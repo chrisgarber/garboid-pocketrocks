@@ -46,6 +46,35 @@ cp .env.example .env
 
 Do not commit `.env`.
 
+## Random bot
+
+`RandomBot` follows the
+[official SDK starter](https://github.com/jaiparera/pocketrocks-python-sdk/tree/develop/starter)
+and directly extends `PocketRocksBot`.
+
+Its baseline strategy is intentionally uninformed:
+
+- sample uniformly from every legal integer bid, treating zero as pass;
+- sample uniformly from every revealable card index;
+- pass when no bid or reveal is available.
+
+Run it after filling in `.env`:
+
+```bash
+uv run garboid-random-bot
+```
+
+For a reproducible decision sequence:
+
+```bash
+uv run garboid-random-bot --seed 42
+```
+
+The automated tests use the SDK's in-memory `FakeTransport`, so they exercise
+the complete SDK request/response path without connecting to the live service.
+Starting the command above creates a real connection and may play games if the
+configured bot is active.
+
 ## Quality checks
 
 ```bash
@@ -57,8 +86,8 @@ uv run pytest
 
 ## Roadmap
 
-1. Establish the repository scaffold and quality gates.
-2. Build a random baseline bot and connect it through the Python SDK.
+1. ✅ Establish the repository scaffold and quality gates.
+2. ✅ Build a random baseline bot and connect it through the Python SDK.
 3. Implement a deterministic game engine and Monte Carlo match runner.
 4. Design and implement value-heuristic bot strategies.
 5. Run seeded round-robin evaluations and compare strategies.
