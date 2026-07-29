@@ -65,15 +65,20 @@ The tasks below must use these names and signatures exactly:
 # adapters/public_history.py
 PublicHistory = tuple[PublicEvent, ...]
 
+
 def public_history_from_sdk_frame(frame: object) -> PublicHistory: ...
+
 
 # adapters/simulator_history.py
 class SimulatorPublicHistoryAdapter:
     @classmethod
-    def from_initial_transition(cls, transition: EngineTransition) -> SimulatorPublicHistoryAdapter: ...
+    def from_initial_transition(
+        cls, transition: EngineTransition
+    ) -> SimulatorPublicHistoryAdapter: ...
     def append(self, events: Sequence[GameEvent]) -> None: ...
     @property
     def history(self) -> PublicHistory: ...
+
 
 # training/single_agent_env.py
 @property
@@ -82,6 +87,7 @@ def learner_context(self) -> DecisionContext: ...
 def ruleset_knowledge(self) -> RulesetKnowledge: ...
 @property
 def public_history(self) -> PublicHistory: ...
+
 
 # neural/encoding.py
 class NeuralObservationEncoder:
@@ -92,7 +98,11 @@ class NeuralObservationEncoder:
         history: PublicHistory,
     ) -> NeuralObservation: ...
 
-def batch_observations(observations: Sequence[NeuralObservation], device: torch.device) -> NeuralBatch: ...
+
+def batch_observations(
+    observations: Sequence[NeuralObservation], device: torch.device
+) -> NeuralBatch: ...
+
 
 # neural/model.py and neural/policy.py
 class NeuralPolicy(nn.Module):
@@ -103,6 +113,7 @@ class NeuralPolicy(nn.Module):
     ) -> None: ...
     def forward(self, batch: NeuralBatch) -> PolicyValueOutput: ...
 
+
 def evaluate_masked_policy(
     output: PolicyValueOutput,
     batch: NeuralBatch,
@@ -110,6 +121,7 @@ def evaluate_masked_policy(
     generator: torch.Generator | None,
     deterministic: bool,
 ) -> PolicySelection: ...
+
 
 # neural/advantages.py and neural/ppo.py
 def compute_gae(
@@ -123,12 +135,16 @@ def compute_gae(
     gae_lambda: float,
 ) -> AdvantageBatch: ...
 
+
 class PPOTrainer:
     def __init__(self, model: NeuralPolicy, config: PPOConfig) -> None: ...
     def update(self, rollout: RolloutBatch, *, update_seed: int) -> PPOUpdateMetrics: ...
 
+
 # neural/checkpoint.py and neural/smoke.py
-def save_inference_checkpoint(path: Path, model: NeuralPolicy, manifest: InferenceManifest) -> None: ...
+def save_inference_checkpoint(
+    path: Path, model: NeuralPolicy, manifest: InferenceManifest
+) -> None: ...
 def load_inference_checkpoint(path: Path, *, device: torch.device) -> LoadedInferenceCheckpoint: ...
 def run_smoke(config: SmokeConfig, output_dir: Path) -> SmokeResult: ...
 ```
@@ -185,10 +201,7 @@ def test_neural_extra_is_optional_and_version_bounded() -> None:
 
 
 def test_core_training_import_does_not_import_torch() -> None:
-    code = (
-        "import sys; import garboid_pocketrocks.training; "
-        "assert 'torch' not in sys.modules"
-    )
+    code = "import sys; import garboid_pocketrocks.training; assert 'torch' not in sys.modules"
     subprocess.run([sys.executable, "-c", code], check=True)
 ```
 
@@ -346,9 +359,7 @@ def test_sdk_frame_becomes_immutable_public_history() -> None:
     [
         object(),
         SimpleNamespace(common_events=()),
-        SimpleNamespace(
-            common_events=(SimpleNamespace(kind="gameSetup", player_count=3),)
-        ),
+        SimpleNamespace(common_events=(SimpleNamespace(kind="gameSetup", player_count=3),)),
     ],
 )
 def test_sdk_adapter_fails_closed_on_missing_or_malformed_history(frame: object) -> None:
@@ -1094,13 +1105,19 @@ Mark the test `@pytest.mark.neural_smoke`. Run `run_smoke` twice into distinct e
 Invoke:
 
 ```python
-exit_code = main([
-    "smoke",
-    "--output-dir", str(tmp_path / "run"),
-    "--seed", "42",
-    "--updates", "1",
-    "--games-per-update", "1",
-])
+exit_code = main(
+    [
+        "smoke",
+        "--output-dir",
+        str(tmp_path / "run"),
+        "--seed",
+        "42",
+        "--updates",
+        "1",
+        "--games-per-update",
+        "1",
+    ]
+)
 assert exit_code == 0
 assert (tmp_path / "run/checkpoint/manifest.json").is_file()
 ```
