@@ -7,6 +7,12 @@ from pathlib import Path
 from typing import Any
 
 from garboid_pocketrocks.bots import (
+    AGGRESSIVE_HEURISTIC_V1_BOT_SPEC,
+    AGGRESSIVE_HEURISTIC_V2_BOT_SPEC,
+    BALANCED_HEURISTIC_V1_BOT_SPEC,
+    BALANCED_HEURISTIC_V2_BOT_SPEC,
+    PASSIVE_HEURISTIC_V1_BOT_SPEC,
+    PASSIVE_HEURISTIC_V2_BOT_SPEC,
     AggressiveHeuristicBot,
     BalancedHeuristicBot,
     BotSpec,
@@ -27,6 +33,12 @@ _BOT_REGISTRY = {
     AggressiveHeuristicBot.BOT_NAME: BotSpec.from_bot_class(AggressiveHeuristicBot),
     BalancedHeuristicBot.BOT_NAME: BotSpec.from_bot_class(BalancedHeuristicBot),
     PassiveHeuristicBot.BOT_NAME: BotSpec.from_bot_class(PassiveHeuristicBot),
+    AGGRESSIVE_HEURISTIC_V1_BOT_SPEC.name: AGGRESSIVE_HEURISTIC_V1_BOT_SPEC,
+    BALANCED_HEURISTIC_V1_BOT_SPEC.name: BALANCED_HEURISTIC_V1_BOT_SPEC,
+    PASSIVE_HEURISTIC_V1_BOT_SPEC.name: PASSIVE_HEURISTIC_V1_BOT_SPEC,
+    AGGRESSIVE_HEURISTIC_V2_BOT_SPEC.name: AGGRESSIVE_HEURISTIC_V2_BOT_SPEC,
+    BALANCED_HEURISTIC_V2_BOT_SPEC.name: BALANCED_HEURISTIC_V2_BOT_SPEC,
+    PASSIVE_HEURISTIC_V2_BOT_SPEC.name: PASSIVE_HEURISTIC_V2_BOT_SPEC,
 }
 
 
@@ -56,9 +68,8 @@ def _parser() -> argparse.ArgumentParser:
         required=True,
         type=_bot_names,
         help=(
-            "comma-separated registered bot names "
-            "(random, aggressive, balanced, passive); heuristic bot IDs are "
-            "development-only and must be replaced before live connection"
+            f"comma-separated registered bot names ({', '.join(_BOT_REGISTRY)}); "
+            "heuristic live bot IDs are development-only"
         ),
     )
     parser.add_argument("--games", required=True, type=_positive_int)
