@@ -17,7 +17,7 @@ from garboid_pocketrocks.heuristics.valuation import HeuristicValuator
 
 from .helpers import make_context, make_knowledge
 
-NO_LIQUIDITY = HeuristicProfile("test", 0.0, 0.0, 0.0)
+NO_LIQUIDITY = HeuristicProfile("test", 0.0, 0.0, 0.0, 0.0)
 
 
 def test_constant_ten_dollar_resource_has_ten_dollar_reservation() -> None:
@@ -123,7 +123,7 @@ def test_profile_shading_never_exceeds_reservation_or_legal_maximum(
 
 def test_chosen_bid_is_floor_of_shaded_reservation() -> None:
     chart = (10, 10, 10, 10, 10, 10)
-    profile = HeuristicProfile("half", 0.0, 0.0, 0.25)
+    profile = HeuristicProfile("half", 0.0, 0.0, 0.0, 0.25)
     result = HeuristicValuator(profile).evaluate_bid(
         make_context(value_chart=chart, legal_max=30),
         make_knowledge(value_chart=chart),
