@@ -21,15 +21,31 @@ from garboid_pocketrocks.simulator.model import (
     ResourceCard,
     Score,
 )
+from garboid_pocketrocks.simulator.replay import (
+    MatchReplay,
+    ReplayDivergence,
+    ReplayedMatch,
+    load_replay,
+    replay_match,
+    save_replay,
+)
+from garboid_pocketrocks.simulator.runner import (
+    BotFault,
+    FaultMode,
+    MatchResult,
+    MatchRunner,
+)
 from garboid_pocketrocks.simulator.setup import SetupResult, build_setup
 
 __all__ = [
     "ActionCard",
     "ActingSeatsError",
     "ActionDeckExhaustedError",
+    "BotFault",
     "DecisionBatch",
     "EngineTransition",
     "EventKind",
+    "FaultMode",
     "GameEvent",
     "GameEngine",
     "GameResult",
@@ -38,12 +54,20 @@ __all__ = [
     "InvestmentPosition",
     "InvalidPhaseError",
     "LoanPosition",
+    "MatchReplay",
+    "MatchResult",
+    "MatchRunner",
     "Phase",
     "PlayerState",
     "ResourceCard",
+    "ReplayDivergence",
+    "ReplayedMatch",
     "Score",
     "SimulationError",
     "SetupResult",
     "build_decision_batch",
     "build_setup",
+    "load_replay",
+    "replay_match",
+    "save_replay",
 ]
