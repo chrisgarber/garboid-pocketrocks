@@ -79,7 +79,6 @@ dependencies = [
     { name = "numpy" },
     { name = "pettingzoo" },
     { name = "pocketrocks-python-sdk" },
-    { name = "python-dotenv" },
 ]
 
 [package.dev-dependencies]
@@ -96,7 +95,6 @@ requires-dist = [
     { name = "numpy", specifier = ">=2.5.1" },
     { name = "pettingzoo", specifier = ">=1.26.1" },
     { name = "pocketrocks-python-sdk", git = "https://github.com/jaiparera/pocketrocks-python-sdk.git?rev=597857446d47ac0890609a4767cad561578a2519" },
-    { name = "python-dotenv", specifier = ">=1" },
 ]
 
 [package.metadata.requires-dev]

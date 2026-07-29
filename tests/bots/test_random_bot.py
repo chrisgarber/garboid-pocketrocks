@@ -1,15 +1,15 @@
 from __future__ import annotations
 
 import asyncio
-import sys
 from collections.abc import Sequence
-from pathlib import Path
 
 import pytest
 from pocketrocks import ActionId, BotDecision, DecisionContext, Suit
 from pocketrocks.testing import FakeTransport, decode_frames, scenario
 
-from garboid_pocketrocks.bots.random_bot import RandomBot, main
+from garboid_pocketrocks.bots.base import BotSpec, PocketRocksFastBot
+from garboid_pocketrocks.bots.random_bot import RandomBot, RandomBotBrain
+from garboid_pocketrocks.rules import LIVE_RULESET
 
 RANDOM_BOT_ID = "bot_e0e2c541-1615-4f47-983c-224e7d888d89"
 
@@ -53,6 +53,33 @@ async def _choose_all(
     contexts: Sequence[DecisionContext],
 ) -> list[BotDecision]:
     return [await bot.choose_decision(context) for context in contexts]
+
+
+def test_random_bot_has_static_public_identity() -> None:
+    assert issubclass(RandomBot, PocketRocksFastBot)
+    assert RandomBot.BOT_ID == RANDOM_BOT_ID
+    assert RandomBot.BOT_NAME == "random"
+
+
+def test_random_brain_and_async_bridge_return_same_decision() -> None:
+    context = _bid_context(7)
+    brain = RandomBotBrain(seed=42)
+    expected = brain.choose_decision(context, LIVE_RULESET.knowledge(3))
+    bot = _bot(seed=42)
+
+    assert _choose(bot, context) == expected
+    assert _bot(seed=42).choose_decision_sync(context) == RandomBotBrain(
+        seed=42
+    ).choose_decision(context, LIVE_RULESET.knowledge(3))
+
+
+def test_bot_spec_builds_fresh_brains() -> None:
+    spec = BotSpec.from_bot_class(RandomBot)
+    left = spec.make_brain(seed=11)
+    right = spec.make_brain(seed=11)
+
+    assert left is not right
+    assert spec.bot_id == RANDOM_BOT_ID
 
 
 @pytest.mark.parametrize("max_amount", [None, 0, -1])
@@ -136,28 +163,3 @@ def test_fake_transport_drives_random_bot_runtime() -> None:
     decision = BotDecision(action_kind=response.action_kind, value=response.value)
     assert context.is_legal(decision)
     assert transport.disconnected
-
-
-def test_main_loads_random_bot_id_from_dotenv(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    (tmp_path / ".env").write_text(
-        f"POCKETROCKS_API_KEY=test-key\nRANDOM_BOT_ID={RANDOM_BOT_ID}\n",
-        encoding="utf-8",
-    )
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.delenv("POCKETROCKS_API_KEY", raising=False)
-    monkeypatch.delenv("POCKETROCKS_BOT_ID", raising=False)
-    monkeypatch.delenv("RANDOM_BOT_ID", raising=False)
-    monkeypatch.setattr(sys, "argv", ["garboid-random-bot"])
-    configured_bot_ids: list[str | None] = []
-
-    def record_configuration(bot: RandomBot) -> None:
-        configured_bot_ids.append(bot.config.bot_id)
-
-    monkeypatch.setattr(RandomBot, "run", record_configuration)
-
-    main()
-
-    assert configured_bot_ids == [RANDOM_BOT_ID]

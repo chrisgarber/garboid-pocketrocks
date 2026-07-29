@@ -1,22 +1,24 @@
 from __future__ import annotations
 
 import argparse
-import os
 import random
-from typing import Any
 
-from dotenv import find_dotenv, load_dotenv
-from pocketrocks import BotDecision, DecisionContext, PocketRocksBot
+from pocketrocks import BotDecision, DecisionContext
+
+from garboid_pocketrocks.bots.base import PocketRocksFastBot
+from garboid_pocketrocks.rules import RulesetKnowledge
 
 
-class RandomBot(PocketRocksBot):
-    """PocketRocks bot that samples uniformly from the legal action range."""
-
-    def __init__(self, *, seed: int | None = None, **sdk_options: Any) -> None:
-        super().__init__(**sdk_options)
+class RandomBotBrain:
+    def __init__(self, *, seed: int | None = None) -> None:
         self._random = random.Random(seed)
 
-    async def choose_decision(self, context: DecisionContext) -> BotDecision:
+    def choose_decision(
+        self,
+        context: DecisionContext,
+        ruleset: RulesetKnowledge,
+    ) -> BotDecision:
+        del ruleset
         if context.decision_kind == "submitBid":
             max_amount = context.legal_max_amount
             if max_amount is None or max_amount <= 0:
@@ -30,9 +32,15 @@ class RandomBot(PocketRocksBot):
         return BotDecision.select_info_to_reveal(index)
 
 
-def _random_bot_id() -> str | None:
-    load_dotenv(find_dotenv(usecwd=True), override=False)
-    return os.getenv("RANDOM_BOT_ID")
+class RandomBot(PocketRocksFastBot):
+    """PocketRocks bot that samples uniformly from the legal action range."""
+
+    BOT_ID = "bot_e0e2c541-1615-4f47-983c-224e7d888d89"
+    BOT_NAME = "random"
+
+    @classmethod
+    def build_brain(cls, seed: int | None) -> RandomBotBrain:
+        return RandomBotBrain(seed=seed)
 
 
 def main() -> None:
@@ -44,4 +52,4 @@ def main() -> None:
         help="seed the bot's random decisions for reproducibility",
     )
     args = parser.parse_args()
-    RandomBot(seed=args.seed, bot_id=_random_bot_id()).run()
+    RandomBot(seed=args.seed).run()
