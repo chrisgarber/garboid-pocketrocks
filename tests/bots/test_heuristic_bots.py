@@ -9,20 +9,42 @@ from pocketrocks import OBJECTIVES, ActionId, BotDecision, DecisionContext, Suit
 
 from garboid_pocketrocks.bots import (
     AGGRESSIVE_HEURISTIC_BOT_SPEC,
+    AGGRESSIVE_HEURISTIC_V1_BOT_SPEC,
+    AGGRESSIVE_HEURISTIC_V2_BOT_SPEC,
     BALANCED_HEURISTIC_BOT_SPEC,
+    BALANCED_HEURISTIC_V1_BOT_SPEC,
+    BALANCED_HEURISTIC_V2_BOT_SPEC,
     PASSIVE_HEURISTIC_BOT_SPEC,
+    PASSIVE_HEURISTIC_V1_BOT_SPEC,
+    PASSIVE_HEURISTIC_V2_BOT_SPEC,
     AggressiveHeuristicBot,
     AggressiveHeuristicBrain,
+    AggressiveHeuristicV1Bot,
+    AggressiveHeuristicV1Brain,
+    AggressiveHeuristicV2Bot,
+    AggressiveHeuristicV2Brain,
     BalancedHeuristicBot,
     BalancedHeuristicBrain,
+    BalancedHeuristicV1Bot,
+    BalancedHeuristicV1Brain,
+    BalancedHeuristicV2Bot,
+    BalancedHeuristicV2Brain,
     BotSpec,
     PassiveHeuristicBot,
     PassiveHeuristicBrain,
+    PassiveHeuristicV1Bot,
+    PassiveHeuristicV1Brain,
+    PassiveHeuristicV2Bot,
+    PassiveHeuristicV2Brain,
     PocketRocksFastBot,
 )
 from garboid_pocketrocks.bots.heuristic import HeuristicBotBrain
 from garboid_pocketrocks.heuristics.errors import HeuristicInputError
-from garboid_pocketrocks.heuristics.profiles import BALANCED_PROFILE
+from garboid_pocketrocks.heuristics.profiles import (
+    BALANCED_PROFILE,
+    HEURISTIC_V1,
+    HEURISTIC_V2,
+)
 from garboid_pocketrocks.heuristics.valuation import HeuristicValuator
 from garboid_pocketrocks.rules import LIVE_RULESET, VALUE_CHARTS, RulesetKnowledge
 from garboid_pocketrocks.simulator.monte_carlo import (
@@ -94,6 +116,77 @@ def test_heuristic_bots_have_distinct_static_public_identities() -> None:
         BalancedHeuristicBot.BOT_NAME,
         PassiveHeuristicBot.BOT_NAME,
     } == {"aggressive", "balanced", "passive"}
+
+
+def test_versioned_heuristic_bots_have_stable_public_identities() -> None:
+    assert (
+        AggressiveHeuristicV1Bot.BOT_NAME,
+        BalancedHeuristicV1Bot.BOT_NAME,
+        PassiveHeuristicV1Bot.BOT_NAME,
+    ) == ("aggressive-v1", "balanced-v1", "passive-v1")
+    assert (
+        AggressiveHeuristicV2Bot.BOT_NAME,
+        BalancedHeuristicV2Bot.BOT_NAME,
+        PassiveHeuristicV2Bot.BOT_NAME,
+    ) == ("aggressive-v2", "balanced-v2", "passive-v2")
+    assert (
+        AggressiveHeuristicV1Bot.BOT_ID,
+        BalancedHeuristicV1Bot.BOT_ID,
+        PassiveHeuristicV1Bot.BOT_ID,
+        AggressiveHeuristicV2Bot.BOT_ID,
+        BalancedHeuristicV2Bot.BOT_ID,
+        PassiveHeuristicV2Bot.BOT_ID,
+    ) == (
+        "bot_10000000-0000-4000-8000-000000000001",
+        "bot_10000000-0000-4000-8000-000000000002",
+        "bot_10000000-0000-4000-8000-000000000003",
+        "bot_20000000-0000-4000-8000-000000000001",
+        "bot_20000000-0000-4000-8000-000000000002",
+        "bot_20000000-0000-4000-8000-000000000003",
+    )
+
+
+@pytest.mark.parametrize(
+    ("bot_class", "brain_class", "profile"),
+    (
+        (AggressiveHeuristicV1Bot, AggressiveHeuristicV1Brain, HEURISTIC_V1.aggressive),
+        (BalancedHeuristicV1Bot, BalancedHeuristicV1Brain, HEURISTIC_V1.balanced),
+        (PassiveHeuristicV1Bot, PassiveHeuristicV1Brain, HEURISTIC_V1.passive),
+        (AggressiveHeuristicV2Bot, AggressiveHeuristicV2Brain, HEURISTIC_V2.aggressive),
+        (BalancedHeuristicV2Bot, BalancedHeuristicV2Brain, HEURISTIC_V2.balanced),
+        (PassiveHeuristicV2Bot, PassiveHeuristicV2Brain, HEURISTIC_V2.passive),
+    ),
+)
+def test_versioned_bot_factories_use_pinned_profiles(
+    bot_class: type[PocketRocksFastBot],
+    brain_class: type[HeuristicBotBrain],
+    profile: object,
+) -> None:
+    brain = bot_class.build_brain(seed=42)
+
+    assert isinstance(brain, brain_class)
+    assert brain.valuator.profile is profile
+
+
+@pytest.mark.parametrize(
+    ("latest_brain", "v2_brain"),
+    (
+        (AggressiveHeuristicBrain, AggressiveHeuristicV2Brain),
+        (BalancedHeuristicBrain, BalancedHeuristicV2Brain),
+        (PassiveHeuristicBrain, PassiveHeuristicV2Brain),
+    ),
+)
+def test_unversioned_brains_match_v2_decisions(
+    latest_brain: type[HeuristicBotBrain],
+    v2_brain: type[HeuristicBotBrain],
+) -> None:
+    context = make_context(action_id=ActionId.AUCTION2, legal_max=17)
+    knowledge = make_knowledge()
+
+    assert latest_brain().choose_decision(context, knowledge) == v2_brain().choose_decision(
+        context,
+        knowledge,
+    )
 
 
 @pytest.mark.parametrize(
@@ -303,6 +396,12 @@ def test_exported_heuristic_specs_are_picklable_and_build_fresh_brains() -> None
         AGGRESSIVE_HEURISTIC_BOT_SPEC,
         BALANCED_HEURISTIC_BOT_SPEC,
         PASSIVE_HEURISTIC_BOT_SPEC,
+        AGGRESSIVE_HEURISTIC_V1_BOT_SPEC,
+        BALANCED_HEURISTIC_V1_BOT_SPEC,
+        PASSIVE_HEURISTIC_V1_BOT_SPEC,
+        AGGRESSIVE_HEURISTIC_V2_BOT_SPEC,
+        BALANCED_HEURISTIC_V2_BOT_SPEC,
+        PASSIVE_HEURISTIC_V2_BOT_SPEC,
     )
 
     for spec in specs:
