@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, ClassVar, Protocol
 
 from pocketrocks import BotDecision, DecisionContext, PocketRocksBot
@@ -42,8 +42,24 @@ class PocketRocksFastBot(PocketRocksBot):
     def build_brain(cls, seed: int | None) -> BotBrain:
         raise NotImplementedError
 
-    def choose_decision_sync(self, context: DecisionContext) -> BotDecision:
+    def _knowledge_for_context(self, context: DecisionContext) -> RulesetKnowledge:
         knowledge = self._ruleset.knowledge(context.player_count)
+        private_cards = knowledge.private_cards_per_player
+        if 0 <= context.bot_seat < len(context.revealed_info_counts_by_seat):
+            private_cards = sum(context.revealed_info_counts_by_seat[context.bot_seat]) + len(
+                context.current_hand_suit_ids
+            )
+        return replace(
+            knowledge,
+            starting_cash=context.starting_cash,
+            private_cards_per_player=private_cards,
+            value_chart=context.value_chart,
+            active_objective_count=len(context.objective_ids),
+            objectives_enabled=bool(context.objective_ids),
+        )
+
+    def choose_decision_sync(self, context: DecisionContext) -> BotDecision:
+        knowledge = self._knowledge_for_context(context)
         return self._brain.choose_decision(context, knowledge)
 
     async def choose_decision(self, context: DecisionContext) -> BotDecision:

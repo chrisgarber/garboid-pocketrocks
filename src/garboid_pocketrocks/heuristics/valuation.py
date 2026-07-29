@@ -114,9 +114,7 @@ class HeuristicValuator:
             (point.bid for point in points if point.win_delta >= 0.0),
             default=0,
         )
-        chosen_bid = math.floor(
-            reservation_bid * (1.0 - self.profile.bid_shading)
-        )
+        chosen_bid = math.floor(reservation_bid * (1.0 - self.profile.bid_shading))
         chosen_bid = min(max(chosen_bid, 0), context.legal_max_amount)
         if chosen_bid > reservation_bid:
             raise HeuristicInputError("chosen bid exceeds its reservation bid")
@@ -195,13 +193,7 @@ class HeuristicValuator:
         terminal_cash: float,
         liquidity: float,
     ) -> BidPoint:
-        total = (
-            resource
-            + objective_completion
-            + objective_progress
-            + terminal_cash
-            + liquidity
-        )
+        total = resource + objective_completion + objective_progress + terminal_cash + liquidity
         if not all(
             math.isfinite(value)
             for value in (

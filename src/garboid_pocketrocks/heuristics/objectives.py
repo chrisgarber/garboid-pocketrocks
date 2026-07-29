@@ -53,10 +53,7 @@ def requirement_vectors(objective_id: int) -> tuple[tuple[int, ...], ...]:
 def objective_distance(objective_id: int, counts: tuple[int, ...]) -> int:
     """Return the fewest additional resources needed to satisfy an objective."""
     return min(
-        sum(
-            max(required - owned, 0)
-            for owned, required in zip(counts, vector, strict=True)
-        )
+        sum(max(required - owned, 0) for owned, required in zip(counts, vector, strict=True))
         for vector in requirement_vectors(objective_id)
     )
 
@@ -69,10 +66,7 @@ def _progress(counts: tuple[int, ...], vectors: tuple[tuple[int, ...], ...]) -> 
     return max(
         1.0
         - (
-            sum(
-                max(required - owned, 0)
-                for owned, required in zip(counts, vector, strict=True)
-            )
+            sum(max(required - owned, 0) for owned, required in zip(counts, vector, strict=True))
             / sum(vector)
         )
         for vector in vectors
@@ -102,8 +96,7 @@ def evaluate_objectives(
     }
     bot_counts = won_resource_counts_by_seat[bot_seat]
     post_win_counts = tuple(
-        owned + offered
-        for owned, offered in zip(bot_counts, offered_counts, strict=True)
+        owned + offered for owned, offered in zip(bot_counts, offered_counts, strict=True)
     )
     values: list[ObjectiveValue] = []
     for objective_id in active_objective_ids:

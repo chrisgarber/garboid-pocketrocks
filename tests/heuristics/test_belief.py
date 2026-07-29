@@ -69,12 +69,12 @@ def test_expected_terminal_prices_follow_each_chart_exactly(
 
     brick = belief.suits[int(Suit.BRICK) - 1]
     wood = belief.suits[int(Suit.WOOD) - 1]
-    assert brick.expected_terminal_price == pytest.approx(
-        0.75 * chart[0] + 0.25 * chart[1]
-    ), chart_name
-    assert wood.expected_terminal_price == pytest.approx(
-        0.75 * chart[1] + 0.25 * chart[2]
-    ), chart_name
+    assert brick.expected_terminal_price == pytest.approx(0.75 * chart[0] + 0.25 * chart[1]), (
+        chart_name
+    )
+    assert wood.expected_terminal_price == pytest.approx(0.75 * chart[1] + 0.25 * chart[2]), (
+        chart_name
+    )
 
 
 def test_terminal_reveal_probability_is_capped_in_chart_bucket_five() -> None:
@@ -103,9 +103,7 @@ def test_expected_future_biddable_counts_and_horizon_conserve_cards() -> None:
     )
     belief = build_belief(context, make_knowledge(private_cards=1))
 
-    assert belief.expected_future_biddable_counts == pytest.approx(
-        (0.75, 0.75, 1.5, 1.5, 1.5)
-    )
+    assert belief.expected_future_biddable_counts == pytest.approx((0.75, 0.75, 1.5, 1.5, 1.5))
     assert sum(belief.expected_future_biddable_counts) == pytest.approx(6.0)
     assert belief.normalized_horizon == pytest.approx(6 / 7)
 
@@ -137,8 +135,7 @@ def test_reveal_context_does_not_subtract_preserved_offer_twice() -> None:
 
     assert sum(suit.unseen_suit_count for suit in belief.suits) == 8
     assert (
-        sum(suit.unseen_suit_count for suit in belief.suits)
-        - belief.suits[0].opponent_hidden_slots
+        sum(suit.unseen_suit_count for suit in belief.suits) - belief.suits[0].opponent_hidden_slots
         == 6
     )
     assert sum(belief.expected_future_biddable_counts) == pytest.approx(6.0)
@@ -359,20 +356,16 @@ def test_engine_generated_contexts_preserve_exact_belief_properties(
     while transition.pending is not None:
         for _seat, context in transition.pending.contexts:
             belief = build_belief(context, knowledge)
-            won_count = sum(
-                count for row in context.won_resource_counts_by_seat for count in row
-            )
+            won_count = sum(count for row in context.won_resource_counts_by_seat for count in row)
             offered_count = (
                 sum(resource_id != 0 for resource_id in context.current_resource_ids)
                 if context.decision_kind == "submitBid"
-                and context.current_action_id
-                in (int(ActionId.AUCTION1), int(ActionId.AUCTION2))
+                and context.current_action_id in (int(ActionId.AUCTION1), int(ActionId.AUCTION2))
                 else 0
             )
             future_biddable = total_biddable - won_count - offered_count
             hidden_slots = sum(
-                knowledge.private_cards_per_player
-                - sum(context.revealed_info_counts_by_seat[seat])
+                knowledge.private_cards_per_player - sum(context.revealed_info_counts_by_seat[seat])
                 for seat in range(player_count)
                 if seat != context.bot_seat
             )
@@ -384,19 +377,17 @@ def test_engine_generated_contexts_preserve_exact_belief_properties(
                 sum(suit.unseen_suit_count for suit in belief.suits) - hidden_slots
                 == future_biddable
             )
-            assert sum(belief.expected_future_biddable_counts) == pytest.approx(
-                future_biddable
-            )
-            assert belief.normalized_horizon == pytest.approx(
-                future_biddable / total_biddable
-            )
+            assert sum(belief.expected_future_biddable_counts) == pytest.approx(future_biddable)
+            assert belief.normalized_horizon == pytest.approx(future_biddable / total_biddable)
             for suit in belief.suits:
                 assert len(suit.terminal_price_pmf) == 6
                 assert sum(suit.terminal_price_pmf) == pytest.approx(1.0)
                 assert all(0.0 <= probability <= 1.0 for probability in suit.terminal_price_pmf)
                 assert 0 <= suit.unseen_suit_count <= suit.unseen_population
-                assert min(context.value_chart) <= suit.expected_terminal_price <= max(
-                    context.value_chart
+                assert (
+                    min(context.value_chart)
+                    <= suit.expected_terminal_price
+                    <= max(context.value_chart)
                 )
                 expected = sum(
                     probability * price
@@ -410,16 +401,12 @@ def test_engine_generated_contexts_preserve_exact_belief_properties(
                 assert math.isfinite(suit.expected_terminal_price)
 
             if context.current_hand_suit_ids:
-                revealed = [
-                    list(row) for row in context.revealed_info_counts_by_seat
-                ]
+                revealed = [list(row) for row in context.revealed_info_counts_by_seat]
                 revealed_suit = context.current_hand_suit_ids[0]
                 revealed[context.bot_seat][revealed_suit - 1] += 1
                 after_reveal = replace(
                     context,
-                    revealed_info_counts_by_seat=tuple(
-                        tuple(row) for row in revealed
-                    ),
+                    revealed_info_counts_by_seat=tuple(tuple(row) for row in revealed),
                     current_hand_suit_ids=context.current_hand_suit_ids[1:],
                     revealable_count=context.revealable_count - 1,
                 )

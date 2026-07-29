@@ -295,14 +295,11 @@ def test_pass_and_zero_bid_are_bidding_passes_but_reveals_are_excluded() -> None
     assert one_behavior.passes < one_behavior.bidding_requests
     assert pass_behavior.reveal_choices == ()
     assert all(choice == 0 for choice in zero_behavior.reveal_choices)
-    assert sum(
-        len(decisions)
-        for _, decisions in result.replays[0].decisions
-        if len(decisions) == 1
-    ) > 0
-    assert sum(
-        statistics.behavior.bidding_requests for statistics in result.bot_statistics
-    ) == sum(
+    assert (
+        sum(len(decisions) for _, decisions in result.replays[0].decisions if len(decisions) == 1)
+        > 0
+    )
+    assert sum(statistics.behavior.bidding_requests for statistics in result.bot_statistics) == sum(
         len(decisions)
         for _, decisions in result.replays[0].decisions
         if len(decisions) == result.replays[0].player_count
@@ -367,7 +364,4 @@ def test_worker_count_preserves_behavior_statistics() -> None:
     parallel = MonteCarloRunner.run(config, workers=2)
 
     assert serial == parallel
-    assert all(
-        statistics.behavior.bidding_requests > 0
-        for statistics in parallel.bot_statistics
-    )
+    assert all(statistics.behavior.bidding_requests > 0 for statistics in parallel.bot_statistics)

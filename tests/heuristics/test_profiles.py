@@ -35,9 +35,7 @@ def test_profile_rejects_invalid_coefficient(field: str, value: float) -> None:
         HeuristicProfile(
             name="invalid",
             liquidity_strength=value if field == "liquidity_strength" else 0.4,
-            objective_progress_weight=(
-                value if field == "objective_progress_weight" else 0.2
-            ),
+            objective_progress_weight=(value if field == "objective_progress_weight" else 0.2),
             bid_shading=value if field == "bid_shading" else 0.25,
         )
 
@@ -60,9 +58,7 @@ def test_named_profiles_have_expected_ordering() -> None:
         > PASSIVE_PROFILE.liquidity_strength
     )
     assert (
-        AGGRESSIVE_PROFILE.bid_shading
-        < BALANCED_PROFILE.bid_shading
-        < PASSIVE_PROFILE.bid_shading
+        AGGRESSIVE_PROFILE.bid_shading < BALANCED_PROFILE.bid_shading < PASSIVE_PROFILE.bid_shading
     )
 
 

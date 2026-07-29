@@ -148,9 +148,7 @@ def test_profile_rejects_invalid_coefficient(field: str, value: float) -> None:
         HeuristicProfile(
             name="invalid",
             liquidity_strength=value if field == "liquidity_strength" else 0.4,
-            objective_progress_weight=(
-                value if field == "objective_progress_weight" else 0.2
-            ),
+            objective_progress_weight=(value if field == "objective_progress_weight" else 0.2),
             bid_shading=value if field == "bid_shading" else 0.25,
         )
 
@@ -162,9 +160,7 @@ def test_named_profiles_have_expected_ordering() -> None:
         > PASSIVE_PROFILE.liquidity_strength
     )
     assert (
-        AGGRESSIVE_PROFILE.bid_shading
-        < BALANCED_PROFILE.bid_shading
-        < PASSIVE_PROFILE.bid_shading
+        AGGRESSIVE_PROFILE.bid_shading < BALANCED_PROFILE.bid_shading < PASSIVE_PROFILE.bid_shading
     )
 ```
 
@@ -269,8 +265,7 @@ def test_reveal_context_does_not_subtract_preserved_offer_twice() -> None:
     )
     belief = build_belief(context, make_knowledge(private_cards=1))
     assert (
-        sum(suit.unseen_suit_count for suit in belief.suits)
-        - belief.suits[0].opponent_hidden_slots
+        sum(suit.unseen_suit_count for suit in belief.suits) - belief.suits[0].opponent_hidden_slots
         == 6
     )
 
@@ -431,6 +426,8 @@ from garboid_pocketrocks.heuristics.objectives import (
     objective_is_met,
     requirement_vectors,
 )
+
+
 def test_every_sdk_objective_has_requirement_vectors() -> None:
     for objective_id in OBJECTIVES:
         vectors = requirement_vectors(objective_id)
@@ -989,9 +986,7 @@ and a two-worker Monte Carlo smoke using all three specs.
 ```python
 try:
     if context.decision_kind == "selectInfoToReveal":
-        return BotDecision.select_info_to_reveal(
-            self.valuator.choose_reveal(context, ruleset)
-        )
+        return BotDecision.select_info_to_reveal(self.valuator.choose_reveal(context, ruleset))
     bid = self.valuator.evaluate_bid(context, ruleset).chosen_bid
     return BotDecision.pass_turn() if bid == 0 else BotDecision.submit_bid(bid)
 except HeuristicInputError:

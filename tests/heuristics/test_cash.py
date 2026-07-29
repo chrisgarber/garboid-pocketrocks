@@ -87,8 +87,7 @@ def test_action_curve_is_nonincreasing_in_bid(
     )
     assert [point.bid for point in curve] == list(range(legal_max + 1))
     assert all(
-        left.win_delta >= right.win_delta
-        for left, right in zip(curve, curve[1:], strict=False)
+        left.win_delta >= right.win_delta for left, right in zip(curve, curve[1:], strict=False)
     )
 
 
@@ -260,8 +259,7 @@ def test_action_curve_is_finite_and_monotone_for_every_legal_bid(
         for component in (point.terminal_cash, point.liquidity, point.win_delta)
     )
     assert all(
-        left.win_delta >= right.win_delta
-        for left, right in zip(curve, curve[1:], strict=False)
+        left.win_delta >= right.win_delta for left, right in zip(curve, curve[1:], strict=False)
     )
 
 

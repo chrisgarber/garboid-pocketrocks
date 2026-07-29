@@ -49,8 +49,7 @@ def _expected_price(
             selected=selected,
         )
         expected += (
-            probability
-            * value_chart[min(known_reveals + selected, _CHART_BUCKET_COUNT - 1)]
+            probability * value_chart[min(known_reveals + selected, _CHART_BUCKET_COUNT - 1)]
         )
     if not math.isfinite(expected):
         raise HeuristicInputError("observer expected price must be finite")

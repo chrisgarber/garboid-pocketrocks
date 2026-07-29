@@ -34,18 +34,13 @@ def _assert_finite_legal_evaluation(
 ) -> None:
     assert context.legal_max_amount is not None
     assert result.points
-    assert tuple(point.bid for point in result.points) == tuple(
-        range(context.legal_max_amount + 1)
-    )
+    assert tuple(point.bid for point in result.points) == tuple(range(context.legal_max_amount + 1))
     assert 0 <= result.chosen_bid <= result.reservation_bid
     assert context.is_legal(BotDecision.submit_bid(result.chosen_bid))
     assert all(context.is_legal(BotDecision.submit_bid(point.bid)) for point in result.points)
 
     assert math.isfinite(result.belief.normalized_horizon)
-    assert all(
-        math.isfinite(count)
-        for count in result.belief.expected_future_biddable_counts
-    )
+    assert all(math.isfinite(count) for count in result.belief.expected_future_biddable_counts)
     for suit in result.belief.suits:
         assert math.isfinite(suit.expected_terminal_price)
         assert all(math.isfinite(probability) for probability in suit.terminal_price_pmf)
@@ -125,11 +120,8 @@ def test_unobservable_deck_order_cannot_change_a_public_context_valuation(
     assert contexts == altered_contexts
 
     evaluator = HeuristicValuator(profile)
-    assert tuple(
-        evaluator.evaluate_bid(context, knowledge) for _, context in contexts
-    ) == tuple(
-        evaluator.evaluate_bid(context, knowledge)
-        for _, context in altered_contexts
+    assert tuple(evaluator.evaluate_bid(context, knowledge) for _, context in contexts) == tuple(
+        evaluator.evaluate_bid(context, knowledge) for _, context in altered_contexts
     )
 
 
@@ -279,12 +271,8 @@ def _deterministic_first_suit_price(chart: str, reveal_count: int) -> float:
 
 @pytest.mark.parametrize("chart", ("B", "D"))
 def test_decreasing_charts_are_not_treated_as_increasing(chart: str) -> None:
-    assert _deterministic_first_suit_price(chart, 0) > (
-        _deterministic_first_suit_price(chart, 5)
-    )
+    assert _deterministic_first_suit_price(chart, 0) > (_deterministic_first_suit_price(chart, 5))
 
 
 def test_nonmonotone_chart_preserves_its_peak_and_decline() -> None:
-    assert _deterministic_first_suit_price("E", 3) > (
-        _deterministic_first_suit_price("E", 5)
-    )
+    assert _deterministic_first_suit_price("E", 3) > (_deterministic_first_suit_price("E", 5))

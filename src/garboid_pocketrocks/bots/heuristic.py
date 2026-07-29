@@ -31,11 +31,7 @@ class HeuristicBotBrain:
                     self.valuator.choose_reveal(context, ruleset)
                 )
             bid = self.valuator.evaluate_bid(context, ruleset).chosen_bid
-            return (
-                BotDecision.pass_turn()
-                if bid == 0
-                else BotDecision.submit_bid(bid)
-            )
+            return BotDecision.pass_turn() if bid == 0 else BotDecision.submit_bid(bid)
         except HeuristicInputError:
             return BotDecision.pass_turn()
 

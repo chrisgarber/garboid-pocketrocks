@@ -83,14 +83,17 @@ def test_constant_chart_tie_chooses_index_zero() -> None:
         value_chart=chart,
     )
 
-    assert choose_reveal(
-        context,
-        make_knowledge(
-            private_cards=2,
-            resource_counts=(4, 4, 4, 4, 4),
-            value_chart=chart,
-        ),
-    ) == 0
+    assert (
+        choose_reveal(
+            context,
+            make_knowledge(
+                private_cards=2,
+                resource_counts=(4, 4, 4, 4, 4),
+                value_chart=chart,
+            ),
+        )
+        == 0
+    )
 
 
 def test_influence_sums_price_changes_for_every_suit() -> None:

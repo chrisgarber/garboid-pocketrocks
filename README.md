@@ -86,6 +86,19 @@ Use `--format json` for structured output, `--workers N` for local process
 workers, and `--replay-dir PATH` to save one versioned JSON replay per game.
 Seeds are stable across runs and worker counts.
 
+Run the three heuristic profiles against one another on another live chart:
+
+```bash
+uv run garboid-simulate \
+  --bots aggressive,balanced,passive \
+  --games 1000 \
+  --players 3 \
+  --ruleset live-E \
+  --seed 42 \
+  --workers 4 \
+  --format json
+```
+
 Evaluation reports games, outright wins, first-place ties, rank counts, final
 money samples, first-place margins, seat buckets, ruleset buckets, decision
 counts, and faults. Distribution helpers provide mean, median, population
@@ -106,6 +119,106 @@ Training can use:
 
 Brains receive public `RulesetKnowledge`; shuffled deck order and hidden cards
 remain private.
+
+## Bayesian heuristic bots
+
+The heuristic evaluator uses only information available through the live SDK.
+For each resource suit, it removes publicly won cards, public reveals, the
+bot's own hand, and the current auction offer from the configured finite deck.
+It then treats the remaining opponent hand slots as an exact hypergeometric
+sample from the remaining cards. This exchangeability assumption is a
+maximum-entropy baseline: it is deterministic and does not leak simulator
+state, but it does not yet model opponents choosing reveals strategically.
+
+The resulting posterior gives an expected terminal price for each suit.
+Conditioning on one suit also changes the other suits because every card comes
+from the same finite population. The evaluator values:
+
+```text
+resource lot = sum(offered card count * expected terminal price)
+
+auction win = resource lot + objective value - bid
+              + option(cash - bid) - option(cash)
+
+loan win = -bid
+           + option(cash + principal - bid) - option(cash)
+
+investment win = fixed payout
+                 + option(cash - bid) - option(cash)
+```
+
+The `option(...)` term is an increasing, concave value for cash that remains
+available for later auctions. It shrinks with the fraction of biddable
+resources remaining and reaches zero at the end of the game. Terminal-dollar
+accounting stays exact: auction and loan bids are spent, loan principal is
+repaid, and an investment bid is returned at scoring while its fixed payout is
+profit.
+
+An objective completed by the offered lot receives its full payout. Incomplete
+progress receives a smaller shaped value based on the positive change in
+squared progress, multiplied by the remaining-resource horizon and reduced
+when opponents are at least as close to the same objective. This progress term
+is heuristic option value, not predicted cash.
+
+Every legal integer bid is evaluated. The reservation bid is the largest bid
+with nonnegative win value, and each profile shades that reservation bid:
+
+| Profile | Liquidity strength | Objective progress | Bid shading | Behavior |
+| --- | ---: | ---: | ---: | --- |
+| aggressive | 0.75 | 0.25 | 0.05 | Preserves early liquidity, pursues progress, and bids near its limit |
+| balanced | 0.40 | 0.20 | 0.25 | Uses middle settings |
+| passive | 0.15 | 0.15 | 0.50 | Waits for larger margins and inexpensive actions |
+
+The simulator-ready identities are:
+
+| CLI name | Brain | Bot wrapper | `BotSpec` | Bot ID |
+| --- | --- | --- | --- | --- |
+| `aggressive` | `AggressiveHeuristicBrain` | `AggressiveHeuristicBot` | `AGGRESSIVE_HEURISTIC_BOT_SPEC` | `bot_00000000-0000-4000-8000-00000000000a` |
+| `balanced` | `BalancedHeuristicBrain` | `BalancedHeuristicBot` | `BALANCED_HEURISTIC_BOT_SPEC` | `bot_00000000-0000-4000-8000-00000000000b` |
+| `passive` | `PassiveHeuristicBrain` | `PassiveHeuristicBot` | `PASSIVE_HEURISTIC_BOT_SPEC` | `bot_00000000-0000-4000-8000-00000000000c` |
+
+These three IDs are development-only placeholders, not registered live bot
+IDs. Replace the relevant class constant before connecting any heuristic bot
+wrapper to the live service. Fast bot wrappers reconcile the chart, starting
+cash, private-card count, and objective state exposed by each SDK context with
+their configured ruleset knowledge. Pass an explicit `Ruleset` when a game
+uses different resource or action deck counts, because the SDK context does
+not expose those initial counts.
+
+Reveal decisions use the same finite-population model from an observer's
+perspective, without access to the bot's hand. For each candidate suit, the
+policy conditions on revealing that card and measures the resulting price
+change across every suit, weighted by opponents' public holdings. It exposes
+the card with the smallest total opponent benefit; ties use the lowest hand
+index.
+
+`BidEvaluation` exposes the full bid curve, posterior, reservation bid, chosen
+bid, and additive value breakdown:
+
+```python
+from garboid_pocketrocks.heuristics import HeuristicValuator
+from garboid_pocketrocks.heuristics.profiles import BALANCED_PROFILE
+from garboid_pocketrocks.rules import live_ruleset
+from garboid_pocketrocks.simulator import GameEngine
+
+ruleset = live_ruleset("A")
+transition = GameEngine.start(ruleset, player_count=3, seed=42)
+assert transition.pending is not None
+_, context = transition.pending.contexts[0]
+
+evaluation = HeuristicValuator(BALANCED_PROFILE).evaluate_bid(
+    context,
+    ruleset.knowledge(3),
+)
+chosen = evaluation.points[evaluation.chosen_bid]
+print(evaluation.reservation_bid, evaluation.chosen_bid)
+print(chosen.breakdown)
+```
+
+See the [heuristic design](docs/superpowers/specs/2026-07-28-heuristic-bots-design.md)
+for the complete model and the
+[v1 tournament benchmark](docs/benchmarks/2026-07-28-heuristic-v1.md) for
+seeded results and behavioral metrics.
 
 ## RL environments
 
@@ -181,9 +294,10 @@ uv run pytest
 2. ✅ Build and live-test a random SDK bot.
 3. ✅ Implement the deterministic engine, replay, Monte Carlo, and RL
    environments.
-4. Design and implement value-heuristic bot strategies.
-5. Run seeded round-robin evaluations and compare strategies.
-6. Build and locally train a neural policy.
+4. ✅ Implement and validate Bayesian value-heuristic bot strategies.
+5. ✅ Run seeded round-robin evaluations and compare strategy behavior.
+6. Build and locally train an imperfect-information neural policy through
+   self-play.
 
 ## License
 

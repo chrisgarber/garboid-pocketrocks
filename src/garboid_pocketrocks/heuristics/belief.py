@@ -43,13 +43,7 @@ def _hypergeometric_probability(
     draws: int,
     selected: int,
 ) -> float:
-    if (
-        population < 0
-        or successes < 0
-        or successes > population
-        or draws < 0
-        or draws > population
-    ):
+    if population < 0 or successes < 0 or successes > population or draws < 0 or draws > population:
         raise ValueError("invalid hypergeometric population")
     if (
         selected < 0
@@ -201,10 +195,7 @@ def _validate_context(
     revealed_totals = tuple(sum(row) for row in context.revealed_info_counts_by_seat)
     if any(revealed > private_cards for revealed in revealed_totals):
         raise HeuristicInputError("revealed private card count exceeds ruleset setup")
-    if (
-        revealed_totals[context.bot_seat] + len(context.current_hand_suit_ids)
-        != private_cards
-    ):
+    if revealed_totals[context.bot_seat] + len(context.current_hand_suit_ids) != private_cards:
         raise HeuristicInputError("own private card count contradicts ruleset setup")
 
     action = _action_from_context(context, knowledge)
@@ -272,12 +263,10 @@ def build_belief(
         for index in range(_SUIT_COUNT)
     )
     hand_by_suit = tuple(
-        sum(suit_id == int(suit) for suit_id in context.current_hand_suit_ids)
-        for suit in Suit
+        sum(suit_id == int(suit) for suit_id in context.current_hand_suit_ids) for suit in Suit
     )
     known_terminal_reveals = tuple(
-        revealed + hand
-        for revealed, hand in zip(revealed_by_suit, hand_by_suit, strict=True)
+        revealed + hand for revealed, hand in zip(revealed_by_suit, hand_by_suit, strict=True)
     )
     won_by_suit = tuple(
         sum(row[index] for row in context.won_resource_counts_by_seat)
@@ -298,8 +287,7 @@ def build_belief(
         raise HeuristicInputError("known card counts exceed ruleset resources")
 
     opponent_hidden_slots = sum(
-        knowledge.private_cards_per_player
-        - sum(context.revealed_info_counts_by_seat[seat])
+        knowledge.private_cards_per_player - sum(context.revealed_info_counts_by_seat[seat])
         for seat in range(context.player_count)
         if seat != context.bot_seat
     )
