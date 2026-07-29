@@ -28,6 +28,7 @@ from garboid_pocketrocks.simulator.model import (
     ResourceCard,
     Score,
     Seat,
+    offered_resource_ids,
 )
 from garboid_pocketrocks.simulator.setup import build_setup
 
@@ -244,6 +245,7 @@ def _resolve_bidding(
         priority_seat=winner,
         phase=Phase.REVEAL if winner_state.private_hand else Phase.BIDDING,
         reveal_seat=winner if winner_state.private_hand else None,
+        current_resource_ids=offered_resource_ids(action_id, state.visible_resources),
     )
     if winner_state.private_hand:
         return EngineTransition(
@@ -378,6 +380,10 @@ def _advance_turn(
         current_action=current_action,
         action_deck=state.action_deck[1:],
         reveal_seat=None,
+        current_resource_ids=offered_resource_ids(
+            current_action.action_id,
+            advanced.visible_resources,
+        ),
     )
     events.append(
         GameEvent(
@@ -424,6 +430,7 @@ def _finish_game(
         players=tuple(players),
         current_action=None,
         reveal_seat=None,
+        current_resource_ids=(0, 0),
     )
     result = _score(terminal_state)
     events.extend(

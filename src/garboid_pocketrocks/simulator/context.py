@@ -37,11 +37,7 @@ def _current_resources(state: GameState) -> tuple[int, int]:
         ActionId.AUCTION2,
     ):
         return (0, 0)
-    count = 1 if action.action_id is ActionId.AUCTION1 else 2
-    suit_ids = tuple(int(card.suit) for card in state.visible_resources[:count])
-    first = suit_ids[0] if suit_ids else 0
-    second = suit_ids[1] if len(suit_ids) > 1 else 0
-    return (first, second)
+    return state.current_resource_ids
 
 
 def _legal_max(state: GameState, seat: Seat) -> int:
@@ -88,7 +84,7 @@ def _context_for(state: GameState, seat: Seat) -> DecisionContext:
         bot_seat=seat,
         current_hand_suit_ids=tuple(int(card.suit) for card in player.private_hand),
         legal_max_amount=None if is_reveal else _legal_max(state, seat),
-        revealable_count=len(player.private_hand) if is_reveal else 0,
+        revealable_count=len(player.private_hand),
     )
 
 

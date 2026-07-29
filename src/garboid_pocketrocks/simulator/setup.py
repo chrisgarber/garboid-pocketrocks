@@ -13,6 +13,7 @@ from garboid_pocketrocks.simulator.model import (
     Phase,
     PlayerState,
     ResourceCard,
+    offered_resource_ids,
 )
 
 
@@ -101,6 +102,10 @@ def build_setup(
         current_action=current_action,
         active_objective_ids=active_objective_ids,
         priority_seat=priority_seat,
+        current_resource_ids=offered_resource_ids(
+            current_action.action_id,
+            visible_resources,
+        ),
     )
     events = (
         GameEvent(
