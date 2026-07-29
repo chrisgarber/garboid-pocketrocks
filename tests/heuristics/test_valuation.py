@@ -133,6 +133,45 @@ def test_chosen_bid_is_floor_of_shaded_reservation() -> None:
     assert result.chosen_bid == 7
 
 
+def test_future_cash_preserves_personality_and_defers_spending() -> None:
+    chart = (10, 10, 10, 10, 10, 10)
+    knowledge = make_knowledge(value_chart=chart)
+    early_context = make_context(
+        action_id=ActionId.AUCTION2,
+        current_resources=(1, 2),
+        value_chart=chart,
+        cash=(30, 30, 30),
+        legal_max=30,
+    )
+    late_context = make_context(
+        action_id=ActionId.AUCTION2,
+        current_resources=(1, 2),
+        value_chart=chart,
+        cash=(30, 30, 30),
+        won=((1, 1, 2, 2, 2), (0, 0, 0, 0, 0), (0, 0, 0, 0, 0)),
+        legal_max=30,
+    )
+
+    early_results = tuple(
+        HeuristicValuator(profile).evaluate_bid(early_context, knowledge)
+        for profile in (AGGRESSIVE_PROFILE, BALANCED_PROFILE, PASSIVE_PROFILE)
+    )
+    late_results = tuple(
+        HeuristicValuator(profile).evaluate_bid(late_context, knowledge)
+        for profile in (AGGRESSIVE_PROFILE, BALANCED_PROFILE, PASSIVE_PROFILE)
+    )
+
+    assert (
+        early_results[0].chosen_bid
+        > early_results[1].chosen_bid
+        > early_results[2].chosen_bid
+    )
+    for early, late in zip(early_results, late_results, strict=True):
+        assert early.chosen_bid < late.chosen_bid
+        assert early.points[early.chosen_bid].breakdown.future_cash < 0.0
+        assert late.points[late.chosen_bid].breakdown.future_cash == 0.0
+
+
 def test_breakdown_components_sum_to_each_point_delta() -> None:
     result = HeuristicValuator(NO_LIQUIDITY).evaluate_bid(
         make_context(),
