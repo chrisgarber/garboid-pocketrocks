@@ -26,6 +26,7 @@ neural = [
 ]
 
 [project.scripts]
+garboid-bots = "garboid_pocketrocks.bots.launcher:main"
 garboid-random-bot = "garboid_pocketrocks.bots.random_bot:main"
 garboid-simulate = "garboid_pocketrocks.simulator.cli:main"
 garboid-train = "garboid_pocketrocks.neural.cli:main"
