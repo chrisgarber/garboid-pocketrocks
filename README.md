@@ -44,7 +44,7 @@ cp .env.example .env
 Do not commit `.env`. `POCKETROCKS_API_KEY` is secret; bot IDs are public class
 constants.
 
-## Live random bot
+## Live bots
 
 `RandomBot` extends `PocketRocksFastBot`, uses the committed public identity
 `RandomBot.BOT_ID`, and delegates decisions to `RandomBotBrain`. The brain:
@@ -64,6 +64,16 @@ For a reproducible decision sequence:
 ```bash
 uv run garboid-random-bot --seed 42
 ```
+
+Run every defined bot in one local process:
+
+```bash
+uv run garboid-bots
+```
+
+The command starts random, aggressive, balanced, and passive in separate
+threads. Each bot uses its committed public ID and the shared SDK settings from
+`.env`. Press Ctrl+C to stop the local process.
 
 The SDK reads its server, capacity, logging, and API-key settings from the
 environment. The tests use its in-memory `FakeTransport` and never connect to
@@ -173,17 +183,16 @@ The simulator-ready identities are:
 
 | CLI name | Brain | Bot wrapper | `BotSpec` | Bot ID |
 | --- | --- | --- | --- | --- |
-| `aggressive` | `AggressiveHeuristicBrain` | `AggressiveHeuristicBot` | `AGGRESSIVE_HEURISTIC_BOT_SPEC` | `bot_00000000-0000-4000-8000-00000000000a` |
-| `balanced` | `BalancedHeuristicBrain` | `BalancedHeuristicBot` | `BALANCED_HEURISTIC_BOT_SPEC` | `bot_00000000-0000-4000-8000-00000000000b` |
-| `passive` | `PassiveHeuristicBrain` | `PassiveHeuristicBot` | `PASSIVE_HEURISTIC_BOT_SPEC` | `bot_00000000-0000-4000-8000-00000000000c` |
+| `aggressive` | `AggressiveHeuristicBrain` | `AggressiveHeuristicBot` | `AGGRESSIVE_HEURISTIC_BOT_SPEC` | `bot_386b81bb-14df-477a-8d4c-0231cf1b3b1a` |
+| `balanced` | `BalancedHeuristicBrain` | `BalancedHeuristicBot` | `BALANCED_HEURISTIC_BOT_SPEC` | `bot_265c84aa-f28e-4a35-b4de-a4f4ee406415` |
+| `passive` | `PassiveHeuristicBrain` | `PassiveHeuristicBot` | `PASSIVE_HEURISTIC_BOT_SPEC` | `bot_9d33c9de-4d90-4608-9a58-d2c77d93e0bd` |
 
-These three IDs are development-only placeholders, not registered live bot
-IDs. Replace the relevant class constant before connecting any heuristic bot
-wrapper to the live service. Fast bot wrappers reconcile the chart, starting
-cash, private-card count, and objective state exposed by each SDK context with
-their configured ruleset knowledge. Pass an explicit `Ruleset` when a game
-uses different resource or action deck counts, because the SDK context does
-not expose those initial counts.
+These activated public IDs are committed class constants and are used by the
+local live launcher. Fast bot wrappers reconcile the chart, starting cash,
+private-card count, and objective state exposed by each SDK context with their
+configured ruleset knowledge. Pass an explicit `Ruleset` when a game uses
+different resource or action deck counts, because the SDK context does not
+expose those initial counts.
 
 Reveal decisions use the same finite-population model from an observer's
 perspective, without access to the bot's hand. For each candidate suit, the

@@ -55,11 +55,7 @@ def _parser() -> argparse.ArgumentParser:
         "--bots",
         required=True,
         type=_bot_names,
-        help=(
-            "comma-separated registered bot names "
-            "(random, aggressive, balanced, passive); heuristic bot IDs are "
-            "development-only and must be replaced before live connection"
-        ),
+        help="comma-separated registered bot names (random, aggressive, balanced, passive)",
     )
     parser.add_argument("--games", required=True, type=_positive_int)
     parser.add_argument("--players", required=True, type=int, choices=(3, 4, 5))
