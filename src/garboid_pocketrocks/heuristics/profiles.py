@@ -35,6 +35,46 @@ class HeuristicProfile:
             raise ValueError("bid shading must be between zero and one")
 
 
-AGGRESSIVE_PROFILE = HeuristicProfile("aggressive", 0.75, 1.50, 0.25, 0.05)
-BALANCED_PROFILE = HeuristicProfile("balanced", 0.40, 0.75, 0.20, 0.25)
-PASSIVE_PROFILE = HeuristicProfile("passive", 0.15, 0.60, 0.15, 0.30)
+@dataclass(frozen=True, slots=True)
+class HeuristicProfileSet:
+    """One immutable generation of the three heuristic personalities."""
+
+    version: str
+    aggressive: HeuristicProfile
+    balanced: HeuristicProfile
+    passive: HeuristicProfile
+
+    def __post_init__(self) -> None:
+        if (
+            len(self.version) < 2
+            or self.version[0] != "v"
+            or not self.version[1:].isdigit()
+            or int(self.version[1:]) < 1
+        ):
+            raise ValueError("heuristic version must use canonical vN form")
+        names = (
+            self.aggressive.name,
+            self.balanced.name,
+            self.passive.name,
+        )
+        if names != ("aggressive", "balanced", "passive"):
+            raise ValueError("profile set must contain canonical personalities")
+
+
+HEURISTIC_V1 = HeuristicProfileSet(
+    "v1",
+    HeuristicProfile("aggressive", 0.75, 0.00, 0.25, 0.05),
+    HeuristicProfile("balanced", 0.40, 0.00, 0.20, 0.25),
+    HeuristicProfile("passive", 0.15, 0.00, 0.15, 0.50),
+)
+HEURISTIC_V2 = HeuristicProfileSet(
+    "v2",
+    HeuristicProfile("aggressive", 0.75, 1.50, 0.25, 0.05),
+    HeuristicProfile("balanced", 0.40, 0.75, 0.20, 0.25),
+    HeuristicProfile("passive", 0.15, 0.60, 0.15, 0.30),
+)
+LATEST_HEURISTICS = HEURISTIC_V2
+
+AGGRESSIVE_PROFILE = LATEST_HEURISTICS.aggressive
+BALANCED_PROFILE = LATEST_HEURISTICS.balanced
+PASSIVE_PROFILE = LATEST_HEURISTICS.passive

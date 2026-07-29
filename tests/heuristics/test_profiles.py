@@ -7,8 +7,12 @@ from garboid_pocketrocks.heuristics.errors import HeuristicInputError
 from garboid_pocketrocks.heuristics.profiles import (
     AGGRESSIVE_PROFILE,
     BALANCED_PROFILE,
+    HEURISTIC_V1,
+    HEURISTIC_V2,
+    LATEST_HEURISTICS,
     PASSIVE_PROFILE,
     HeuristicProfile,
+    HeuristicProfileSet,
 )
 
 
@@ -48,10 +52,44 @@ def test_profile_rejects_empty_name() -> None:
         HeuristicProfile("", 0.4, 0.5, 0.2, 0.25)
 
 
-def test_named_profiles_have_exact_constants() -> None:
-    assert AGGRESSIVE_PROFILE == HeuristicProfile("aggressive", 0.75, 1.50, 0.25, 0.05)
-    assert BALANCED_PROFILE == HeuristicProfile("balanced", 0.40, 0.75, 0.20, 0.25)
-    assert PASSIVE_PROFILE == HeuristicProfile("passive", 0.15, 0.60, 0.15, 0.30)
+def test_versioned_profiles_have_exact_constants() -> None:
+    assert HEURISTIC_V1.version == "v1"
+    assert HEURISTIC_V1.aggressive == HeuristicProfile("aggressive", 0.75, 0.0, 0.25, 0.05)
+    assert HEURISTIC_V1.balanced == HeuristicProfile("balanced", 0.40, 0.0, 0.20, 0.25)
+    assert HEURISTIC_V1.passive == HeuristicProfile("passive", 0.15, 0.0, 0.15, 0.50)
+
+    assert HEURISTIC_V2.version == "v2"
+    assert HEURISTIC_V2.aggressive == HeuristicProfile("aggressive", 0.75, 1.50, 0.25, 0.05)
+    assert HEURISTIC_V2.balanced == HeuristicProfile("balanced", 0.40, 0.75, 0.20, 0.25)
+    assert HEURISTIC_V2.passive == HeuristicProfile("passive", 0.15, 0.60, 0.15, 0.30)
+
+
+def test_unversioned_profiles_alias_latest_generation() -> None:
+    assert LATEST_HEURISTICS is HEURISTIC_V2
+    assert AGGRESSIVE_PROFILE is HEURISTIC_V2.aggressive
+    assert BALANCED_PROFILE is HEURISTIC_V2.balanced
+    assert PASSIVE_PROFILE is HEURISTIC_V2.passive
+
+
+@pytest.mark.parametrize("version", ("", "1", "version-1", "v0", "v-1", "V1"))
+def test_profile_set_rejects_noncanonical_version(version: str) -> None:
+    with pytest.raises(ValueError, match="version"):
+        HeuristicProfileSet(
+            version,
+            HeuristicProfile("aggressive", 0.75, 0.0, 0.25, 0.05),
+            HeuristicProfile("balanced", 0.40, 0.0, 0.20, 0.25),
+            HeuristicProfile("passive", 0.15, 0.0, 0.15, 0.50),
+        )
+
+
+def test_profile_set_rejects_mismatched_personality_names() -> None:
+    with pytest.raises(ValueError, match="personalities"):
+        HeuristicProfileSet(
+            "v3",
+            HeuristicProfile("balanced", 0.75, 0.0, 0.25, 0.05),
+            HeuristicProfile("aggressive", 0.40, 0.0, 0.20, 0.25),
+            HeuristicProfile("passive", 0.15, 0.0, 0.15, 0.50),
+        )
 
 
 def test_named_profiles_have_expected_ordering() -> None:
