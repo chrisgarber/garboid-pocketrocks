@@ -15,6 +15,7 @@ authors = [
 ]
 dependencies = [
   "pocketrocks-python-sdk @ git+https://github.com/jaiparera/pocketrocks-python-sdk.git@597857446d47ac0890609a4767cad561578a2519",
+  "python-dotenv>=1",
 ]
 
 [project.scripts]

@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 import asyncio
+import sys
 from collections.abc import Sequence
+from pathlib import Path
 
 import pytest
 from pocketrocks import ActionId, BotDecision, DecisionContext, Suit
 from pocketrocks.testing import FakeTransport, decode_frames, scenario
 
-from garboid_pocketrocks.bots.random_bot import RandomBot
+from garboid_pocketrocks.bots.random_bot import RandomBot, main
+
+RANDOM_BOT_ID = "bot_e0e2c541-1615-4f47-983c-224e7d888d89"
 
 
 def _bot(seed: int) -> RandomBot:
@@ -132,3 +136,28 @@ def test_fake_transport_drives_random_bot_runtime() -> None:
     decision = BotDecision(action_kind=response.action_kind, value=response.value)
     assert context.is_legal(decision)
     assert transport.disconnected
+
+
+def test_main_loads_random_bot_id_from_dotenv(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    (tmp_path / ".env").write_text(
+        f"POCKETROCKS_API_KEY=test-key\nRANDOM_BOT_ID={RANDOM_BOT_ID}\n",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("POCKETROCKS_API_KEY", raising=False)
+    monkeypatch.delenv("POCKETROCKS_BOT_ID", raising=False)
+    monkeypatch.delenv("RANDOM_BOT_ID", raising=False)
+    monkeypatch.setattr(sys, "argv", ["garboid-random-bot"])
+    configured_bot_ids: list[str | None] = []
+
+    def record_configuration(bot: RandomBot) -> None:
+        configured_bot_ids.append(bot.config.bot_id)
+
+    monkeypatch.setattr(RandomBot, "run", record_configuration)
+
+    main()
+
+    assert configured_bot_ids == [RANDOM_BOT_ID]

@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import argparse
+import os
 import random
 from typing import Any
 
+from dotenv import find_dotenv, load_dotenv
 from pocketrocks import BotDecision, DecisionContext, PocketRocksBot
 
 
@@ -28,6 +30,11 @@ class RandomBot(PocketRocksBot):
         return BotDecision.select_info_to_reveal(index)
 
 
+def _random_bot_id() -> str | None:
+    load_dotenv(find_dotenv(usecwd=True), override=False)
+    return os.getenv("RANDOM_BOT_ID")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run the Garboid random PocketRocks bot")
     parser.add_argument(
@@ -37,4 +44,4 @@ def main() -> None:
         help="seed the bot's random decisions for reproducibility",
     )
     args = parser.parse_args()
-    RandomBot(seed=args.seed).run()
+    RandomBot(seed=args.seed, bot_id=_random_bot_id()).run()

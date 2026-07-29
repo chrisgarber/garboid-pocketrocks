@@ -46,6 +46,9 @@ cp .env.example .env
 
 Do not commit `.env`.
 
+The API key in `.env` is secret. Bot IDs are public identifiers, so each bot's
+ID can live in the committed template under a strategy-specific name.
+
 ## Random bot
 
 `RandomBot` follows the
@@ -63,6 +66,10 @@ Run it after filling in `.env`:
 ```bash
 uv run garboid-random-bot
 ```
+
+The command loads `RANDOM_BOT_ID` and passes it to the SDK. If that variable is
+unset, the SDK's generic `POCKETROCKS_BOT_ID` setting remains available as a
+fallback.
 
 For a reproducible decision sequence:
 

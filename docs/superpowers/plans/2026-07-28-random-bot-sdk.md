@@ -292,12 +292,14 @@ Expected: help text includes `--seed` and exits with code `0`.
 Replace `.env.example` with:
 
 ```dotenv
-# Copy this file to `.env`, then replace the required placeholders.
+# Copy this file to `.env`, then replace the required secret placeholder.
 # Never commit `.env`; it contains your secret API key.
 
-# Required — obtain these from the PocketRocks dashboard.
+# Required secret — obtain this from the PocketRocks dashboard.
 POCKETROCKS_API_KEY=paste-your-api-key-here
-POCKETROCKS_BOT_ID=paste-your-bot-id-here
+
+# Public bot identity committed for the random-bot profile.
+RANDOM_BOT_ID=bot_e0e2c541-1615-4f47-983c-224e7d888d89
 
 # Hosted PocketRocks server. The SDK uses this value by default.
 POCKETROCKS_SERVER_URL=wss://pocketrocks.xyz
@@ -410,7 +412,8 @@ Expected: one implementation commit after the design commit.
 
 **Interfaces:**
 - Consumes: public GitHub repository `chrisgarber/garboid-pocketrocks`
-- Consumes: user-created ignored `.env` with a PocketRocks API key and bot ID
+- Consumes: user-created ignored `.env` with a PocketRocks API key and the
+  committed `RANDOM_BOT_ID`
 - Produces: successful CI run for the random-bot implementation
 - Produces: observed SDK connection to `wss://pocketrocks.xyz`
 
@@ -467,7 +470,8 @@ Ask the user to run:
 cp .env.example .env
 ```
 
-and replace the API key and bot ID placeholders. Wait for confirmation.
+and replace the API key placeholder. The random bot ID is already configured.
+Wait for confirmation.
 
 Check only for file presence:
 

@@ -88,15 +88,15 @@ Registers:
 garboid-random-bot = "garboid_pocketrocks.bots.random_bot:main"
 ```
 
-No new dependency is required because the SDK and Python standard library
-already provide all runtime and testing primitives used by this milestone.
+`python-dotenv` is declared directly because the random-bot CLI loads its
+strategy-specific bot ID before passing it into the SDK.
 
 ### `.env.example`
 
 Expands the starter configuration guidance with:
 
 - required API key placeholder;
-- required bot ID placeholder;
+- committed public random-bot ID under `RANDOM_BOT_ID`;
 - hosted server URL;
 - optional capacity and log-level examples.
 
@@ -213,7 +213,9 @@ connection.
 After fake-transport verification, local checks, push, and successful CI:
 
 1. Ask the user to create `.env` from `.env.example` and supply their real API
-   key and bot ID.
+   key. The committed `RANDOM_BOT_ID` is passed explicitly to the SDK; its
+   generic `POCKETROCKS_BOT_ID` remains a fallback when the bot-specific
+   variable is absent.
 2. Confirm only that `.env` exists; do not print or inspect its values.
 3. Run `uv run garboid-random-bot --seed 0` in an interactive terminal.
 4. Observe SDK output confirming a connection.

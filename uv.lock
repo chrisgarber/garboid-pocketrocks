@@ -58,6 +58,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "pocketrocks-python-sdk" },
+    { name = "python-dotenv" },
 ]
 
 [package.dev-dependencies]
@@ -68,7 +69,10 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "pocketrocks-python-sdk", git = "https://github.com/jaiparera/pocketrocks-python-sdk.git?rev=597857446d47ac0890609a4767cad561578a2519" }]
+requires-dist = [
+    { name = "pocketrocks-python-sdk", git = "https://github.com/jaiparera/pocketrocks-python-sdk.git?rev=597857446d47ac0890609a4767cad561578a2519" },
+    { name = "python-dotenv", specifier = ">=1" },
+]
 
 [package.metadata.requires-dev]
 dev = [
