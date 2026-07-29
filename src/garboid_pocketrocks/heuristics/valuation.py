@@ -26,6 +26,7 @@ class ValueBreakdown:
     objective_progress: float
     terminal_cash: float
     liquidity: float
+    future_cash: float
     total: float
 
 
@@ -92,6 +93,7 @@ class HeuristicValuator:
                 horizon=belief.normalized_horizon,
                 starting_cash=context.starting_cash,
                 liquidity_strength=self.profile.liquidity_strength,
+                future_cash_weight=self.profile.future_cash_weight,
                 gross_value=gross_value,
             )
         except HeuristicInputError:
@@ -107,6 +109,7 @@ class HeuristicValuator:
                 objective_progress=objective_progress,
                 terminal_cash=point.terminal_cash,
                 liquidity=point.liquidity,
+                future_cash=point.future_cash,
             )
             for point in economics
         )
@@ -192,8 +195,16 @@ class HeuristicValuator:
         objective_progress: float,
         terminal_cash: float,
         liquidity: float,
+        future_cash: float,
     ) -> BidPoint:
-        total = resource + objective_completion + objective_progress + terminal_cash + liquidity
+        total = (
+            resource
+            + objective_completion
+            + objective_progress
+            + terminal_cash
+            + liquidity
+            + future_cash
+        )
         if not all(
             math.isfinite(value)
             for value in (
@@ -202,6 +213,7 @@ class HeuristicValuator:
                 objective_progress,
                 terminal_cash,
                 liquidity,
+                future_cash,
                 total,
             )
         ):
@@ -212,6 +224,7 @@ class HeuristicValuator:
             objective_progress=objective_progress,
             terminal_cash=terminal_cash,
             liquidity=liquidity,
+            future_cash=future_cash,
             total=total,
         )
         return BidPoint(bid=bid, win_delta=total, breakdown=breakdown)

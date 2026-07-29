@@ -147,6 +147,7 @@ def test_breakdown_components_sum_to_each_point_delta() -> None:
             + breakdown.objective_progress
             + breakdown.terminal_cash
             + breakdown.liquidity
+            + breakdown.future_cash
         )
         assert breakdown.total == expected == point.win_delta
         assert all(
@@ -157,9 +158,27 @@ def test_breakdown_components_sum_to_each_point_delta() -> None:
                 breakdown.objective_progress,
                 breakdown.terminal_cash,
                 breakdown.liquidity,
+                breakdown.future_cash,
                 breakdown.total,
             )
         )
+
+
+def test_zero_horizon_has_no_future_cash_component() -> None:
+    won = ((1, 2, 2, 2, 2), (0, 0, 0, 0, 0), (0, 0, 0, 0, 0))
+    result = HeuristicValuator(BALANCED_PROFILE).evaluate_bid(
+        make_context(
+            action_id=ActionId.AUCTION1,
+            current_resources=(1, 0),
+            won=won,
+            cash=(20, 20, 20),
+            legal_max=20,
+        ),
+        make_knowledge(),
+    )
+
+    assert result.belief.normalized_horizon == 0.0
+    assert all(point.breakdown.future_cash == 0.0 for point in result.points)
 
 
 def test_financial_actions_have_no_resource_or_objective_value() -> None:
