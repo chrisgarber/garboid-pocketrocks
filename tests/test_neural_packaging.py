@@ -55,10 +55,14 @@ def test_core_and_neural_mypy_configs_have_separate_boundaries() -> None:
     assert "exclude" not in neural_config
 
 
-def test_ci_keeps_core_install_and_adds_neural_job() -> None:
+def test_ci_keeps_core_install_and_splits_neural_unit_and_smoke_steps() -> None:
     workflow = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
 
     assert "run: uv sync --locked\n" in workflow
     assert "run: uv sync --locked --extra neural" in workflow
     assert "run: uv run --extra neural mypy --config-file mypy.neural.ini src tests" in workflow
-    assert "run: uv run --extra neural pytest tests/neural -q" in workflow
+    assert 'run: uv run --extra neural pytest tests/neural -m "not neural_smoke" -q' in workflow
+    assert (
+        "run: uv run --extra neural pytest "
+        "tests/neural/test_smoke.py::test_two_by_sixteen_smoke_is_deterministic -q"
+    ) in workflow

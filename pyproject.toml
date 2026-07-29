@@ -28,6 +28,7 @@ neural = [
 [project.scripts]
 garboid-random-bot = "garboid_pocketrocks.bots.random_bot:main"
 garboid-simulate = "garboid_pocketrocks.simulator.cli:main"
+garboid-train = "garboid_pocketrocks.neural.cli:main"
 
 [tool.hatch.metadata]
 allow-direct-references = true
@@ -50,6 +51,9 @@ dev = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+  "neural_smoke: deterministic CPU PPO smoke contract",
+]
 
 [tool.ruff]
 line-length = 100

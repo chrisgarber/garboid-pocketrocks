@@ -275,8 +275,37 @@ cash + investment locks + investment payouts
 
 Terminal resource value supplies the remaining normalized final-money change.
 A configurable win bonus is divided among tied winners. Reward components are
-returned separately for auditing. No neural policy or training algorithm is
-included yet.
+returned separately for auditing.
+
+## Stage 1 neural PPO smoke
+
+Torch remains an optional dependency. Install the locked neural environment
+and run the deterministic mechanics smoke with:
+
+```bash
+uv sync --locked --extra neural
+uv run --extra neural garboid-train smoke \
+  --output-dir artifacts/neural-smoke
+```
+
+The default runs exactly two PPO updates with 16 complete live-A, three-player
+games per update on CPU. The learner seat rotates while the other seats use
+the frozen balanced and passive heuristic bots. It verifies deterministic
+planning, public-history encoding, legal-action masking, gamma-one GAE, one
+epoch of clipped PPO, gradient clipping, and checkpoint replay. It is a
+mechanics test, not evidence of playing strength.
+
+The output contains `smoke-result.json` and an inference-only checkpoint:
+
+```text
+checkpoint/
+  manifest.json
+  model.pt
+```
+
+Stage 1 checkpoints intentionally omit optimizer and random-number-generator
+state, so runs cannot be resumed. Stage 1 also has no opponent league, varied
+ruleset curriculum, or registered live neural bot wrapper.
 
 ## Quality checks
 
