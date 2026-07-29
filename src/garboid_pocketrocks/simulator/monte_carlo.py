@@ -323,9 +323,19 @@ class MonteCarloRunner:
         *,
         workers: int = 1,
     ) -> MonteCarloResult:
+        jobs = MonteCarloRunner.plan(config)
+        return MonteCarloRunner.run_jobs(config, jobs, workers=workers)
+
+    @staticmethod
+    def run_jobs(
+        config: MonteCarloConfig,
+        jobs: tuple[GameJob, ...],
+        *,
+        workers: int = 1,
+    ) -> MonteCarloResult:
         if workers < 1:
             raise ValueError("workers must be positive")
-        jobs = MonteCarloRunner.plan(config)
+        _validate_jobs(config, jobs)
         if workers == 1:
             completed = tuple(_execute_job(job) for job in jobs)
         else:
@@ -339,6 +349,37 @@ class MonteCarloRunner:
                     f"process workers failed to load bot specs: {names}"
                 ) from error
         return _aggregate(config, completed)
+
+
+def _validate_jobs(
+    config: MonteCarloConfig,
+    jobs: tuple[GameJob, ...],
+) -> None:
+    if len(jobs) != config.games:
+        raise ValueError(
+            f"job count {len(jobs)} does not match configured games {config.games}"
+        )
+    if tuple(job.game_index for job in jobs) != tuple(range(config.games)):
+        raise ValueError("game indices must be contiguous and start at zero")
+    if any(job.root_seed != config.root_seed for job in jobs):
+        raise ValueError("every job root seed must match the configuration")
+
+    supported_rulesets = {ruleset.name: ruleset for ruleset in config.ruleset_sampler.support()}
+    configured_bot_ids = {spec.bot_id for spec in config.bot_specs}
+    for job in jobs:
+        if job.player_count not in config.player_counts:
+            raise ValueError(f"job {job.game_index} uses an unconfigured player count")
+        if (
+            job.ruleset.name not in supported_rulesets
+            or supported_rulesets[job.ruleset.name] != job.ruleset
+        ):
+            raise ValueError(f"job {job.game_index} uses an unsupported ruleset")
+        if len(job.lineup) != job.player_count:
+            raise ValueError(f"job {job.game_index} lineup length does not match player count")
+        if any(spec.bot_id not in configured_bot_ids for spec in job.lineup):
+            raise ValueError(f"job {job.game_index} uses an unconfigured bot identity")
+        if job.fault_mode is not config.fault_mode:
+            raise ValueError(f"job {job.game_index} fault mode does not match the configuration")
 
 
 def _validate_picklable_bot_specs(bot_specs: tuple[BotSpec, ...]) -> None:
