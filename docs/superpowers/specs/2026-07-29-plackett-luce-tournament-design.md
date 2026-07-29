@@ -150,9 +150,13 @@ from the tournament root seed and global index using the existing
 count.
 
 The scheduler guarantees unique bot IDs within a lineup. Tests will require
-near-balanced appearances and seats; exact equality is required when the
-arithmetic permits it. Pair exposure is a greedy balance objective rather than
-an exact combinatorial guarantee and will be tested against a bounded spread.
+the maximum and minimum bot appearance counts within each condition cell to
+differ by at most one. Within a fixed player count, each bot's usage of the
+available seats must also differ by at most one. Pair exposure is a greedy
+balance objective rather than an exact combinatorial guarantee; tests verify
+that every selected candidate minimizes the documented lexicographic score at
+the moment it is selected, and the report records the resulting minimum,
+median, and maximum pair counts.
 
 ### Monte Carlo execution seam
 
@@ -217,11 +221,12 @@ worth.
 
 Fit real-bot log-worths and observed tie-order log parameters by penalized
 maximum likelihood with an analytic gradient and SciPy L-BFGS-B. `scipy` will
-become a direct runtime dependency. Tie parameters use finite numerical bounds;
-unobserved higher tie orders are omitted instead of inferred. Convergence
-requires the optimizer's success status and a finite objective and gradient.
-Failure raises a domain-specific error that includes the optimizer message and
-suggests inspecting faults and comparison coverage.
+become a direct runtime dependency. Tie log-parameters are bounded to
+`[-12, 12]`; unobserved higher tie orders are omitted instead of inferred. The
+optimizer uses at most 1,000 iterations and a gradient tolerance of `1e-8`.
+Convergence requires the optimizer's success status and a finite objective and
+gradient. Failure raises a domain-specific error that includes the optimizer
+message and suggests inspecting faults and comparison coverage.
 
 The result records:
 
@@ -255,8 +260,10 @@ The 2.5th and 97.5th empirical percentiles form the displayed 95% interval.
 Bootstrap seeds derive from the tournament root seed. Replicates run after the
 Monte Carlo tournament so the main strength estimate and artifacts remain
 available even when bootstrap sampling is disabled. A failed replicate is
-reported and excluded; the report fails if fewer than 90% of requested
-replicates converge.
+reported and excluded. Intervals are emitted when at least 90% of requested
+replicates converge; otherwise the leaderboard is still written without
+intervals and every artifact carries a bootstrap warning. Secondary
+uncertainty estimation never suppresses the primary fitted rankings.
 
 ## Metrics and artifacts
 
@@ -337,10 +344,10 @@ Preflight errors occur before games start for:
 - unsafe output-directory replacement;
 - non-picklable bot factories when workers exceed one.
 
-Post-simulation errors occur before artifacts are finalized for non-finite
-data, optimizer failure, or insufficient converged bootstrap replicates.
-Artifacts are first written to temporary siblings and atomically replaced so a
-failed report does not leave mixed-version output.
+Post-simulation errors occur before artifacts are finalized for non-finite data
+or failure of the primary optimizer. Artifact contents are fully rendered
+before writing. Each file is written to a temporary sibling and atomically
+replaced so a failed write never leaves a partially written artifact.
 
 ## Testing strategy
 
@@ -354,7 +361,9 @@ Implementation follows test-driven development.
   10,000;
 - every lineup contains distinct bot IDs;
 - every job uses the requested chart and player count;
-- appearances, pairs, and seats stay within explicit balance bounds;
+- per-cell bot appearance counts differ by at most one;
+- per-player-count seat counts for each bot differ by at most one;
+- every greedy lineup choice minimizes the documented candidate score;
 - global indices and derived seeds are unique;
 - four bots with requested five-player games fail before execution.
 
@@ -422,7 +431,7 @@ The feature is complete when:
 3. a five-or-more-bot population yields finite tie-aware Plackett–Luce worths
    and 1500-centered display ratings;
 4. serial and process-worker execution produce identical tournament results;
-5. CSV, JSON, and self-contained HTML artifacts are generated atomically;
+5. CSV, JSON, and self-contained HTML artifacts are each written atomically;
 6. the HTML report includes the leaderboard, winning-money relationship, and
    calibration charts;
 7. the relevant focused tests, full test suite, lint, and type checking pass.
