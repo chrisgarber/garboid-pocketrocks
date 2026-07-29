@@ -10,6 +10,7 @@ from garboid_pocketrocks.heuristics.cash import evaluate_action_curve
 from garboid_pocketrocks.heuristics.errors import HeuristicInputError
 from garboid_pocketrocks.heuristics.objectives import evaluate_objectives
 from garboid_pocketrocks.heuristics.profiles import HeuristicProfile
+from garboid_pocketrocks.heuristics.reveals import choose_reveal
 from garboid_pocketrocks.rules import RulesetKnowledge
 
 _AUCTIONS = (ActionId.AUCTION1, ActionId.AUCTION2)
@@ -125,6 +126,14 @@ class HeuristicValuator:
             reservation_bid=reservation_bid,
             chosen_bid=chosen_bid,
         )
+
+    def choose_reveal(
+        self,
+        context: DecisionContext,
+        ruleset: RulesetKnowledge,
+    ) -> int:
+        """Choose which private-card index to reveal."""
+        return choose_reveal(context, ruleset)
 
     @staticmethod
     def _offered_counts(
