@@ -402,11 +402,11 @@ Run the same fixed seed twice for v1 and v2 lineups and require exact JSON
 equality per generation:
 
 ```bash
-PYTHONPATH=src .venv/bin/python -m garboid_pocketrocks.simulator.cli \
+PYTHONPATH=src .venv/bin/garboid-simulate \
   --bots aggressive-v1,balanced-v1,passive-v1 \
   --games 100 --players 3 --seed 20260729 --workers 2 --format json
 
-PYTHONPATH=src .venv/bin/python -m garboid_pocketrocks.simulator.cli \
+PYTHONPATH=src .venv/bin/garboid-simulate \
   --bots aggressive-v2,balanced-v2,passive-v2 \
   --games 100 --players 3 --seed 20260729 --workers 2 --format json
 ```

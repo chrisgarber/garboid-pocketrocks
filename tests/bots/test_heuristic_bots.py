@@ -177,8 +177,8 @@ def test_versioned_bot_factories_use_pinned_profiles(
     ),
 )
 def test_unversioned_brains_match_v2_decisions(
-    latest_brain: type[HeuristicBotBrain],
-    v2_brain: type[HeuristicBotBrain],
+    latest_brain: Callable[[], HeuristicBotBrain],
+    v2_brain: Callable[[], HeuristicBotBrain],
 ) -> None:
     context = make_context(action_id=ActionId.AUCTION2, legal_max=17)
     knowledge = make_knowledge()

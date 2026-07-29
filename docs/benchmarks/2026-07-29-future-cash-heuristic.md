@@ -1,8 +1,8 @@
-# Future-cash heuristic benchmark
+# Heuristic v2 future-cash benchmark
 
-This report records the calibration and frozen validation of the heuristic
-bots after adding an explicit opportunity cost for spending cash needed by
-future resource auctions.
+This report records the calibration and frozen validation of heuristic v2
+after adding an explicit opportunity cost for spending cash needed by future
+resource auctions. The earlier behavior is frozen as v1.
 
 ## Change
 
@@ -17,7 +17,7 @@ Each action curve includes the change in this value between its current and
 post-action cash. The term applies uniformly to resource auctions, loans, and
 investments and is exposed separately in valuation breakdowns.
 
-The calibrated profile constants are:
+The calibrated v2 profile constants are:
 
 | Profile | Liquidity | Future cash | Objective progress | Bid shading |
 |---|---:|---:|---:|---:|
@@ -32,7 +32,7 @@ budgets before late resource auctions.
 
 ## Method
 
-- Lineup: aggressive, balanced, passive
+- Lineup: aggressive-v2, balanced-v2, passive-v2
 - Player count: 3
 - Rulesets: live charts A-E, sampled uniformly
 - Calibration: 20,000 games, root seed `20260730`
@@ -68,10 +68,14 @@ personality order for both early resource spending
 The mean winning score was 77.529 and the median was 76. All bot-fault counts
 were zero.
 
-Balanced is now the strongest profile, while aggressive and passive remain
-competitive and behaviorally distinct. Relative to the previous 100,000-game
-result, outright wins changed from 16.856% / 15.497% / 65.725% to
-32.987% / 36.124% / 28.180% for aggressive / balanced / passive.
+Balanced-v2 is the strongest v2 profile, while aggressive-v2 and passive-v2
+remain competitive and behaviorally distinct. Relative to the frozen v1
+100,000-game result, outright wins changed from
+16.856% / 15.497% / 65.725% to 32.987% / 36.124% / 28.180% for
+aggressive / balanced / passive.
+
+The simulation CLI exposes both generations as `*-v1` and `*-v2`.
+Unversioned names alias v2.
 
 The frozen result narrowly missed the aspirational balance band. Passive was
 0.820 percentage points below its 29% lower bound, and the 7.944-point
