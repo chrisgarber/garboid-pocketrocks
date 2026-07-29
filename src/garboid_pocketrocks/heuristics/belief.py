@@ -123,6 +123,35 @@ def _action_from_context(context: DecisionContext, knowledge: RulesetKnowledge) 
     return action
 
 
+def _count_resources(resource_ids: Iterable[int]) -> tuple[int, ...]:
+    counts = [0] * _SUIT_COUNT
+    for resource_id in resource_ids:
+        if resource_id:
+            counts[resource_id - 1] += 1
+    return tuple(counts)
+
+
+def _visible_resource_counts(context: DecisionContext) -> tuple[int, ...]:
+    if context.decision_kind != "submitBid":
+        return (0,) * _SUIT_COUNT
+    return _count_resources(context.current_resource_ids)
+
+
+def offered_resource_counts(
+    context: DecisionContext,
+    action: ActionId,
+) -> tuple[int, ...]:
+    """Return the visible resources awarded by winning the active action."""
+    if context.decision_kind != "submitBid" or action not in _AUCTIONS:
+        return (0,) * _SUIT_COUNT
+    resource_ids = (
+        context.current_resource_ids[:1]
+        if action is ActionId.AUCTION1
+        else context.current_resource_ids
+    )
+    return _count_resources(resource_ids)
+
+
 def _validate_context(
     context: DecisionContext,
     knowledge: RulesetKnowledge,
@@ -199,12 +228,7 @@ def _validate_context(
         raise HeuristicInputError("own private card count contradicts ruleset setup")
 
     action = _action_from_context(context, knowledge)
-    offered_count = sum(resource_id != 0 for resource_id in context.current_resource_ids)
-    if action not in _AUCTIONS and offered_count:
-        raise HeuristicInputError("offered resource is invalid for a financial action")
-    maximum_offer = 1 if action is ActionId.AUCTION1 else 2
-    if action in _AUCTIONS and offered_count > maximum_offer:
-        raise HeuristicInputError("offered resource count exceeds auction capacity")
+    offered_count = sum(offered_resource_counts(context, action))
     if context.decision_kind == "submitBid":
         if context.legal_max_amount is None or context.legal_max_amount < 0:
             raise HeuristicInputError("bid request requires a nonnegative legal maximum")
@@ -213,18 +237,6 @@ def _validate_context(
     elif context.legal_max_amount is not None:
         raise HeuristicInputError("reveal request cannot include a legal bid maximum")
     return action
-
-
-def _offered_counts(
-    context: DecisionContext,
-    action: ActionId,
-) -> tuple[int, ...]:
-    counts = [0] * _SUIT_COUNT
-    if context.decision_kind == "submitBid" and action in _AUCTIONS:
-        for resource_id in context.current_resource_ids:
-            if resource_id:
-                counts[resource_id - 1] += 1
-    return tuple(counts)
 
 
 def _terminal_price_pmf(
@@ -272,14 +284,18 @@ def build_belief(
         sum(row[index] for row in context.won_resource_counts_by_seat)
         for index in range(_SUIT_COUNT)
     )
-    offered_by_suit = _offered_counts(context, action)
+    visible_by_suit = _visible_resource_counts(context)
+    offered_by_suit = offered_resource_counts(context, action)
+    known_future_by_suit = tuple(
+        visible - offered for visible, offered in zip(visible_by_suit, offered_by_suit, strict=True)
+    )
     unseen_by_suit = tuple(
-        total - terminal - won - offered
-        for total, terminal, won, offered in zip(
+        total - terminal - won - visible
+        for total, terminal, won, visible in zip(
             knowledge.resource_counts,
             known_terminal_reveals,
             won_by_suit,
-            offered_by_suit,
+            visible_by_suit,
             strict=True,
         )
     )
@@ -304,15 +320,21 @@ def build_belief(
         raise HeuristicInputError("known won and offered cards exceed biddable resources")
     if unseen_population < opponent_hidden_slots:
         raise HeuristicInputError("opponent hidden slots exceed the unseen population")
-    if unseen_population - opponent_hidden_slots != future_biddable:
+    unknown_future_biddable = unseen_population - opponent_hidden_slots
+    if unknown_future_biddable + sum(known_future_by_suit) != future_biddable:
         raise HeuristicInputError("public card counts violate finite-population conservation")
 
     if unseen_population:
         expected_future_biddable_counts = tuple(
-            unseen * future_biddable / unseen_population for unseen in unseen_by_suit
+            known_future + (unseen * unknown_future_biddable / unseen_population)
+            for known_future, unseen in zip(
+                known_future_by_suit,
+                unseen_by_suit,
+                strict=True,
+            )
         )
     else:
-        expected_future_biddable_counts = (0.0,) * _SUIT_COUNT
+        expected_future_biddable_counts = tuple(float(count) for count in known_future_by_suit)
 
     suits: list[SuitBelief] = []
     for suit, known, unseen in zip(

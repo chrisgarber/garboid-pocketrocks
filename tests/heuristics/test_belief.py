@@ -160,13 +160,28 @@ def test_reveal_context_ignores_the_preserved_offer_identity() -> None:
     assert with_preserved_offer == without_preserved_offer
 
 
-def test_financial_bid_has_no_offered_resources() -> None:
+def test_financial_bid_ignores_visible_board_resources() -> None:
     context = make_context(
-        action_id=ActionId.LOAN10,
-        current_resources=(0, 0),
+        action_id=ActionId.INVEST10,
+        current_resources=(int(Suit.WOOD), int(Suit.ORE)),
     )
     belief = build_belief(context, make_knowledge())
+
+    assert tuple(suit.unseen_suit_count for suit in belief.suits) == (2, 1, 1, 2, 2)
+    assert belief.expected_future_biddable_counts == (2.0, 2.0, 2.0, 2.0, 2.0)
     assert belief.normalized_horizon == 1.0
+
+
+def test_one_card_auction_ignores_second_visible_resource() -> None:
+    context = make_context(
+        action_id=ActionId.AUCTION1,
+        current_resources=(int(Suit.ORE), int(Suit.WOOD)),
+    )
+    belief = build_belief(context, make_knowledge())
+
+    assert tuple(suit.unseen_suit_count for suit in belief.suits) == (2, 1, 1, 2, 2)
+    assert belief.expected_future_biddable_counts == (2.0, 2.0, 1.0, 2.0, 2.0)
+    assert belief.normalized_horizon == 0.9
 
 
 def test_moving_own_hand_card_to_revealed_information_preserves_belief() -> None:
@@ -255,22 +270,6 @@ def test_inconsistent_known_cards_are_rejected() -> None:
             ),
             make_knowledge(private_cards=1),
             "private card",
-        ),
-        (
-            make_context(
-                action_id=ActionId.LOAN10,
-                current_resources=(int(Suit.BRICK), 0),
-            ),
-            make_knowledge(),
-            "offered resource",
-        ),
-        (
-            make_context(
-                action_id=ActionId.AUCTION1,
-                current_resources=(int(Suit.BRICK), int(Suit.WOOD)),
-            ),
-            make_knowledge(),
-            "offered resource",
         ),
     ),
 )

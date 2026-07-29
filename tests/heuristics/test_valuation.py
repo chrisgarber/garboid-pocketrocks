@@ -180,6 +180,34 @@ def test_financial_actions_have_no_resource_or_objective_value() -> None:
     )
 
 
+def test_live_investment_context_with_visible_resources_still_bids() -> None:
+    result = HeuristicValuator(BALANCED_PROFILE).evaluate_bid(
+        make_context(
+            action_id=ActionId.INVEST10,
+            current_resources=(2, 4),
+        ),
+        make_knowledge(),
+    )
+
+    assert result.chosen_bid > 0
+    assert all(point.breakdown.resource == 0.0 for point in result.points)
+
+
+def test_one_card_auction_values_only_first_visible_resource() -> None:
+    chart = (10, 10, 10, 10, 10, 10)
+    result = HeuristicValuator(NO_LIQUIDITY).evaluate_bid(
+        make_context(
+            action_id=ActionId.AUCTION1,
+            current_resources=(3, 2),
+            value_chart=chart,
+        ),
+        make_knowledge(value_chart=chart),
+    )
+
+    assert result.points[0].breakdown.resource == 10.0
+    assert result.reservation_bid == 10
+
+
 @pytest.mark.parametrize(
     ("context", "message"),
     (

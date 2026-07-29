@@ -5,7 +5,11 @@ from dataclasses import dataclass
 
 from pocketrocks import ActionId, DecisionContext
 
-from garboid_pocketrocks.heuristics.belief import BeliefState, build_belief
+from garboid_pocketrocks.heuristics.belief import (
+    BeliefState,
+    build_belief,
+    offered_resource_counts,
+)
 from garboid_pocketrocks.heuristics.cash import evaluate_action_curve
 from garboid_pocketrocks.heuristics.errors import HeuristicInputError
 from garboid_pocketrocks.heuristics.objectives import evaluate_objectives
@@ -14,7 +18,6 @@ from garboid_pocketrocks.heuristics.reveals import choose_reveal
 from garboid_pocketrocks.rules import RulesetKnowledge
 
 _AUCTIONS = (ActionId.AUCTION1, ActionId.AUCTION2)
-_SUIT_COUNT = 5
 
 
 @dataclass(frozen=True, slots=True)
@@ -70,7 +73,7 @@ class HeuristicValuator:
         belief = build_belief(context, ruleset)
         try:
             action = ActionId(context.current_action_id)
-            offered_counts = self._offered_counts(context, action)
+            offered_counts = offered_resource_counts(context, action)
             resource_value = self._resource_value(
                 belief=belief,
                 offered_counts=offered_counts,
@@ -132,18 +135,6 @@ class HeuristicValuator:
     ) -> int:
         """Choose which private-card index to reveal."""
         return choose_reveal(context, ruleset)
-
-    @staticmethod
-    def _offered_counts(
-        context: DecisionContext,
-        action: ActionId,
-    ) -> tuple[int, ...]:
-        counts = [0] * _SUIT_COUNT
-        if action in _AUCTIONS:
-            for resource_id in context.current_resource_ids:
-                if resource_id:
-                    counts[resource_id - 1] += 1
-        return tuple(counts)
 
     @staticmethod
     def _resource_value(
