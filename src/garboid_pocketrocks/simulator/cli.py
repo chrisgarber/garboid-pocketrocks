@@ -91,6 +91,10 @@ def _table(result: MonteCarloResult) -> str:
         "ties",
         "mean_rank",
         "mean_money",
+        "pass_rate",
+        "mean_bid",
+        "resource_wins",
+        "objectives",
     )
     rows = [
         (
@@ -100,6 +104,10 @@ def _table(result: MonteCarloResult) -> str:
             str(statistics.first_place_ties),
             f"{statistics.mean_rank():.3f}",
             f"{statistics.mean_final_money():.3f}",
+            f"{statistics.behavior.pass_rate():.3f}",
+            f"{statistics.behavior.mean_nonzero_bid():.3f}",
+            str(statistics.behavior.resource_cards_won),
+            str(statistics.behavior.objectives_claimed),
         )
         for statistics in result.bot_statistics
     ]

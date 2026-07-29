@@ -8,7 +8,9 @@ from pocketrocks import BotDecision, DecisionContext
 from garboid_pocketrocks import simulator
 from garboid_pocketrocks.bots import BotBrain, BotSpec, RandomBot
 from garboid_pocketrocks.rules import LIVE_RULESET, RulesetKnowledge
+from garboid_pocketrocks.simulator import monte_carlo
 from garboid_pocketrocks.simulator.errors import SimulationError
+from garboid_pocketrocks.simulator.events import EventKind
 from garboid_pocketrocks.simulator.monte_carlo import (
     MonteCarloConfig,
     MonteCarloRunner,
@@ -205,3 +207,167 @@ def test_faults_are_aggregated_for_the_responsible_bot() -> None:
     )
 
     assert raising.faults > 0
+
+
+class ScriptedMetricsBrain:
+    def __init__(self, bidding_decision: str) -> None:
+        self.bidding_decision = bidding_decision
+
+    def choose_decision(
+        self,
+        context: DecisionContext,
+        ruleset: RulesetKnowledge,
+    ) -> BotDecision:
+        del ruleset
+        if context.decision_kind == "selectInfoToReveal":
+            return (
+                BotDecision.pass_turn()
+                if self.bidding_decision == "pass"
+                else BotDecision.select_info_to_reveal(0)
+            )
+        if self.bidding_decision == "pass":
+            return BotDecision.pass_turn()
+        if self.bidding_decision == "zero":
+            return BotDecision.submit_bid(0)
+        legal_max_amount = context.legal_max_amount
+        assert legal_max_amount is not None
+        return BotDecision.submit_bid(min(1, legal_max_amount))
+
+
+def _pass_metrics_brain(seed: int | None) -> ScriptedMetricsBrain:
+    del seed
+    return ScriptedMetricsBrain("pass")
+
+
+def _zero_metrics_brain(seed: int | None) -> ScriptedMetricsBrain:
+    del seed
+    return ScriptedMetricsBrain("zero")
+
+
+def _one_metrics_brain(seed: int | None) -> ScriptedMetricsBrain:
+    del seed
+    return ScriptedMetricsBrain("one")
+
+
+def _scripted_metrics_config(*, games: int = 1) -> MonteCarloConfig:
+    return MonteCarloConfig(
+        bot_specs=(
+            BotSpec("pass", "pass", _pass_metrics_brain),
+            BotSpec("zero", "zero", _zero_metrics_brain),
+            BotSpec("one", "one", _one_metrics_brain),
+        ),
+        games=games,
+        player_counts=(3,),
+        ruleset_sampler=FixedRulesetSampler(LIVE_RULESET),
+        root_seed=31337,
+        capture_replays=True,
+    )
+
+
+def test_behavior_statistics_defines_empty_rates_and_six_action_buckets() -> None:
+    behavior = monte_carlo.BehaviorStatistics(
+        bidding_requests=0,
+        passes=0,
+        nonzero_bids=(),
+        reveal_choices=(),
+        wins_by_action=(0, 0, 0, 0, 0, 0),
+        resource_cards_won=0,
+        objectives_claimed=0,
+    )
+
+    assert behavior.pass_rate() == 0.0
+    assert behavior.mean_nonzero_bid() == 0.0
+    assert len(behavior.wins_by_action) == 6
+
+
+def test_pass_and_zero_bid_are_bidding_passes_but_reveals_are_excluded() -> None:
+    result = MonteCarloRunner.run(_scripted_metrics_config())
+    by_id = {statistics.bot_id: statistics for statistics in result.bot_statistics}
+    pass_behavior = by_id["pass"].behavior
+    zero_behavior = by_id["zero"].behavior
+    one_behavior = by_id["one"].behavior
+
+    assert pass_behavior.bidding_requests > 0
+    assert pass_behavior.passes == pass_behavior.bidding_requests
+    assert zero_behavior.passes == zero_behavior.bidding_requests
+    assert zero_behavior.nonzero_bids == ()
+    assert one_behavior.bidding_requests == pass_behavior.bidding_requests
+    assert one_behavior.passes < one_behavior.bidding_requests
+    assert pass_behavior.reveal_choices == ()
+    assert all(choice == 0 for choice in zero_behavior.reveal_choices)
+    assert sum(
+        len(decisions)
+        for _, decisions in result.replays[0].decisions
+        if len(decisions) == 1
+    ) > 0
+    assert sum(
+        statistics.behavior.bidding_requests for statistics in result.bot_statistics
+    ) == sum(
+        len(decisions)
+        for _, decisions in result.replays[0].decisions
+        if len(decisions) == result.replays[0].player_count
+    )
+
+
+def test_behavior_wins_resources_and_objectives_match_exact_events() -> None:
+    result = MonteCarloRunner.run(_scripted_metrics_config())
+    replay = result.replays[0]
+    bot_ids_by_seat = result.game_summaries[0].bot_ids
+
+    expected_wins = {bot_id: [0] * 6 for bot_id in bot_ids_by_seat}
+    expected_resources = {bot_id: 0 for bot_id in bot_ids_by_seat}
+    expected_objectives = {bot_id: 0 for bot_id in bot_ids_by_seat}
+    for event in replay.events:
+        if event.seat is None:
+            continue
+        bot_id = bot_ids_by_seat[event.seat]
+        if event.kind is EventKind.AUCTION_RESOLVED:
+            assert event.action_id is not None
+            expected_wins[bot_id][int(event.action_id) - 1] += 1
+        elif event.kind is EventKind.RESOURCES_AWARDED:
+            assert event.resource_ids is not None
+            expected_resources[bot_id] += len(event.resource_ids)
+        elif event.kind is EventKind.OBJECTIVE_CLAIMED:
+            assert event.objective_ids is not None
+            expected_objectives[bot_id] += len(event.objective_ids)
+
+    for statistics in result.bot_statistics:
+        behavior = statistics.behavior
+        assert len(behavior.wins_by_action) == 6
+        assert behavior.wins_by_action == tuple(expected_wins[statistics.bot_id])
+        assert behavior.resource_cards_won == expected_resources[statistics.bot_id]
+        assert behavior.objectives_claimed == expected_objectives[statistics.bot_id]
+    assert sum(sum(values) for values in expected_wins.values()) > 0
+    assert sum(expected_resources.values()) > 0
+    assert sum(expected_objectives.values()) > 0
+
+
+def test_duplicate_bot_ids_aggregate_behavior() -> None:
+    repeated = BotSpec("pass", "pass", _pass_metrics_brain)
+    config = MonteCarloConfig(
+        bot_specs=(repeated, repeated, repeated),
+        games=2,
+        player_counts=(3,),
+        ruleset_sampler=FixedRulesetSampler(LIVE_RULESET),
+        root_seed=41,
+    )
+
+    statistics = MonteCarloRunner.run(config).bot_statistics[0]
+
+    assert statistics.games == 6
+    assert statistics.behavior.bidding_requests > 0
+    assert statistics.behavior.passes == statistics.behavior.bidding_requests
+    assert sum(statistics.behavior.wins_by_action) > 0
+
+
+def test_worker_count_preserves_behavior_statistics() -> None:
+    config = _scripted_metrics_config(games=3)
+
+    serial = MonteCarloRunner.run(config, workers=1)
+    parallel = MonteCarloRunner.run(config, workers=2)
+
+    assert serial == parallel
+    assert all(
+        statistics.behavior.bidding_requests > 0
+        for statistics in parallel.bot_statistics
+    )

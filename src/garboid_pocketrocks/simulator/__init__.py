@@ -22,6 +22,7 @@ from garboid_pocketrocks.simulator.model import (
     Score,
 )
 from garboid_pocketrocks.simulator.monte_carlo import (
+    BehaviorStatistics,
     BotStatistics,
     GameJob,
     GameSummary,
@@ -59,6 +60,7 @@ __all__ = [
     "ActingSeatsError",
     "ActionDeckExhaustedError",
     "BotFault",
+    "BehaviorStatistics",
     "BotStatistics",
     "DecisionBatch",
     "EngineTransition",

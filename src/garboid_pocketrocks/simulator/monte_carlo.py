@@ -11,6 +11,7 @@ from dataclasses import dataclass, field, replace
 from garboid_pocketrocks.bots.base import BotSpec
 from garboid_pocketrocks.rules import Ruleset
 from garboid_pocketrocks.simulator.errors import SimulationError
+from garboid_pocketrocks.simulator.events import EventKind
 from garboid_pocketrocks.simulator.model import Score
 from garboid_pocketrocks.simulator.replay import MatchReplay
 from garboid_pocketrocks.simulator.runner import (
@@ -118,6 +119,23 @@ class RulesetStatistics:
 
 
 @dataclass(frozen=True, slots=True)
+class BehaviorStatistics:
+    bidding_requests: int
+    passes: int
+    nonzero_bids: tuple[int, ...]
+    reveal_choices: tuple[int, ...]
+    wins_by_action: tuple[int, ...]
+    resource_cards_won: int
+    objectives_claimed: int
+
+    def pass_rate(self) -> float:
+        return self.passes / self.bidding_requests if self.bidding_requests else 0.0
+
+    def mean_nonzero_bid(self) -> float:
+        return float(statistics.mean(self.nonzero_bids)) if self.nonzero_bids else 0.0
+
+
+@dataclass(frozen=True, slots=True)
 class BotStatistics:
     bot_name: str
     bot_id: str
@@ -131,6 +149,7 @@ class BotStatistics:
     per_ruleset: tuple[RulesetStatistics, ...]
     decision_counts: tuple[int, ...]
     faults: int
+    behavior: BehaviorStatistics
 
     @property
     def decision_count(self) -> int:
@@ -242,6 +261,17 @@ class _StatisticsAccumulator:
         self.score_margins.append(score_margin)
         self.decision_counts.append(decision_count)
         self.faults += faults
+
+
+@dataclass(slots=True)
+class _BehaviorAccumulator:
+    bidding_requests: int = 0
+    passes: int = 0
+    nonzero_bids: list[int] = field(default_factory=list)
+    reveal_choices: list[int] = field(default_factory=list)
+    wins_by_action: list[int] = field(default_factory=lambda: [0] * 6)
+    resource_cards_won: int = 0
+    objectives_claimed: int = 0
 
 
 class MonteCarloRunner:
@@ -368,6 +398,7 @@ def _aggregate(
     total: dict[str, _StatisticsAccumulator] = {}
     per_seat: dict[str, dict[int, _StatisticsAccumulator]] = {}
     per_ruleset: dict[str, dict[str, _StatisticsAccumulator]] = {}
+    behavior: dict[str, _BehaviorAccumulator] = {}
     for spec in config.bot_specs:
         if spec.bot_id in total:
             continue
@@ -381,6 +412,7 @@ def _aggregate(
             ruleset.name: _StatisticsAccumulator.with_rank_count(rank_count)
             for ruleset in config.ruleset_sampler.support()
         }
+        behavior[spec.bot_id] = _BehaviorAccumulator()
 
     summaries: list[GameSummary] = []
     replays: list[MatchReplay] = []
@@ -421,6 +453,11 @@ def _aggregate(
                 )
             )
 
+        _record_behavior(
+            match.replay,
+            bot_ids_by_seat=tuple(spec.bot_id for spec in job.lineup),
+            accumulators=behavior,
+        )
         scores_by_seat = {score.seat: score for score in match.result.scores}
         first_place_count = sum(score.rank == 1 for score in match.result.scores)
         first_place_money = max(score.final_money for score in match.result.scores)
@@ -447,6 +484,7 @@ def _aggregate(
             total=total[bot_id],
             per_seat=per_seat[bot_id],
             per_ruleset=per_ruleset[bot_id],
+            behavior=behavior[bot_id],
         )
         for bot_id in bot_order
     )
@@ -457,6 +495,44 @@ def _aggregate(
     )
 
 
+def _record_behavior(
+    replay: MatchReplay,
+    *,
+    bot_ids_by_seat: tuple[str, ...],
+    accumulators: dict[str, _BehaviorAccumulator],
+) -> None:
+    for _, decisions in replay.decisions:
+        is_bidding_batch = len(decisions) == replay.player_count
+        for seat, decision in decisions:
+            accumulator = accumulators[bot_ids_by_seat[seat]]
+            if is_bidding_batch:
+                accumulator.bidding_requests += 1
+                if decision.action_kind == "pass" or (
+                    decision.action_kind == "submitBid" and decision.value == 0
+                ):
+                    accumulator.passes += 1
+                elif decision.action_kind == "submitBid":
+                    assert decision.value is not None
+                    accumulator.nonzero_bids.append(decision.value)
+            elif decision.action_kind == "selectInfoToReveal":
+                assert decision.value is not None
+                accumulator.reveal_choices.append(decision.value)
+
+    for event in replay.events:
+        if event.seat is None:
+            continue
+        accumulator = accumulators[bot_ids_by_seat[event.seat]]
+        if event.kind is EventKind.AUCTION_RESOLVED:
+            assert event.action_id is not None
+            accumulator.wins_by_action[int(event.action_id) - 1] += 1
+        elif event.kind is EventKind.RESOURCES_AWARDED:
+            assert event.resource_ids is not None
+            accumulator.resource_cards_won += len(event.resource_ids)
+        elif event.kind is EventKind.OBJECTIVE_CLAIMED:
+            assert event.objective_ids is not None
+            accumulator.objectives_claimed += len(event.objective_ids)
+
+
 def _freeze_bot_statistics(
     *,
     bot_id: str,
@@ -464,6 +540,7 @@ def _freeze_bot_statistics(
     total: _StatisticsAccumulator,
     per_seat: dict[int, _StatisticsAccumulator],
     per_ruleset: dict[str, _StatisticsAccumulator],
+    behavior: _BehaviorAccumulator,
 ) -> BotStatistics:
     return BotStatistics(
         bot_name=bot_name,
@@ -504,4 +581,13 @@ def _freeze_bot_statistics(
         ),
         decision_counts=tuple(total.decision_counts),
         faults=total.faults,
+        behavior=BehaviorStatistics(
+            bidding_requests=behavior.bidding_requests,
+            passes=behavior.passes,
+            nonzero_bids=tuple(sorted(behavior.nonzero_bids)),
+            reveal_choices=tuple(sorted(behavior.reveal_choices)),
+            wins_by_action=tuple(behavior.wins_by_action),
+            resource_cards_won=behavior.resource_cards_won,
+            objectives_claimed=behavior.objectives_claimed,
+        ),
     )
