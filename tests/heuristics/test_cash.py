@@ -10,6 +10,7 @@ from pocketrocks import ActionId
 from garboid_pocketrocks.heuristics.cash import (
     cash_option_value,
     evaluate_action_curve,
+    future_cash_value,
 )
 
 
@@ -26,6 +27,63 @@ def test_option_value_is_increasing_and_concave() -> None:
     assert values[1] - values[0] > values[2] - values[1] > values[3] - values[2]
 
 
+def test_future_cash_value_is_zero_at_zero_horizon() -> None:
+    assert (
+        future_cash_value(
+            30,
+            horizon=0.0,
+            starting_cash=30,
+            weight=1.0,
+        )
+        == 0.0
+    )
+
+
+def test_future_cash_value_is_flat_above_reserve_target() -> None:
+    assert future_cash_value(
+        30,
+        horizon=0.5,
+        starting_cash=30,
+        weight=0.75,
+    ) == future_cash_value(
+        15,
+        horizon=0.5,
+        starting_cash=30,
+        weight=0.75,
+    )
+
+
+def test_future_cash_value_has_linear_marginal_value_below_target() -> None:
+    assert future_cash_value(
+        14,
+        horizon=0.5,
+        starting_cash=30,
+        weight=0.75,
+    ) - future_cash_value(
+        13,
+        horizon=0.5,
+        starting_cash=30,
+        weight=0.75,
+    ) == pytest.approx(0.75)
+
+
+@pytest.mark.parametrize(
+    ("weight", "message"),
+    ((-0.1, "weight"), (float("nan"), "weight")),
+)
+def test_future_cash_value_rejects_invalid_weight(
+    weight: float,
+    message: str,
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        future_cash_value(
+            20,
+            horizon=0.5,
+            starting_cash=30,
+            weight=weight,
+        )
+
+
 def test_finite_but_overflowing_inputs_are_rejected() -> None:
     with pytest.raises(ValueError, match="cash option value"):
         cash_option_value(30, horizon=1.0, starting_cash=30, strength=1e308)
@@ -37,6 +95,7 @@ def test_finite_but_overflowing_inputs_are_rejected() -> None:
             horizon=1.0,
             starting_cash=30,
             liquidity_strength=8e306,
+            future_cash_weight=0.0,
             gross_value=1.6e308,
         )
 
@@ -49,6 +108,7 @@ def test_zero_horizon_action_accounting_is_exact() -> None:
         horizon=0.0,
         starting_cash=30,
         liquidity_strength=0.75,
+        future_cash_weight=0.0,
         gross_value=0.0,
     )
     investment = evaluate_action_curve(
@@ -58,10 +118,43 @@ def test_zero_horizon_action_accounting_is_exact() -> None:
         horizon=0.0,
         starting_cash=30,
         liquidity_strength=0.75,
+        future_cash_weight=0.0,
         gross_value=0.0,
     )
     assert [point.win_delta for point in loan[:3]] == [0.0, -1.0, -2.0]
     assert all(math.isclose(point.win_delta, 5.0) for point in investment)
+
+
+def test_bid_crossing_reserve_has_separate_future_cash_cost() -> None:
+    curve = evaluate_action_curve(
+        action_id=ActionId.AUCTION2,
+        cash=20,
+        legal_max=10,
+        horizon=0.5,
+        starting_cash=30,
+        liquidity_strength=0.0,
+        future_cash_weight=0.75,
+        gross_value=20.0,
+    )
+
+    assert curve[5].future_cash == 0.0
+    assert curve[6].future_cash == pytest.approx(-0.75)
+    assert curve[10].future_cash == pytest.approx(-3.75)
+
+
+def test_early_loan_receives_positive_future_cash_value() -> None:
+    point = evaluate_action_curve(
+        action_id=ActionId.LOAN10,
+        cash=5,
+        legal_max=0,
+        horizon=0.8,
+        starting_cash=30,
+        liquidity_strength=0.0,
+        future_cash_weight=0.75,
+        gross_value=0.0,
+    )[0]
+
+    assert point.future_cash == pytest.approx(7.5)
 
 
 @pytest.mark.parametrize(
@@ -83,6 +176,7 @@ def test_action_curve_is_nonincreasing_in_bid(
         horizon=0.7,
         starting_cash=30,
         liquidity_strength=0.75,
+        future_cash_weight=0.0,
         gross_value=4.0,
     )
     assert [point.bid for point in curve] == list(range(legal_max + 1))
@@ -99,6 +193,7 @@ def test_loan_benefit_increases_with_horizon() -> None:
         horizon=0.2,
         starting_cash=30,
         liquidity_strength=0.75,
+        future_cash_weight=0.0,
         gross_value=0.0,
     )[0]
     late = evaluate_action_curve(
@@ -108,6 +203,7 @@ def test_loan_benefit_increases_with_horizon() -> None:
         horizon=0.8,
         starting_cash=30,
         liquidity_strength=0.75,
+        future_cash_weight=0.0,
         gross_value=0.0,
     )[0]
     assert late.liquidity > early.liquidity
@@ -121,6 +217,7 @@ def test_investment_lock_cost_increases_with_horizon() -> None:
         horizon=0.2,
         starting_cash=30,
         liquidity_strength=0.75,
+        future_cash_weight=0.0,
         gross_value=0.0,
     )[-1]
     late = evaluate_action_curve(
@@ -130,6 +227,7 @@ def test_investment_lock_cost_increases_with_horizon() -> None:
         horizon=0.8,
         starting_cash=30,
         liquidity_strength=0.75,
+        future_cash_weight=0.0,
         gross_value=0.0,
     )[-1]
     assert late.liquidity < early.liquidity
@@ -167,6 +265,8 @@ def test_cash_option_value_rejects_invalid_numeric_inputs(
         ({"horizon": 1.1}, "horizon"),
         ({"starting_cash": 0}, "starting_cash"),
         ({"liquidity_strength": float("nan")}, "liquidity_strength"),
+        ({"future_cash_weight": -0.1}, "future_cash_weight"),
+        ({"future_cash_weight": float("nan")}, "future_cash_weight"),
         ({"gross_value": float("inf")}, "gross_value"),
     ),
 )
@@ -181,6 +281,7 @@ def test_action_curve_rejects_invalid_numeric_inputs(
         "horizon": 0.5,
         "starting_cash": 30,
         "liquidity_strength": 0.75,
+        "future_cash_weight": 0.0,
         "gross_value": 4.0,
     }
     arguments.update(kwargs)
@@ -250,6 +351,7 @@ def test_action_curve_is_finite_and_monotone_for_every_legal_bid(
         horizon=horizon,
         starting_cash=starting_cash,
         liquidity_strength=strength,
+        future_cash_weight=0.0,
         gross_value=3.0,
     )
     assert [point.bid for point in curve] == list(range(legal_max + 1))
@@ -284,6 +386,7 @@ def test_cash_effects_move_in_the_required_horizon_direction(
         horizon=0.2,
         starting_cash=starting_cash,
         liquidity_strength=strength,
+        future_cash_weight=0.0,
         gross_value=0.0,
     )[-1]
     late_loan = evaluate_action_curve(
@@ -293,6 +396,7 @@ def test_cash_effects_move_in_the_required_horizon_direction(
         horizon=0.8,
         starting_cash=starting_cash,
         liquidity_strength=strength,
+        future_cash_weight=0.0,
         gross_value=0.0,
     )[-1]
     early_investment = evaluate_action_curve(
@@ -302,6 +406,7 @@ def test_cash_effects_move_in_the_required_horizon_direction(
         horizon=0.2,
         starting_cash=starting_cash,
         liquidity_strength=strength,
+        future_cash_weight=0.0,
         gross_value=0.0,
     )[-1]
     late_investment = evaluate_action_curve(
@@ -311,6 +416,7 @@ def test_cash_effects_move_in_the_required_horizon_direction(
         horizon=0.8,
         starting_cash=starting_cash,
         liquidity_strength=strength,
+        future_cash_weight=0.0,
         gross_value=0.0,
     )[-1]
     assert late_loan.liquidity >= early_loan.liquidity
