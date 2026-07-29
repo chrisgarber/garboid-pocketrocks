@@ -1,10 +1,22 @@
 from __future__ import annotations
 
-import numpy as np
+from collections import Counter
 
-from garboid_pocketrocks.bots import BotSpec, RandomBot
+import numpy as np
+import pytest
+
+from garboid_pocketrocks.bots import (
+    AGGRESSIVE_HEURISTIC_BOT_SPEC,
+    BALANCED_HEURISTIC_BOT_SPEC,
+    PASSIVE_HEURISTIC_BOT_SPEC,
+    BotSpec,
+    RandomBot,
+)
 from garboid_pocketrocks.rules import live_ruleset
-from garboid_pocketrocks.simulator.runner import MatchRunner
+from garboid_pocketrocks.simulator.monte_carlo import (
+    MonteCarloConfig,
+    MonteCarloRunner,
+)
 from garboid_pocketrocks.simulator.sampling import FixedRulesetSampler
 from garboid_pocketrocks.training import (
     EnvironmentBounds,
@@ -17,19 +29,53 @@ def _random_specs(count: int) -> tuple[BotSpec, ...]:
     return tuple(BotSpec.from_bot_class(RandomBot) for _ in range(count))
 
 
-def test_every_live_chart_and_player_count_runs_to_completion() -> None:
-    for chart in "ABCDE":
-        ruleset = live_ruleset(chart)
-        for player_count in (3, 4, 5):
-            match = MatchRunner.run(
-                _random_specs(player_count),
-                ruleset=ruleset,
-                player_count=player_count,
-                seed=(ord(chart) * 10) + player_count,
-            )
+def _heuristic_smoke_lineup(player_count: int) -> tuple[BotSpec, ...]:
+    return (
+        AGGRESSIVE_HEURISTIC_BOT_SPEC,
+        BALANCED_HEURISTIC_BOT_SPEC,
+        PASSIVE_HEURISTIC_BOT_SPEC,
+        *_random_specs(player_count - 3),
+    )
 
-            assert len(match.result.scores) == player_count
-            assert {score.seat for score in match.result.scores} == set(range(player_count))
+
+@pytest.mark.parametrize("chart", tuple("ABCDE"))
+@pytest.mark.parametrize("player_count", (3, 4, 5))
+def test_heuristic_profiles_make_only_legal_decisions_across_live_games(
+    chart: str,
+    player_count: int,
+) -> None:
+    lineup = _heuristic_smoke_lineup(player_count)
+    root_seed = 42 + 100 * (ord(chart) - ord("A")) + player_count
+    result = MonteCarloRunner.run(
+        MonteCarloConfig(
+            bot_specs=lineup,
+            games=15,
+            player_counts=(player_count,),
+            ruleset_sampler=FixedRulesetSampler(live_ruleset(chart)),
+            root_seed=root_seed,
+        )
+    )
+
+    assert tuple(spec.name for spec in lineup) == (
+        "aggressive",
+        "balanced",
+        "passive",
+        *("random",) * (player_count - 3),
+    )
+    assert len(result.game_summaries) == 15
+    assert all(summary.root_seed == root_seed for summary in result.game_summaries)
+    assert all(
+        Counter(summary.bot_names) == Counter(spec.name for spec in lineup)
+        for summary in result.game_summaries
+    )
+    assert all(not any(summary.fault_counts) for summary in result.game_summaries)
+    assert all(statistics.faults == 0 for statistics in result.bot_statistics)
+    assert all(statistics.decision_count > 0 for statistics in result.bot_statistics)
+    assert all(
+        statistics.games == 15
+        for statistics in result.bot_statistics
+        if statistics.bot_name != "random"
+    )
 
 
 def test_single_agent_environment_runs_to_termination_with_masked_actions() -> None:

@@ -1,0 +1,77 @@
+from __future__ import annotations
+
+from pocketrocks import ActionId
+
+from garboid_pocketrocks.bots.base import BotSpec
+from garboid_pocketrocks.bots.heuristic import (
+    AggressiveHeuristicBot,
+    BalancedHeuristicBot,
+    PassiveHeuristicBot,
+)
+from garboid_pocketrocks.rules import live_ruleset
+from garboid_pocketrocks.simulator.monte_carlo import (
+    BotStatistics,
+    MonteCarloConfig,
+    MonteCarloResult,
+    MonteCarloRunner,
+)
+from garboid_pocketrocks.simulator.sampling import FixedRulesetSampler
+
+
+def _benchmark_config(*, games: int = 1_000) -> MonteCarloConfig:
+    return MonteCarloConfig(
+        bot_specs=(
+            BotSpec.from_bot_class(AggressiveHeuristicBot),
+            BotSpec.from_bot_class(BalancedHeuristicBot),
+            BotSpec.from_bot_class(PassiveHeuristicBot),
+        ),
+        games=games,
+        player_counts=(3,),
+        ruleset_sampler=FixedRulesetSampler(live_ruleset("A")),
+        root_seed=42,
+    )
+
+
+def _statistics_by_name(result: MonteCarloResult) -> dict[str, BotStatistics]:
+    return {statistics.bot_name: statistics for statistics in result.bot_statistics}
+
+
+def _loan_wins(statistics: BotStatistics) -> int:
+    return sum(
+        statistics.behavior.wins_by_action[int(action_id) - 1]
+        for action_id in (ActionId.LOAN10, ActionId.LOAN20)
+    )
+
+
+def _behavior_summary(by_name: dict[str, BotStatistics]) -> str:
+    return ", ".join(
+        (
+            f"{name}: pass_rate={statistics.behavior.pass_rate():.6f}, "
+            f"mean_nonzero_bid={statistics.behavior.mean_nonzero_bid():.6f}, "
+            f"loan_wins={_loan_wins(statistics)}"
+        )
+        for name, statistics in sorted(by_name.items())
+    )
+
+
+def test_seed_42_live_a_heuristic_tournament_is_reproducible_and_distinct() -> None:
+    config = _benchmark_config()
+
+    serial = MonteCarloRunner.run(config, workers=1)
+    parallel = MonteCarloRunner.run(config, workers=2)
+
+    assert serial == parallel
+    assert all(statistics.faults == 0 for statistics in serial.bot_statistics)
+    for statistics in serial.bot_statistics:
+        seat_games = tuple(bucket.games for bucket in statistics.per_seat)
+        assert sum(seat_games) == config.games
+        assert max(seat_games) - min(seat_games) <= 1
+
+    by_name = _statistics_by_name(serial)
+    assert set(by_name) == {"aggressive", "balanced", "passive"}
+    summary = _behavior_summary(by_name)
+    pass_rates = [statistics.behavior.pass_rate() for statistics in by_name.values()]
+    mean_nonzero_bids = [statistics.behavior.mean_nonzero_bid() for statistics in by_name.values()]
+    assert max(pass_rates) - min(pass_rates) >= 0.10, summary
+    assert max(mean_nonzero_bids) - min(mean_nonzero_bids) >= 1.0, summary
+    assert _loan_wins(by_name["aggressive"]) > _loan_wins(by_name["passive"]), summary

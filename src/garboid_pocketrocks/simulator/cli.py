@@ -6,7 +6,13 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
-from garboid_pocketrocks.bots import BotSpec, RandomBot
+from garboid_pocketrocks.bots import (
+    AggressiveHeuristicBot,
+    BalancedHeuristicBot,
+    BotSpec,
+    PassiveHeuristicBot,
+    RandomBot,
+)
 from garboid_pocketrocks.rules import live_ruleset
 from garboid_pocketrocks.simulator.monte_carlo import (
     MonteCarloConfig,
@@ -18,6 +24,9 @@ from garboid_pocketrocks.simulator.sampling import FixedRulesetSampler
 
 _BOT_REGISTRY = {
     RandomBot.BOT_NAME: BotSpec.from_bot_class(RandomBot),
+    AggressiveHeuristicBot.BOT_NAME: BotSpec.from_bot_class(AggressiveHeuristicBot),
+    BalancedHeuristicBot.BOT_NAME: BotSpec.from_bot_class(BalancedHeuristicBot),
+    PassiveHeuristicBot.BOT_NAME: BotSpec.from_bot_class(PassiveHeuristicBot),
 }
 
 
@@ -46,7 +55,11 @@ def _parser() -> argparse.ArgumentParser:
         "--bots",
         required=True,
         type=_bot_names,
-        help="comma-separated registered bot names (currently: random)",
+        help=(
+            "comma-separated registered bot names "
+            "(random, aggressive, balanced, passive); heuristic bot IDs are "
+            "development-only and must be replaced before live connection"
+        ),
     )
     parser.add_argument("--games", required=True, type=_positive_int)
     parser.add_argument("--players", required=True, type=int, choices=(3, 4, 5))

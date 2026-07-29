@@ -24,10 +24,10 @@ def _run_cli(*arguments: str) -> subprocess.CompletedProcess[str]:
     )
 
 
-def test_simulate_cli_emits_reproducible_json() -> None:
+def test_simulate_cli_runs_heuristic_bots_identically_across_worker_counts() -> None:
     arguments = (
         "--bots",
-        "random,random,random",
+        "aggressive,balanced,passive",
         "--games",
         "6",
         "--players",
@@ -38,10 +38,12 @@ def test_simulate_cli_emits_reproducible_json() -> None:
         "json",
     )
 
-    left = _run_cli(*arguments)
-    right = _run_cli(*arguments)
+    serial = json.loads(_run_cli(*arguments, "--workers", "1").stdout)
+    parallel = json.loads(_run_cli(*arguments, "--workers", "2").stdout)
 
-    assert json.loads(left.stdout) == json.loads(right.stdout)
+    assert serial["result"] == parallel["result"]
+    assert serial["configuration"]["workers"] == 1
+    assert parallel["configuration"]["workers"] == 2
 
 
 def test_simulate_cli_json_includes_exact_raw_behavior_shape() -> None:
@@ -103,9 +105,7 @@ def test_table_includes_formatted_behavior_columns() -> None:
         "objectives",
     ]
     assert values[-4] == f"{result.bot_statistics[0].behavior.pass_rate():.3f}"
-    assert values[-3] == (
-        f"{result.bot_statistics[0].behavior.mean_nonzero_bid():.3f}"
-    )
+    assert values[-3] == (f"{result.bot_statistics[0].behavior.mean_nonzero_bid():.3f}")
     assert values[-2:] == [
         str(result.bot_statistics[0].behavior.resource_cards_won),
         str(result.bot_statistics[0].behavior.objectives_claimed),
