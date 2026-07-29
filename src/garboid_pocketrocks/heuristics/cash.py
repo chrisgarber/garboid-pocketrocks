@@ -168,8 +168,7 @@ def evaluate_action_curve(
         )
         win_delta = gross_value + terminal_cash + liquidity + future_cash
         if not all(
-            math.isfinite(value)
-            for value in (terminal_cash, liquidity, future_cash, win_delta)
+            math.isfinite(value) for value in (terminal_cash, liquidity, future_cash, win_delta)
         ):
             raise ValueError("action economics must be finite")
         curve.append(

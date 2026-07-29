@@ -161,11 +161,7 @@ def test_future_cash_preserves_personality_and_defers_spending() -> None:
         for profile in (AGGRESSIVE_PROFILE, BALANCED_PROFILE, PASSIVE_PROFILE)
     )
 
-    assert (
-        early_results[0].chosen_bid
-        > early_results[1].chosen_bid
-        > early_results[2].chosen_bid
-    )
+    assert late_results[0].chosen_bid > late_results[1].chosen_bid > late_results[2].chosen_bid
     for early, late in zip(early_results, late_results, strict=True):
         assert early.chosen_bid < late.chosen_bid
         assert early.points[early.chosen_bid].breakdown.future_cash < 0.0

@@ -35,6 +35,6 @@ class HeuristicProfile:
             raise ValueError("bid shading must be between zero and one")
 
 
-AGGRESSIVE_PROFILE = HeuristicProfile("aggressive", 0.75, 1.00, 0.25, 0.05)
+AGGRESSIVE_PROFILE = HeuristicProfile("aggressive", 0.75, 1.50, 0.25, 0.05)
 BALANCED_PROFILE = HeuristicProfile("balanced", 0.40, 0.75, 0.20, 0.25)
-PASSIVE_PROFILE = HeuristicProfile("passive", 0.15, 0.25, 0.15, 0.50)
+PASSIVE_PROFILE = HeuristicProfile("passive", 0.15, 0.60, 0.15, 0.30)

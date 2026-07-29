@@ -46,7 +46,8 @@ incidentally.
 - Apply the same opportunity cost to auctions, loans, and investments.
 - Preserve the live-information boundary: use only `DecisionContext` and
   `RulesetKnowledge`.
-- Preserve personality on equivalent contexts:
+- Preserve personality on equivalent contexts after the future-cash reserve
+  expires:
   - aggressive submits the highest bid;
   - balanced submits an intermediate bid;
   - passive submits the lowest bid.
@@ -246,11 +247,14 @@ The focused unit and property suites must pass with:
 - identical evaluations for identical public contexts;
 - legal deterministic decisions for charts A-E and 3-5 players.
 
-Canonical equal-information contexts must preserve:
+Canonical equal-information zero-horizon contexts must preserve:
 
 ```text
 aggressive chosen bid > balanced chosen bid > passive chosen bid
 ```
+
+Earlier contexts may tie after integer bid rounding. Aggregate calibration
+must still preserve strict early resource-spending order.
 
 The 20,000-game calibration tournament and untouched 100,000-game validation
 tournament target:

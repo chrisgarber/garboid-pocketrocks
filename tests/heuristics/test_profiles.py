@@ -49,9 +49,9 @@ def test_profile_rejects_empty_name() -> None:
 
 
 def test_named_profiles_have_exact_constants() -> None:
-    assert AGGRESSIVE_PROFILE == HeuristicProfile("aggressive", 0.75, 1.00, 0.25, 0.05)
+    assert AGGRESSIVE_PROFILE == HeuristicProfile("aggressive", 0.75, 1.50, 0.25, 0.05)
     assert BALANCED_PROFILE == HeuristicProfile("balanced", 0.40, 0.75, 0.20, 0.25)
-    assert PASSIVE_PROFILE == HeuristicProfile("passive", 0.15, 0.25, 0.15, 0.50)
+    assert PASSIVE_PROFILE == HeuristicProfile("passive", 0.15, 0.60, 0.15, 0.30)
 
 
 def test_named_profiles_have_expected_ordering() -> None:
