@@ -52,9 +52,9 @@ class PassiveHeuristicBrain(HeuristicBotBrain):
 
 
 class AggressiveHeuristicBot(PocketRocksFastBot):
-    """Development-only live wrapper for the aggressive heuristic."""
+    """Live wrapper for the aggressive heuristic."""
 
-    BOT_ID = "bot_00000000-0000-4000-8000-00000000000a"
+    BOT_ID = "bot_386b81bb-14df-477a-8d4c-0231cf1b3b1a"
     BOT_NAME = "aggressive"
 
     @classmethod
@@ -64,9 +64,9 @@ class AggressiveHeuristicBot(PocketRocksFastBot):
 
 
 class BalancedHeuristicBot(PocketRocksFastBot):
-    """Development-only live wrapper for the balanced heuristic."""
+    """Live wrapper for the balanced heuristic."""
 
-    BOT_ID = "bot_00000000-0000-4000-8000-00000000000b"
+    BOT_ID = "bot_265c84aa-f28e-4a35-b4de-a4f4ee406415"
     BOT_NAME = "balanced"
 
     @classmethod
@@ -76,9 +76,9 @@ class BalancedHeuristicBot(PocketRocksFastBot):
 
 
 class PassiveHeuristicBot(PocketRocksFastBot):
-    """Development-only live wrapper for the passive heuristic."""
+    """Live wrapper for the passive heuristic."""
 
-    BOT_ID = "bot_00000000-0000-4000-8000-00000000000c"
+    BOT_ID = "bot_9d33c9de-4d90-4608-9a58-d2c77d93e0bd"
     BOT_NAME = "passive"
 
     @classmethod

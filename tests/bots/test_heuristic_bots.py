@@ -86,9 +86,9 @@ def test_heuristic_bots_have_distinct_static_public_identities() -> None:
     assert issubclass(AggressiveHeuristicBot, PocketRocksFastBot)
     assert issubclass(BalancedHeuristicBot, PocketRocksFastBot)
     assert issubclass(PassiveHeuristicBot, PocketRocksFastBot)
-    assert AggressiveHeuristicBot.BOT_ID == "bot_00000000-0000-4000-8000-00000000000a"
-    assert BalancedHeuristicBot.BOT_ID == "bot_00000000-0000-4000-8000-00000000000b"
-    assert PassiveHeuristicBot.BOT_ID == "bot_00000000-0000-4000-8000-00000000000c"
+    assert AggressiveHeuristicBot.BOT_ID == "bot_386b81bb-14df-477a-8d4c-0231cf1b3b1a"
+    assert BalancedHeuristicBot.BOT_ID == "bot_265c84aa-f28e-4a35-b4de-a4f4ee406415"
+    assert PassiveHeuristicBot.BOT_ID == "bot_9d33c9de-4d90-4608-9a58-d2c77d93e0bd"
     assert {
         AggressiveHeuristicBot.BOT_NAME,
         BalancedHeuristicBot.BOT_NAME,
