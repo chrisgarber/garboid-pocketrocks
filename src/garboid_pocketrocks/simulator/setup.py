@@ -106,14 +106,14 @@ def build_setup(
         GameEvent(
             EventKind.GAME_SETUP,
             turn_index=0,
-            resource_ids=tuple(card.card_id for card in visible_resources),
+            resource_ids=tuple(int(card.suit) for card in visible_resources),
             objective_ids=active_objective_ids,
         ),
         GameEvent(
             EventKind.TURN_OPENED,
             turn_index=0,
             action_id=current_action.action_id,
-            resource_ids=tuple(card.card_id for card in visible_resources),
+            resource_ids=tuple(int(card.suit) for card in visible_resources),
         ),
     )
     return SetupResult(state=state, events=events)
