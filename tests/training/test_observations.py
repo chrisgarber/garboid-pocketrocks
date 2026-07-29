@@ -125,3 +125,39 @@ def test_encoder_rejects_incompatible_bounds_and_unknown_hidden_fields() -> None
             replace(_context(), legal_max_amount=101),
             LIVE_RULESET.knowledge(3),
         )
+
+
+def test_observation_accepts_negative_chart_values_within_int16() -> None:
+    encoder = ObservationEncoder(EnvironmentBounds(max_bid=100, max_hand_size=5))
+    context = replace(_context(), value_chart=(-1, 4, 8, 12, 16, 20))
+
+    encoded = encoder.encode(
+        context,
+        replace(LIVE_RULESET.knowledge(3), value_chart=context.value_chart),
+    )
+
+    assert encoder.observation_space.contains(encoded)
+
+
+@pytest.mark.parametrize(
+    ("context", "message"),
+    [
+        (replace(_context(), value_chart=(0, 4, 8, 12, 16, 40_000)), "value chart"),
+        (replace(_context(), cash_by_seat=(30, 40_000, 25)), "cash"),
+        (
+            replace(
+                _context(),
+                won_resource_counts_by_seat=((40_000, 0, 0, 0, 0),) * 3,
+            ),
+            "won resource",
+        ),
+    ],
+)
+def test_observation_rejects_values_outside_numeric_dtype_bounds(
+    context: DecisionContext,
+    message: str,
+) -> None:
+    encoder = ObservationEncoder(EnvironmentBounds(max_bid=100, max_hand_size=5))
+
+    with pytest.raises(ValueError, match=message):
+        encoder.encode(context, LIVE_RULESET.knowledge(3))

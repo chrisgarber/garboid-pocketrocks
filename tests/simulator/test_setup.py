@@ -26,9 +26,7 @@ def test_live_setup_counts_by_player_count() -> None:
         setup = build_setup(LIVE_RULESET, player_count=players, seed=7)
         assert len(setup.state.players) == players
         assert {player.cash for player in setup.state.players} == {cash}
-        assert {len(player.private_hand) for player in setup.state.players} == {
-            hand_size
-        }
+        assert {len(player.private_hand) for player in setup.state.players} == {hand_size}
         assert len(setup.state.visible_resources) == 2
         assert len(setup.state.active_objective_ids) == 4
         assert len(setup.state.action_deck) == 29

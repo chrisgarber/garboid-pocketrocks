@@ -93,8 +93,7 @@ class MatchReplay:
                 for item in cast(list[dict[str, Any]], payload["decisions"])
             ),
             events=tuple(
-                _event_from_dict(item)
-                for item in cast(list[dict[str, Any]], payload["events"])
+                _event_from_dict(item) for item in cast(list[dict[str, Any]], payload["events"])
             ),
         )
 
@@ -128,9 +127,7 @@ def replay_match(replay: MatchReplay) -> ReplayedMatch:
     regenerated_events = list(transition.events)
     for expected_step, (recorded_step, decisions) in enumerate(replay.decisions):
         if recorded_step != expected_step:
-            raise ReplayDivergence(
-                f"expected decision step {expected_step}, got {recorded_step}"
-            )
+            raise ReplayDivergence(f"expected decision step {expected_step}, got {recorded_step}")
         if transition.pending is None:
             raise ReplayDivergence(f"decision step {expected_step} has no pending batch")
         recorded_seats = tuple(seat for seat, _ in decisions)
@@ -204,12 +201,8 @@ def _event_to_dict(event: GameEvent) -> dict[str, Any]:
         "seat": event.seat,
         "action_id": int(event.action_id) if event.action_id is not None else None,
         "amount": event.amount,
-        "resource_ids": (
-            list(event.resource_ids) if event.resource_ids is not None else None
-        ),
-        "objective_ids": (
-            list(event.objective_ids) if event.objective_ids is not None else None
-        ),
+        "resource_ids": (list(event.resource_ids) if event.resource_ids is not None else None),
+        "objective_ids": (list(event.objective_ids) if event.objective_ids is not None else None),
         "scores": (
             [
                 {
@@ -233,9 +226,7 @@ def _event_from_dict(payload: dict[str, Any]) -> GameEvent:
         turn_index=_optional_int(payload.get("turn_index")),
         seat=_optional_int(payload.get("seat")),
         action_id=(
-            ActionId(int(payload["action_id"]))
-            if payload.get("action_id") is not None
-            else None
+            ActionId(int(payload["action_id"])) if payload.get("action_id") is not None else None
         ),
         amount=_optional_int(payload.get("amount")),
         resource_ids=(
@@ -260,9 +251,5 @@ def _event_from_dict(payload: dict[str, Any]) -> GameEvent:
             if scores_payload is not None
             else None
         ),
-        automatic=(
-            bool(payload["automatic"])
-            if payload.get("automatic") is not None
-            else None
-        ),
+        automatic=(bool(payload["automatic"]) if payload.get("automatic") is not None else None),
     )

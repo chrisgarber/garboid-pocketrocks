@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
+
 import gymnasium as gym
 import numpy as np
 from pocketrocks import ActionId, DecisionContext, Suit
@@ -10,6 +12,8 @@ from garboid_pocketrocks.training.bounds import EnvironmentBounds
 
 _MAX_SEATS = 5
 _MAX_OBJECTIVES = 30
+_INT16_MIN = int(np.iinfo(np.int16).min)
+_INT16_MAX = int(np.iinfo(np.int16).max)
 _RULESET_FIELDS = frozenset(
     {
         "rules_resource_counts",
@@ -42,28 +46,20 @@ class ObservationEncoder:
                 "phase": _box(0, 1, (1,), np.int8),
                 "player_count": _box(0, _MAX_SEATS, (1,), np.int8),
                 "bot_seat": _box(0, _MAX_SEATS - 1, (1,), np.int8),
-                "starting_cash": _box(0, int(np.iinfo(np.int16).max), (1,), np.int16),
-                "value_chart": _box(0, int(np.iinfo(np.int16).max), (6,), np.int16),
+                "starting_cash": _box(0, _INT16_MAX, (1,), np.int16),
+                "value_chart": _box(_INT16_MIN, _INT16_MAX, (6,), np.int16),
                 "active_objectives": _box(0, 1, (_MAX_OBJECTIVES,), np.int8),
                 "current_action": _box(0, len(ActionId), (1,), np.int8),
                 "current_resources": _box(0, len(Suit), (2,), np.int8),
-                "cash_by_seat": _box(0, int(np.iinfo(np.int16).max), (_MAX_SEATS,), np.int16),
+                "cash_by_seat": _box(0, _INT16_MAX, (_MAX_SEATS,), np.int16),
                 "priority_seat": _box(0, _MAX_SEATS - 1, (1,), np.int8),
-                "won_resources": _box(
-                    0, int(np.iinfo(np.int16).max), (_MAX_SEATS, len(Suit)), np.int16
-                ),
-                "revealed_info": _box(
-                    0, int(np.iinfo(np.int16).max), (_MAX_SEATS, len(Suit)), np.int16
-                ),
+                "won_resources": _box(0, _INT16_MAX, (_MAX_SEATS, len(Suit)), np.int16),
+                "revealed_info": _box(0, _INT16_MAX, (_MAX_SEATS, len(Suit)), np.int16),
                 "owned_objectives": _box(0, 1, (_MAX_SEATS, _MAX_OBJECTIVES), np.int8),
                 "private_hand": _box(0, len(Suit), (bounds.max_hand_size,), np.int8),
-                "rules_resource_counts": _box(
-                    0, int(np.iinfo(np.int16).max), (len(Suit),), np.int16
-                ),
-                "rules_action_counts": _box(
-                    0, int(np.iinfo(np.int16).max), (len(ActionId),), np.int16
-                ),
-                "rules_private_cards": _box(0, int(np.iinfo(np.int16).max), (1,), np.int16),
+                "rules_resource_counts": _box(0, _INT16_MAX, (len(Suit),), np.int16),
+                "rules_action_counts": _box(0, _INT16_MAX, (len(ActionId),), np.int16),
+                "rules_private_cards": _box(0, _INT16_MAX, (1,), np.int16),
                 "rules_objective_pool": _box(0, 1, (_MAX_OBJECTIVES,), np.int8),
                 "rules_active_objective_count": _box(0, _MAX_OBJECTIVES, (1,), np.int8),
                 "rules_objectives_enabled": _box(0, 1, (1,), np.int8),
@@ -117,8 +113,39 @@ class ObservationEncoder:
             raise ValueError("player count exceeds observation bounds")
         if not 0 <= context.bot_seat < context.player_count:
             raise ValueError("bot seat is outside player count")
-        if context.starting_cash > np.iinfo(np.int16).max:
-            raise ValueError("starting cash exceeds observation bounds")
+        _require_range("starting cash", (context.starting_cash,), 0, _INT16_MAX)
+        _require_range("value chart", context.value_chart, _INT16_MIN, _INT16_MAX)
+        _require_range("cash", context.cash_by_seat, 0, _INT16_MAX)
+        _require_range(
+            "won resource count",
+            (count for row in context.won_resource_counts_by_seat for count in row),
+            0,
+            _INT16_MAX,
+        )
+        _require_range(
+            "revealed information count",
+            (count for row in context.revealed_info_counts_by_seat for count in row),
+            0,
+            _INT16_MAX,
+        )
+        _require_range(
+            "rules resource count",
+            knowledge.resource_counts,
+            0,
+            _INT16_MAX,
+        )
+        _require_range(
+            "rules action count",
+            knowledge.action_counts,
+            0,
+            _INT16_MAX,
+        )
+        _require_range(
+            "rules private cards",
+            (knowledge.private_cards_per_player,),
+            0,
+            _INT16_MAX,
+        )
         if knowledge.private_cards_per_player > self.bounds.max_hand_size:
             raise ValueError("private cards exceed environment hand bounds")
         maximum_possible_cash = (
@@ -128,10 +155,25 @@ class ObservationEncoder:
         )
         if maximum_possible_cash > self.bounds.max_bid:
             raise ValueError("maximum possible loan cash exceeds environment bid bounds")
+        if maximum_possible_cash > _INT16_MAX:
+            raise ValueError("maximum possible loan cash exceeds observation bounds")
         if context.legal_max_amount is not None and context.legal_max_amount > self.bounds.max_bid:
             raise ValueError("legal maximum exceeds environment bounds")
         if context.revealable_count > self.bounds.max_hand_size:
             raise ValueError("revealable count exceeds environment bounds")
+
+
+def _require_range(
+    name: str,
+    values: Iterable[int],
+    minimum: int,
+    maximum: int,
+) -> None:
+    for value in values:
+        if not minimum <= value <= maximum:
+            raise ValueError(
+                f"{name} value {value} is outside observation bounds [{minimum}, {maximum}]"
+            )
 
 
 def _box(

@@ -5,7 +5,8 @@ from dataclasses import replace
 import pytest
 from pocketrocks import ActionId, BotDecision
 
-from garboid_pocketrocks.rules import LIVE_RULESET
+from garboid_pocketrocks.bots import RandomBotBrain
+from garboid_pocketrocks.rules import LIVE_RULESET, live_ruleset
 from garboid_pocketrocks.simulator.engine import EngineTransition, GameEngine
 from garboid_pocketrocks.simulator.events import EventKind, GameEvent
 from garboid_pocketrocks.simulator.model import ActionCard, GameResult, Phase, Score
@@ -121,3 +122,42 @@ def test_event_shaping_is_auditable_and_config_rejects_invalid_event_configurati
 
     assert rewards[1].shaping == 0.25
     assert rewards[0].shaping == 0
+
+
+def test_reward_config_rejects_negative_penalty_and_nonfinite_coefficients() -> None:
+    with pytest.raises(ValueError, match="invalid action penalty"):
+        RewardConfig(invalid_action_penalty=-1)
+    with pytest.raises(ValueError, match="finite"):
+        RewardConfig(win_bonus=float("nan"))
+
+
+@pytest.mark.parametrize("chart", ("A", "E"))
+def test_complete_game_accounting_rewards_reconcile_to_final_money(
+    chart: str,
+) -> None:
+    ruleset = live_ruleset(chart)
+    transition = GameEngine.start(ruleset, player_count=3, seed=71)
+    tracker = RewardTracker(RewardConfig(win_bonus=0))
+    tracker.reset(transition.state)
+    brains = tuple(RandomBotBrain(seed=100 + seat) for seat in range(3))
+    totals = [0.0, 0.0, 0.0]
+
+    while transition.result is None:
+        assert transition.pending is not None
+        decisions = {
+            seat: brains[seat].choose_decision(
+                context,
+                ruleset.knowledge(3),
+            )
+            for seat, context in transition.pending.contexts
+        }
+        transition = GameEngine.step(transition.state, decisions)
+        rewards = tracker.update(transition)
+        for seat, reward in rewards.items():
+            totals[seat] += reward.accounting + reward.terminal_resource
+
+    for score in transition.result.scores:
+        assert totals[score.seat] == pytest.approx(
+            (score.final_money - ruleset.setup_for(3).starting_cash)
+            / ruleset.setup_for(3).starting_cash
+        )

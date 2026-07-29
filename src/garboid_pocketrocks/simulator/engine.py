@@ -137,9 +137,7 @@ def _decision_events(
             turn_index=state.turn_index,
             seat=seat,
             action_id=(
-                state.current_action.action_id
-                if state.current_action is not None
-                else None
+                state.current_action.action_id if state.current_action is not None else None
             ),
             amount=decision.value,
         )
@@ -268,9 +266,7 @@ def _claim_objectives(
     for card in winner_state.won_resources:
         counts[int(card.suit) - 1] += 1
     owned = {
-        objective_id
-        for player in old_state.players
-        for objective_id in player.owned_objective_ids
+        objective_id for player in old_state.players for objective_id in player.owned_objective_ids
     }
     claimed = tuple(
         objective_id
@@ -308,8 +304,7 @@ def _objective_is_met(objective_id: int, counts: list[int]) -> bool:
         return sum(count >= 2 for count in counts) >= 2
     assert objective.requirement is not None
     return all(
-        count >= required
-        for count, required in zip(counts, objective.requirement, strict=True)
+        count >= required for count, required in zip(counts, objective.requirement, strict=True)
     )
 
 
@@ -462,22 +457,17 @@ def _score(state: GameState) -> GameResult:
             sum(card.suit is suit for card in player.won_resources) for suit in Suit
         )
         resource_value = sum(
-            count
-            * state.ruleset.value_chart[min(revealed_by_suit[int(suit) - 1], 5)]
+            count * state.ruleset.value_chart[min(revealed_by_suit[int(suit) - 1], 5)]
             for suit, count in zip(Suit, owned_by_suit, strict=True)
         )
         objective_value = sum(
-            OBJECTIVES[objective_id].payout
-            for objective_id in player.owned_objective_ids
+            OBJECTIVES[objective_id].payout for objective_id in player.owned_objective_ids
         )
         final_money = (
             player.cash
             + resource_value
             + objective_value
-            + sum(
-                investment.locked + investment.payout
-                for investment in player.investments
-            )
+            + sum(investment.locked + investment.payout for investment in player.investments)
             - sum(loan.principal for loan in player.loans)
         )
         money_by_seat.append(final_money)

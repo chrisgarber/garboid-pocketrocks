@@ -59,9 +59,7 @@ class Ruleset:
         if not 0 <= self.active_objective_count <= len(self.objective_pool):
             raise RulesetValidationError("active objective count exceeds objective pool")
         if not self.objectives_enabled and self.active_objective_count != 0:
-            raise RulesetValidationError(
-                "disabled objectives require active objective count zero"
-            )
+            raise RulesetValidationError("disabled objectives require active objective count zero")
         for setup in self.player_setups:
             self._validate_setup(setup)
 
@@ -72,9 +70,7 @@ class Ruleset:
             raise RulesetValidationError("starting cash must be positive")
         if setup.private_cards_per_player < 0:
             raise RulesetValidationError("private-card count must be nonnegative")
-        biddable = sum(self.resource_counts) - (
-            setup.player_count * setup.private_cards_per_player
-        )
+        biddable = sum(self.resource_counts) - (setup.player_count * setup.private_cards_per_player)
         if biddable <= 0:
             raise RulesetValidationError("setup must leave a biddable resource")
         auction_capacity = self.action_count(ActionId.AUCTION1) + (

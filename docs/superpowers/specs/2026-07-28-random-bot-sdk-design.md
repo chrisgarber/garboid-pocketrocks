@@ -3,6 +3,12 @@
 **Date:** 2026-07-28
 **Status:** Approved for planning
 
+> **Historical note (2026-07-28):** This milestone was implemented and
+> live-tested as designed. The later simulator/RL milestone extracted
+> `RandomBotBrain`, introduced `PocketRocksFastBot`, and moved the public
+> identity from `RANDOM_BOT_ID` into the committed `RandomBot.BOT_ID` class
+> constant. The API key remains in ignored `.env`.
+
 ## Purpose
 
 Implement the first playable Garboid PocketRocks bot as a direct subclass of the

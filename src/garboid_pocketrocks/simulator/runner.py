@@ -48,9 +48,7 @@ class MatchRunner:
         fault_mode: FaultMode = FaultMode.RAISE,
     ) -> MatchResult:
         if len(lineup) != player_count:
-            raise ValueError(
-                f"lineup has {len(lineup)} bots but player_count is {player_count}"
-            )
+            raise ValueError(f"lineup has {len(lineup)} bots but player_count is {player_count}")
         brain_rng = random.Random(seed)
         brains: list[BotBrain | None] = []
         faults: list[BotFault] = []

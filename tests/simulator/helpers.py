@@ -47,9 +47,7 @@ def assert_resource_conservation(state: GameState) -> None:
 def assert_objective_ownership(state: GameState) -> None:
     active_objectives = set(state.active_objective_ids)
     owned_objectives = [
-        objective_id
-        for player in state.players
-        for objective_id in player.owned_objective_ids
+        objective_id for player in state.players for objective_id in player.owned_objective_ids
     ]
 
     assert len(active_objectives) == len(state.active_objective_ids)
@@ -104,17 +102,13 @@ def recompute_result(state: GameState) -> GameResult:
             for suit in Suit
         )
         objective_value = sum(
-            OBJECTIVES[objective_id].payout
-            for objective_id in player.owned_objective_ids
+            OBJECTIVES[objective_id].payout for objective_id in player.owned_objective_ids
         )
         money_by_seat.append(
             player.cash
             + resource_value
             + objective_value
-            + sum(
-                investment.locked + investment.payout
-                for investment in player.investments
-            )
+            + sum(investment.locked + investment.payout for investment in player.investments)
             - sum(loan.principal for loan in player.loans)
         )
 

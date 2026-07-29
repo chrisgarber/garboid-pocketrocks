@@ -51,6 +51,12 @@ class WeightedRulesetSampler:
             for _, weight in self.weighted_rulesets
         ):
             raise ValueError("ruleset weights must be positive integers")
+        rulesets_by_name: dict[str, Ruleset] = {}
+        for ruleset, _ in self.weighted_rulesets:
+            existing = rulesets_by_name.get(ruleset.name)
+            if existing is not None and existing != ruleset:
+                raise ValueError(f"different rulesets must not use the same name {ruleset.name!r}")
+            rulesets_by_name[ruleset.name] = ruleset
         object.__setattr__(
             self,
             "_support",

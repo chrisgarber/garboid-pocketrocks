@@ -30,9 +30,7 @@ def _state_with_action(
 
 
 def test_bidding_context_matches_live_loan_limit() -> None:
-    transition = GameEngine.resume(
-        _state_with_action(ActionId.LOAN20, cash=(7, 12, 30))
-    )
+    transition = GameEngine.resume(_state_with_action(ActionId.LOAN20, cash=(7, 12, 30)))
 
     assert transition.pending is not None
     contexts = transition.pending.contexts_by_seat

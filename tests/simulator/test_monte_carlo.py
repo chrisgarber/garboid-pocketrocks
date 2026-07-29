@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import sys
+
 import pytest
 from pocketrocks import BotDecision, DecisionContext
 
@@ -26,10 +28,7 @@ def _small_random_config(
     capture_replays: bool = False,
 ) -> MonteCarloConfig:
     return MonteCarloConfig(
-        bot_specs=tuple(
-            _random_spec(f"random-{index}", f"random-{index}")
-            for index in range(3)
-        ),
+        bot_specs=tuple(_random_spec(f"random-{index}", f"random-{index}") for index in range(3)),
         games=games,
         player_counts=(3,),
         ruleset_sampler=FixedRulesetSampler(LIVE_RULESET),
@@ -71,14 +70,13 @@ def test_aggregation_reconciles_games_seats_rulesets_and_decisions() -> None:
     assert sum(statistics.games for statistics in result.bot_statistics) == 27
     for statistics in result.bot_statistics:
         assert statistics.games == sum(bucket.games for bucket in statistics.per_seat)
-        assert statistics.games == sum(
-            bucket.games for bucket in statistics.per_ruleset
-        )
+        assert statistics.games == sum(bucket.games for bucket in statistics.per_ruleset)
         assert statistics.games == sum(statistics.rank_counts)
-        assert statistics.mean_rank() == sum(
-            rank * count
-            for rank, count in enumerate(statistics.rank_counts, start=1)
-        ) / statistics.games
+        assert (
+            statistics.mean_rank()
+            == sum(rank * count for rank, count in enumerate(statistics.rank_counts, start=1))
+            / statistics.games
+        )
         assert all(margin <= 0 for margin in statistics.score_margins)
         assert statistics.decision_count == sum(
             bucket.decision_count for bucket in statistics.per_seat
@@ -86,10 +84,7 @@ def test_aggregation_reconciles_games_seats_rulesets_and_decisions() -> None:
         assert statistics.faults == 0
         assert statistics.mean_final_money() == statistics.mean()
         assert statistics.median_final_money() == statistics.median()
-        assert (
-            statistics.final_money_population_spread()
-            == statistics.population_spread()
-        )
+        assert statistics.final_money_population_spread() == statistics.population_spread()
         assert statistics.final_money_quantile(0.5) == statistics.quantile(0.5)
 
 
@@ -107,9 +102,7 @@ def test_same_seed_produces_equal_frozen_results() -> None:
 
 
 def test_replay_capture_is_ordered_and_includes_provenance() -> None:
-    captured = MonteCarloRunner.run(
-        _small_random_config(games=3, seed=77, capture_replays=True)
-    )
+    captured = MonteCarloRunner.run(_small_random_config(games=3, seed=77, capture_replays=True))
     omitted = MonteCarloRunner.run(_small_random_config(games=1))
 
     assert [replay.game_index for replay in captured.replays] == [0, 1, 2]
@@ -131,9 +124,7 @@ def test_repeated_bot_identity_is_aggregated_once() -> None:
 
     assert len(result.bot_statistics) == 1
     assert result.bot_statistics[0].games == 9
-    assert tuple(
-        bucket.games for bucket in result.bot_statistics[0].per_seat
-    ) == (3, 3, 3)
+    assert tuple(bucket.games for bucket in result.bot_statistics[0].per_seat) == (3, 3, 3)
 
 
 def test_unpicklable_closure_works_serially_and_fails_clearly_in_workers() -> None:
@@ -154,6 +145,28 @@ def test_unpicklable_closure_works_serially_and_fails_clearly_in_workers() -> No
 
     assert len(MonteCarloRunner.run(config, workers=1).game_summaries) == 1
     with pytest.raises(SimulationError, match="closure.*pickl"):
+        MonteCarloRunner.run(config, workers=2)
+
+
+def test_main_module_factory_fails_before_spawn_workers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    factory = _raising_brain
+    monkeypatch.setattr(factory, "__module__", "__main__")
+    monkeypatch.setattr(sys.modules["__main__"], factory.__name__, factory, raising=False)
+    config = MonteCarloConfig(
+        bot_specs=(
+            BotSpec("main-factory", "main-factory", factory),
+            _random_spec("one", "one"),
+            _random_spec("two", "two"),
+        ),
+        games=1,
+        player_counts=(3,),
+        ruleset_sampler=FixedRulesetSampler(LIVE_RULESET),
+        root_seed=9,
+    )
+
+    with pytest.raises(SimulationError, match="main-factory.*importable"):
         MonteCarloRunner.run(config, workers=2)
 
 
@@ -188,9 +201,7 @@ def test_faults_are_aggregated_for_the_responsible_bot() -> None:
 
     result = MonteCarloRunner.run(config)
     raising = next(
-        statistics
-        for statistics in result.bot_statistics
-        if statistics.bot_id == "raising"
+        statistics for statistics in result.bot_statistics if statistics.bot_id == "raising"
     )
 
     assert raising.faults > 0

@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import importlib
 import pickle
 import random
 import statistics
 from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures.process import BrokenProcessPool
 from dataclasses import dataclass, field, replace
 
 from garboid_pocketrocks.bots.base import BotSpec
@@ -46,7 +48,12 @@ class MonteCarloConfig:
         support = self.ruleset_sampler.support()
         if not support:
             raise ValueError("ruleset sampler support must be nonempty")
+        rulesets_by_name: dict[str, Ruleset] = {}
         for ruleset in support:
+            existing = rulesets_by_name.get(ruleset.name)
+            if existing is not None and existing != ruleset:
+                raise ValueError(f"different rulesets must not use the same name {ruleset.name!r}")
+            rulesets_by_name[ruleset.name] = ruleset
             for player_count in self.player_counts:
                 ruleset.setup_for(player_count)
 
@@ -159,10 +166,7 @@ class BotStatistics:
     def mean_rank(self) -> float:
         if not self.games:
             return 0.0
-        rank_total = sum(
-            rank * count
-            for rank, count in enumerate(self.rank_counts, start=1)
-        )
+        rank_total = sum(rank * count for rank, count in enumerate(self.rank_counts, start=1))
         return rank_total / self.games
 
     def quantile(self, probability: float) -> float:
@@ -247,9 +251,9 @@ class MonteCarloRunner:
         for player_count in set(config.player_counts):
             if len(config.bot_specs) == player_count:
                 shuffled = list(config.bot_specs)
-                random.Random(
-                    derive_seed(config.root_seed, "lineup", player_count)
-                ).shuffle(shuffled)
+                random.Random(derive_seed(config.root_seed, "lineup", player_count)).shuffle(
+                    shuffled
+                )
                 base_lineups[player_count] = tuple(shuffled)
 
         jobs: list[GameJob] = []
@@ -265,9 +269,7 @@ class MonteCarloRunner:
             if player_count in base_lineups:
                 selected = list(base_lineups[player_count])
             else:
-                lineup_rng = random.Random(
-                    derive_seed(config.root_seed, "lineup", game_index)
-                )
+                lineup_rng = random.Random(derive_seed(config.root_seed, "lineup", game_index))
                 selected = lineup_rng.sample(config.bot_specs, player_count)
                 lineup_rng.shuffle(selected)
             offset = game_index % player_count
@@ -298,8 +300,14 @@ class MonteCarloRunner:
             completed = tuple(_execute_job(job) for job in jobs)
         else:
             _validate_picklable_bot_specs(config.bot_specs)
-            with ProcessPoolExecutor(max_workers=workers) as executor:
-                completed = tuple(executor.map(_execute_job, jobs))
+            try:
+                with ProcessPoolExecutor(max_workers=workers) as executor:
+                    completed = tuple(executor.map(_execute_job, jobs))
+            except (BrokenProcessPool, pickle.PicklingError) as error:
+                names = ", ".join(spec.name for spec in config.bot_specs)
+                raise SimulationError(
+                    f"process workers failed to load bot specs: {names}"
+                ) from error
         return _aggregate(config, completed)
 
 
@@ -309,9 +317,32 @@ def _validate_picklable_bot_specs(bot_specs: tuple[BotSpec, ...]) -> None:
             pickle.dumps(spec)
         except Exception as error:
             raise SimulationError(
-                f"bot spec {spec.name!r} ({spec.bot_id}) is not picklable "
-                "for process workers"
+                f"bot spec {spec.name!r} ({spec.bot_id}) is not picklable for process workers"
             ) from error
+        factory = spec.brain_factory
+        module_name = getattr(factory, "__module__", None)
+        qualified_name = getattr(factory, "__qualname__", None)
+        if module_name is None or qualified_name is None:
+            continue
+        if module_name == "__main__" or "<locals>" in qualified_name:
+            raise SimulationError(
+                f"bot spec {spec.name!r} ({spec.bot_id}) factory is not "
+                "importable by spawn process workers"
+            )
+        try:
+            resolved: object = importlib.import_module(module_name)
+            for part in qualified_name.split("."):
+                resolved = getattr(resolved, part)
+        except (ImportError, AttributeError) as error:
+            raise SimulationError(
+                f"bot spec {spec.name!r} ({spec.bot_id}) factory is not "
+                "importable by spawn process workers"
+            ) from error
+        if resolved != factory:
+            raise SimulationError(
+                f"bot spec {spec.name!r} ({spec.bot_id}) factory is not "
+                "importable by spawn process workers"
+            )
 
 
 def _execute_job(job: GameJob) -> _CompletedGame:
@@ -344,8 +375,7 @@ def _aggregate(
         bot_names[spec.bot_id] = spec.name
         total[spec.bot_id] = _StatisticsAccumulator.with_rank_count(rank_count)
         per_seat[spec.bot_id] = {
-            seat: _StatisticsAccumulator.with_rank_count(rank_count)
-            for seat in range(rank_count)
+            seat: _StatisticsAccumulator.with_rank_count(rank_count) for seat in range(rank_count)
         }
         per_ruleset[spec.bot_id] = {
             ruleset.name: _StatisticsAccumulator.with_rank_count(rank_count)
@@ -366,8 +396,7 @@ def _aggregate(
             for seat in range(job.player_count)
         )
         faults_by_seat = tuple(
-            sum(fault.seat == seat for fault in match.faults)
-            for seat in range(job.player_count)
+            sum(fault.seat == seat for fault in match.faults) for seat in range(job.player_count)
         )
         summaries.append(
             GameSummary(
@@ -394,9 +423,7 @@ def _aggregate(
 
         scores_by_seat = {score.seat: score for score in match.result.scores}
         first_place_count = sum(score.rank == 1 for score in match.result.scores)
-        first_place_money = max(
-            score.final_money for score in match.result.scores
-        )
+        first_place_money = max(score.final_money for score in match.result.scores)
         for seat, spec in enumerate(job.lineup):
             score = scores_by_seat[seat]
             for accumulator in (

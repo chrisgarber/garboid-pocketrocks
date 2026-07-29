@@ -2,6 +2,12 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use braze-superpowers:subagent-driven-development (recommended) or braze-superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Historical note (2026-07-28):** This plan records the original completed
+> milestone. The later simulator/RL work extracted `RandomBotBrain`, introduced
+> `PocketRocksFastBot`, and replaced the `RANDOM_BOT_ID` environment boundary
+> with the committed `RandomBot.BOT_ID` class constant. Only the API key remains
+> secret in ignored `.env`.
+
 **Goal:** Add a seeded random `PocketRocksBot`, verify it through the SDK's in-memory runtime, publish it, and briefly test a real credentialed connection.
 
 **Architecture:** `RandomBot` directly subclasses the SDK's `PocketRocksBot` and implements its async `choose_decision` contract. It returns SDK `BotDecision` values without a translation layer. The SDK owns configuration, connection management, validation, concurrency, and wire I/O.

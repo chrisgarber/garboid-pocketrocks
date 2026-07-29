@@ -53,8 +53,7 @@ def test_terminal_scoring_reveals_cards_and_uses_competition_ranks() -> None:
     assert transition.state.players[0].revealed_info == (hidden,)
     assert transition.result is not None
     assert tuple(
-        (score.seat, score.final_money, score.rank)
-        for score in transition.result.scores
+        (score.seat, score.final_money, score.rank) for score in transition.result.scores
     ) == ((0, 17, 1), (1, 16, 3), (2, 17, 1))
 
 

@@ -22,6 +22,7 @@ dependencies = [
 
 [project.scripts]
 garboid-random-bot = "garboid_pocketrocks.bots.random_bot:main"
+garboid-simulate = "garboid_pocketrocks.simulator.cli:main"
 
 [tool.hatch.metadata]
 allow-direct-references = true

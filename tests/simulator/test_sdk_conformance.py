@@ -108,13 +108,17 @@ def test_bidding_revealable_count_matches_sdk_hand_size() -> None:
 
     assert transition.pending is not None
     actual = transition.pending.contexts_by_seat[0]
-    expected = scenario(
-        players=3,
-        starting_cash=30,
-    ).deciding(
-        seat=0,
-        hand=actual.current_hand_suit_ids,
-    ).to_context(received_at=0)
+    expected = (
+        scenario(
+            players=3,
+            starting_cash=30,
+        )
+        .deciding(
+            seat=0,
+            hand=actual.current_hand_suit_ids,
+        )
+        .to_context(received_at=0)
+    )
 
     assert actual.revealable_count == expected.revealable_count
 

@@ -68,9 +68,9 @@ def test_random_brain_and_async_bridge_return_same_decision() -> None:
     bot = _bot(seed=42)
 
     assert _choose(bot, context) == expected
-    assert _bot(seed=42).choose_decision_sync(context) == RandomBotBrain(
-        seed=42
-    ).choose_decision(context, LIVE_RULESET.knowledge(3))
+    assert _bot(seed=42).choose_decision_sync(context) == RandomBotBrain(seed=42).choose_decision(
+        context, LIVE_RULESET.knowledge(3)
+    )
 
 
 def test_bot_spec_builds_fresh_brains() -> None:

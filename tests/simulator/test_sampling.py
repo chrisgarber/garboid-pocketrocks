@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 from garboid_pocketrocks.rules import (
@@ -27,9 +29,7 @@ def test_fixed_sampler_always_returns_its_single_supported_ruleset() -> None:
 
 
 def test_weighted_sampler_is_seeded_by_game_index() -> None:
-    sampler = WeightedRulesetSampler(
-        ((live_ruleset("A"), 1), (live_ruleset("E"), 2))
-    )
+    sampler = WeightedRulesetSampler(((live_ruleset("A"), 1), (live_ruleset("E"), 2)))
 
     assert [sampler.sample(root_seed=7, game_index=i) for i in range(20)] == [
         sampler.sample(root_seed=7, game_index=i) for i in range(20)
@@ -39,11 +39,17 @@ def test_weighted_sampler_is_seeded_by_game_index() -> None:
 def test_weighted_sampler_support_is_distinct_and_ordered() -> None:
     chart_a = live_ruleset("A")
     chart_e = live_ruleset("E")
-    sampler = WeightedRulesetSampler(
-        ((chart_a, 1), (chart_e, 2), (chart_a, 3))
-    )
+    sampler = WeightedRulesetSampler(((chart_a, 1), (chart_e, 2), (chart_a, 3)))
 
     assert sampler.support() == (chart_a, chart_e)
+
+
+def test_weighted_sampler_rejects_different_rulesets_with_same_name() -> None:
+    conflicting = live_ruleset("E")
+    conflicting = replace(conflicting, name=LIVE_RULESET.name)
+
+    with pytest.raises(ValueError, match="same name"):
+        WeightedRulesetSampler(((LIVE_RULESET, 1), (conflicting, 1)))
 
 
 @pytest.mark.parametrize("weight", [0, -1, 1.5, True])
@@ -83,16 +89,19 @@ def test_variation_sampler_can_change_each_public_axis() -> None:
     assert len({sample.action_counts for sample in samples}) == 2
     assert len({sample.player_setups for sample in samples}) == 2
     assert len({sample.value_chart for sample in samples}) == 2
-    assert len(
-        {
-            (
-                sample.objective_pool,
-                sample.active_objective_count,
-                sample.objectives_enabled,
-            )
-            for sample in samples
-        }
-    ) == 2
+    assert (
+        len(
+            {
+                (
+                    sample.objective_pool,
+                    sample.active_objective_count,
+                    sample.objectives_enabled,
+                )
+                for sample in samples
+            }
+        )
+        == 2
+    )
 
 
 def test_variation_support_is_the_validated_cartesian_product() -> None:

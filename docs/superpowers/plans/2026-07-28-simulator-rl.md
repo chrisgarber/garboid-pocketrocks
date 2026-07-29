@@ -223,9 +223,7 @@ class Ruleset:
         if not 0 <= self.active_objective_count <= len(self.objective_pool):
             raise RulesetValidationError("active objective count exceeds objective pool")
         if not self.objectives_enabled and self.active_objective_count != 0:
-            raise RulesetValidationError(
-                "disabled objectives require active objective count zero"
-            )
+            raise RulesetValidationError("disabled objectives require active objective count zero")
         for setup in self.player_setups:
             self._validate_setup(setup)
 
@@ -236,9 +234,7 @@ class Ruleset:
             raise RulesetValidationError("starting cash must be positive")
         if setup.private_cards_per_player < 0:
             raise RulesetValidationError("private-card count must be nonnegative")
-        biddable = sum(self.resource_counts) - (
-            setup.player_count * setup.private_cards_per_player
-        )
+        biddable = sum(self.resource_counts) - (setup.player_count * setup.private_cards_per_player)
         if biddable <= 0:
             raise RulesetValidationError("setup must leave a biddable resource")
         auction_capacity = self.action_counts[ActionId.AUCTION1 - 1] + (
@@ -365,9 +361,9 @@ def test_random_brain_and_async_bridge_return_same_decision() -> None:
     bot = _bot(seed=42)
 
     assert _choose(bot, context) == expected
-    assert bot.choose_decision_sync(context) == RandomBotBrain(
-        seed=42
-    ).choose_decision(context, LIVE_RULESET.knowledge(3))
+    assert bot.choose_decision_sync(context) == RandomBotBrain(seed=42).choose_decision(
+        context, LIVE_RULESET.knowledge(3)
+    )
 
 
 def test_bot_spec_builds_fresh_brains() -> None:
@@ -490,16 +486,10 @@ class RandomBotBrain:
             if max_amount is None or max_amount <= 0:
                 return BotDecision.pass_turn()
             amount = self._random.randint(0, max_amount)
-            return (
-                BotDecision.pass_turn()
-                if amount == 0
-                else BotDecision.submit_bid(amount)
-            )
+            return BotDecision.pass_turn() if amount == 0 else BotDecision.submit_bid(amount)
         if context.revealable_count <= 0:
             return BotDecision.pass_turn()
-        return BotDecision.select_info_to_reveal(
-            self._random.randrange(context.revealable_count)
-        )
+        return BotDecision.select_info_to_reveal(self._random.randrange(context.revealable_count))
 
 
 class RandomBot(PocketRocksFastBot):
@@ -600,9 +590,7 @@ def test_live_setup_counts_by_player_count() -> None:
         setup = build_setup(LIVE_RULESET, player_count=players, seed=7)
         assert len(setup.state.players) == players
         assert {player.cash for player in setup.state.players} == {cash}
-        assert {len(player.private_hand) for player in setup.state.players} == {
-            hand_size
-        }
+        assert {len(player.private_hand) for player in setup.state.players} == {hand_size}
         assert len(setup.state.visible_resources) == 2
         assert len(setup.state.active_objective_ids) == 4
         assert len(setup.state.action_deck) == 29
@@ -802,9 +790,7 @@ Create tests that assert:
 
 ```python
 def test_bidding_context_matches_live_loan_limit() -> None:
-    transition = GameEngine.resume(
-        state_with_action(ActionId.LOAN20, cash=(7, 12, 30))
-    )
+    transition = GameEngine.resume(state_with_action(ActionId.LOAN20, cash=(7, 12, 30)))
     contexts = transition.pending.contexts_by_seat
     assert contexts[0].legal_max_amount == 27
     assert contexts[1].legal_max_amount == 32
@@ -895,8 +881,6 @@ class EngineTransition:
     @property
     def terminated(self) -> bool:
         return self.result is not None
-
-
 ```
 
 `GameEngine` provides three static entry points:
@@ -947,8 +931,7 @@ Terminal scoring must use:
 
 ```python
 resource_value = sum(
-    count_owned(player, suit)
-    * state.ruleset.value_chart[min(total_revealed(state, suit), 5)]
+    count_owned(player, suit) * state.ruleset.value_chart[min(total_revealed(state, suit), 5)]
     for suit in Suit
 )
 final_money = (
@@ -1232,8 +1215,6 @@ class MatchResult:
     events: tuple[GameEvent, ...]
     faults: tuple[BotFault, ...]
     replay: MatchReplay
-
-
 ```
 
 `MatchRunner.run(lineup: Sequence[BotSpec], *, ruleset: Ruleset,
@@ -1292,9 +1273,7 @@ Cover:
 
 ```python
 def test_weighted_sampler_is_seeded_by_game_index() -> None:
-    sampler = WeightedRulesetSampler(
-        ((live_ruleset("A"), 1), (live_ruleset("E"), 2))
-    )
+    sampler = WeightedRulesetSampler(((live_ruleset("A"), 1), (live_ruleset("E"), 2)))
     assert [sampler.sample(root_seed=7, game_index=i) for i in range(20)] == [
         sampler.sample(root_seed=7, game_index=i) for i in range(20)
     ]
@@ -1327,16 +1306,19 @@ def test_variation_sampler_can_change_each_public_axis() -> None:
     assert len({sample.action_counts for sample in samples}) == 2
     assert len({sample.player_setups for sample in samples}) == 2
     assert len({sample.value_chart for sample in samples}) == 2
-    assert len(
-        {
-            (
-                sample.objective_pool,
-                sample.active_objective_count,
-                sample.objectives_enabled,
-            )
-            for sample in samples
-        }
-    ) == 2
+    assert (
+        len(
+            {
+                (
+                    sample.objective_pool,
+                    sample.active_objective_count,
+                    sample.objectives_enabled,
+                )
+                for sample in samples
+            }
+        )
+        == 2
+    )
 
 
 def test_worker_count_does_not_change_monte_carlo_result() -> None:
@@ -1487,13 +1469,14 @@ def test_action_codec_round_trips_legal_decisions() -> None:
 def test_action_masks_match_sdk_context_legality() -> None:
     codec = ActionCodec(EnvironmentBounds(max_bid=100, max_hand_size=5))
     bid_mask = codec.mask(_bid_context(7))
-    assert tuple(index for index, enabled in enumerate(bid_mask) if enabled) == tuple(
-        range(8)
-    )
+    assert tuple(index for index, enabled in enumerate(bid_mask) if enabled) == tuple(range(8))
     reveal_mask = codec.mask(_reveal_context(3))
-    assert tuple(
-        index for index, enabled in enumerate(reveal_mask) if enabled
-    ) == (0, 101, 102, 103)
+    assert tuple(index for index, enabled in enumerate(reveal_mask) if enabled) == (
+        0,
+        101,
+        102,
+        103,
+    )
 ```
 
 - [ ] **Step 2: Write failing observation and reward tests**
@@ -1539,8 +1522,6 @@ class EnvironmentBounds:
     def __post_init__(self) -> None:
         if self.max_bid < 0 or self.max_hand_size < 0:
             raise ValueError("environment bounds must be nonnegative")
-
-
 ```
 
 `ActionCodec(bounds)` owns a `gymnasium.spaces.Discrete` of size
@@ -1596,11 +1577,7 @@ class RewardBreakdown:
     @property
     def total(self) -> float:
         return (
-            self.accounting
-            + self.terminal_resource
-            + self.placement
-            + self.shaping
-            + self.penalty
+            self.accounting + self.terminal_resource + self.placement + self.shaping + self.penalty
         )
 ```
 
@@ -1718,8 +1695,6 @@ against `EnvironmentBounds` and reject incompatible supports before reset.
 class InvalidActionMode(StrEnum):
     RAISE = "raise"
     PENALIZE_AND_PASS = "penalize_and_pass"
-
-
 ```
 
 `PocketRocksEnv` subclasses

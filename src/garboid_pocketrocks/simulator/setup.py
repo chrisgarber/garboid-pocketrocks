@@ -64,18 +64,14 @@ def build_setup(
             hand.append(resource_cards[next_resource_index])
             next_resource_index += 1
 
-    visible_resources = tuple(
-        resource_cards[next_resource_index : next_resource_index + 2]
-    )
+    visible_resources = tuple(resource_cards[next_resource_index : next_resource_index + 2])
     next_resource_index += len(visible_resources)
     resource_deck = tuple(resource_cards[next_resource_index:])
 
     objective_ids = list(ruleset.objective_pool)
     rng.shuffle(objective_ids)
     active_objective_ids = (
-        tuple(objective_ids[: ruleset.active_objective_count])
-        if ruleset.objectives_enabled
-        else ()
+        tuple(objective_ids[: ruleset.active_objective_count]) if ruleset.objectives_enabled else ()
     )
 
     priority_seat = rng.randrange(player_count)

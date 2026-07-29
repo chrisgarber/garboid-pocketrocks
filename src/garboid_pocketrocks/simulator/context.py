@@ -65,9 +65,7 @@ def _context_for(state: GameState, seat: Seat) -> DecisionContext:
         value_chart=state.ruleset.value_chart,
         objective_ids=state.active_objective_ids,
         current_action_id=(
-            int(state.current_action.action_id)
-            if state.current_action is not None
-            else None
+            int(state.current_action.action_id) if state.current_action is not None else None
         ),
         current_resource_ids=_current_resources(state),
         cash_by_seat=tuple(other.cash for other in state.players),
@@ -78,9 +76,7 @@ def _context_for(state: GameState, seat: Seat) -> DecisionContext:
         revealed_info_counts_by_seat=tuple(
             _counts_by_suit(other.revealed_info) for other in state.players
         ),
-        owned_objective_ids_by_seat=tuple(
-            other.owned_objective_ids for other in state.players
-        ),
+        owned_objective_ids_by_seat=tuple(other.owned_objective_ids for other in state.players),
         bot_seat=seat,
         current_hand_suit_ids=tuple(int(card.suit) for card in player.private_hand),
         legal_max_amount=None if is_reveal else _legal_max(state, seat),

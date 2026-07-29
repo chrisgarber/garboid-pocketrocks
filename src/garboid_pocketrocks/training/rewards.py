@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 
 from pocketrocks import OBJECTIVES
@@ -18,6 +19,17 @@ class RewardConfig:
     event_bonuses: tuple[tuple[str, float], ...] = ()
 
     def __post_init__(self) -> None:
+        coefficients = (
+            self.accounting_weight,
+            self.win_bonus,
+            self.invalid_action_penalty,
+            *self.placement_bonuses,
+            *(bonus for _, bonus in self.event_bonuses),
+        )
+        if not all(math.isfinite(coefficient) for coefficient in coefficients):
+            raise ValueError("reward coefficients must be finite")
+        if self.invalid_action_penalty < 0:
+            raise ValueError("invalid action penalty must be nonnegative")
         event_kinds = tuple(kind for kind, _ in self.event_bonuses)
         if len(set(event_kinds)) != len(event_kinds):
             raise ValueError("event bonuses must not contain duplicate event kinds")

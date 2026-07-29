@@ -36,10 +36,7 @@ def test_random_brain_games_preserve_transition_invariants(
     seed: int,
 ) -> None:
     brain_rng = random.Random(seed)
-    brains = tuple(
-        RandomBotBrain(seed=brain_rng.randrange(2**63))
-        for _ in range(player_count)
-    )
+    brains = tuple(RandomBotBrain(seed=brain_rng.randrange(2**63)) for _ in range(player_count))
     knowledge = LIVE_RULESET.knowledge(player_count)
     transition = GameEngine.start(
         LIVE_RULESET,
