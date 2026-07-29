@@ -35,3 +35,25 @@ jobs:
 
       - name: Test
         run: uv run pytest
+
+  neural:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Install uv and Python
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          version: "0.11.26"
+          python-version: "3.14"
+          enable-cache: true
+
+      - name: Synchronize neural dependencies
+        run: uv sync --locked --extra neural
+
+      - name: Type-check complete neural tree
+        run: uv run --extra neural mypy --config-file mypy.neural.ini src tests
+
+      - name: Run neural tests
+        run: uv run --extra neural pytest tests/neural -q

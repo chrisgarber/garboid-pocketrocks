@@ -20,12 +20,25 @@ dependencies = [
   "pocketrocks-python-sdk @ git+https://github.com/jaiparera/pocketrocks-python-sdk.git@597857446d47ac0890609a4767cad561578a2519",
 ]
 
+[project.optional-dependencies]
+neural = [
+  "torch>=2.13,<2.14",
+]
+
 [project.scripts]
 garboid-random-bot = "garboid_pocketrocks.bots.random_bot:main"
 garboid-simulate = "garboid_pocketrocks.simulator.cli:main"
 
 [tool.hatch.metadata]
 allow-direct-references = true
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
 
 [dependency-groups]
 dev = [
@@ -50,4 +63,8 @@ select = ["E", "F", "I", "B", "UP"]
 python_version = "3.14"
 strict = true
 files = ["src", "tests"]
+exclude = [
+  "^src/garboid_pocketrocks/neural/",
+  "^tests/neural/",
+]
 warn_unused_configs = true
