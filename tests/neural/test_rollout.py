@@ -31,15 +31,11 @@ def test_stage1_episode_plan_is_named_stable_and_order_independent() -> None:
     plans = plan_stage1_episodes(root_seed=42, updates=2, games_per_update=16)
 
     assert len(plans) == 32
-    assert [plan.learner_seat for plan in plans] == [
-        index % 3 for index in range(32)
-    ]
+    assert [plan.learner_seat for plan in plans] == [index % 3 for index in range(32)]
     assert plans == plan_stage1_episodes(root_seed=42, updates=2, games_per_update=16)
 
     by_key = {(plan.update_index, plan.episode_index): plan for plan in plans}
-    reverse_by_key = {
-        (plan.update_index, plan.episode_index): plan for plan in reversed(plans)
-    }
+    reverse_by_key = {(plan.update_index, plan.episode_index): plan for plan in reversed(plans)}
     assert by_key == reverse_by_key
 
     seeds = {
@@ -151,12 +147,10 @@ def test_rollout_collects_only_immutable_legal_learner_transitions() -> None:
         assert math.isfinite(float(episode.final_money))
         assert 1 <= episode.rank <= 3
         assert episode.outright_first is (
-            episode.rank == 1
-            and sum(score.rank == 1 for score in episode.result.scores) == 1
+            episode.rank == 1 and sum(score.rank == 1 for score in episode.result.scores) == 1
         )
         assert episode.tied_first is (
-            episode.rank == 1
-            and sum(score.rank == 1 for score in episode.result.scores) > 1
+            episode.rank == 1 and sum(score.rank == 1 for score in episode.result.scores) > 1
         )
         assert math.isclose(
             episode.reward_breakdown.total,
@@ -217,9 +211,7 @@ def test_rollout_collects_only_immutable_legal_learner_transitions() -> None:
                     assert masked_logit == -math.inf
 
     assert rollout.transitions == tuple(
-        transition
-        for episode in rollout.episodes
-        for transition in episode.transitions
+        transition for episode in rollout.episodes for transition in episode.transitions
     )
     for name, parameter in model.named_parameters():
         assert torch.equal(parameter, parameters_before[name])

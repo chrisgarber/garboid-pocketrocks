@@ -100,11 +100,7 @@ class RolloutBatch:
 
     @property
     def transitions(self) -> tuple[RolloutTransition, ...]:
-        return tuple(
-            transition
-            for episode in self.episodes
-            for transition in episode.transitions
-        )
+        return tuple(transition for episode in self.episodes for transition in episode.transitions)
 
 
 def collect_rollout(
@@ -185,9 +181,7 @@ def _collect_episode(
                 deterministic=False,
             )
         action = int(selection.actions[0].item())
-        illegal_probability = float(
-            selection.probabilities[0][~batch.action_mask[0]].sum().item()
-        )
+        illegal_probability = float(selection.probabilities[0][~batch.action_mask[0]].sum().item())
         _, reward, terminated, truncated, info = env.step(action)
         breakdown = _reward_breakdown(info)
         transitions.append(
