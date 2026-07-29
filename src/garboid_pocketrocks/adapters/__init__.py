@@ -11,6 +11,10 @@ from garboid_pocketrocks.adapters.public_history import (
     PublicTurnOpened,
     public_history_from_sdk_frame,
 )
+from garboid_pocketrocks.adapters.simulator_history import (
+    SimulatorHistoryError,
+    SimulatorPublicHistoryAdapter,
+)
 
 __all__ = [
     "PublicAuctionResolved",
@@ -21,5 +25,7 @@ __all__ = [
     "PublicHistoryCompatibilityError",
     "PublicInformationRevealed",
     "PublicTurnOpened",
+    "SimulatorHistoryError",
+    "SimulatorPublicHistoryAdapter",
     "public_history_from_sdk_frame",
 ]

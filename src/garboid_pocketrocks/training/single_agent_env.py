@@ -11,6 +11,10 @@ import numpy as np
 from gymnasium.spaces.space import MaskNDArray
 from pocketrocks import BotDecision, DecisionContext
 
+from garboid_pocketrocks.adapters.public_history import PublicHistory
+from garboid_pocketrocks.adapters.simulator_history import (
+    SimulatorPublicHistoryAdapter,
+)
 from garboid_pocketrocks.bots.base import BotBrain, BotSpec
 from garboid_pocketrocks.rules import Ruleset, RulesetKnowledge
 from garboid_pocketrocks.simulator.engine import EngineTransition, GameEngine
@@ -83,6 +87,7 @@ class PocketRocksEnv(gym.Env[dict[str, Any], int]):
         self._knowledge: RulesetKnowledge | None = None
         self._brains: dict[Seat, BotBrain] = {}
         self._learner_context: DecisionContext | None = None
+        self._history_adapter: SimulatorPublicHistoryAdapter | None = None
         self._reward_tracker = RewardTracker(reward_config)
         self._root_seed = 0
         self._step_breakdown = RewardBreakdown()
@@ -93,7 +98,16 @@ class PocketRocksEnv(gym.Env[dict[str, Any], int]):
         seed: int | None = None,
         options: dict[str, Any] | None = None,
     ) -> tuple[dict[str, Any], dict[str, Any]]:
-        del options
+        reset_options = {} if options is None else options
+        unknown_options = set(reset_options) - {"opponent_seed"}
+        if unknown_options:
+            raise ValueError(f"unknown reset options: {sorted(unknown_options)!r}")
+        if "opponent_seed" in reset_options:
+            opponent_seed_value = reset_options["opponent_seed"]
+            if not isinstance(opponent_seed_value, int) or isinstance(opponent_seed_value, bool):
+                raise ValueError("opponent_seed must be an integer")
+        else:
+            opponent_seed_value = None
         super().reset(seed=seed)
         if seed is not None:
             self._root_seed = seed
@@ -113,9 +127,31 @@ class PocketRocksEnv(gym.Env[dict[str, Any], int]):
         )
         self._knowledge = ruleset.knowledge(self.player_count)
         self._reward_tracker.reset(self.transition.state)
-        self._brains = self._make_opponent_brains(seat_rng)
+        opponent_seed = self._root_seed if opponent_seed_value is None else opponent_seed_value
+        self._brains = self._make_opponent_brains(random.Random(opponent_seed))
+        self._history_adapter = SimulatorPublicHistoryAdapter.from_initial_transition(
+            self.transition
+        )
         self._learner_context = self._context_for_learner()
         return self._observation(), {"learner_seat": self.learner_seat}
+
+    @property
+    def learner_context(self) -> DecisionContext:
+        if self._learner_context is None:
+            raise RuntimeError("environment must be reset before observing")
+        return self._learner_context
+
+    @property
+    def ruleset_knowledge(self) -> RulesetKnowledge:
+        if self._knowledge is None:
+            raise RuntimeError("environment must be reset before observing")
+        return self._knowledge
+
+    @property
+    def public_history(self) -> PublicHistory:
+        if self._history_adapter is None:
+            raise RuntimeError("environment must be reset before observing")
+        return self._history_adapter.history
 
     def step(
         self,
@@ -166,6 +202,7 @@ class PocketRocksEnv(gym.Env[dict[str, Any], int]):
                     self._knowledge_for_game(),
                 )
             self.transition = GameEngine.step(self.transition.state, decisions)
+            self._history_for_game().append(self.transition.events)
             accumulated = _add_breakdowns(
                 accumulated,
                 self._reward_tracker.update(self.transition)[self.learner_seat],
@@ -206,6 +243,10 @@ class PocketRocksEnv(gym.Env[dict[str, Any], int]):
     def _knowledge_for_game(self) -> RulesetKnowledge:
         assert self._knowledge is not None
         return self._knowledge
+
+    def _history_for_game(self) -> SimulatorPublicHistoryAdapter:
+        assert self._history_adapter is not None
+        return self._history_adapter
 
     def _make_opponent_brains(self, rng: random.Random) -> dict[Seat, BotBrain]:
         brains: dict[Seat, BotBrain] = {}
