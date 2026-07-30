@@ -53,6 +53,15 @@ from garboid_pocketrocks.simulator.sampling import (
     WeightedRulesetSampler,
     derive_seed,
 )
+from garboid_pocketrocks.simulator.session import (
+    PendingDecisions,
+    PlayerSnapshot,
+    SdkGameSession,
+    SessionResult,
+    SessionScore,
+    SessionSnapshot,
+    SessionTransition,
+)
 from garboid_pocketrocks.simulator.setup import SetupResult, build_setup
 
 __all__ = [
@@ -92,9 +101,16 @@ __all__ = [
     "ReplayedMatch",
     "Score",
     "SeatStatistics",
+    "SdkGameSession",
+    "SessionResult",
+    "SessionScore",
+    "SessionSnapshot",
+    "SessionTransition",
     "SimulationError",
     "SetupResult",
     "WeightedRulesetSampler",
+    "PendingDecisions",
+    "PlayerSnapshot",
     "FixedRulesetSampler",
     "build_decision_batch",
     "build_setup",
