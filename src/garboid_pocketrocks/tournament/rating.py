@@ -78,11 +78,16 @@ class _IndexedObservation:
 
 
 @dataclass(frozen=True, slots=True)
+class _ChoiceSet:
+    feature_matrix: NDArray[np.float64]
+    chosen_weights: NDArray[np.float64]
+    total_weight: float
+
+
+@dataclass(frozen=True, slots=True)
 class _FitProblem:
-    observations: tuple[_IndexedObservation, ...]
-    bot_count: int
-    ghost_index: int
-    maximum_tie_order: int
+    choice_sets: tuple[_ChoiceSet, ...]
+    parameter_count: int
 
 
 def observations_from_games(
@@ -168,13 +173,16 @@ def fit_plackett_luce(
             )
         )
 
-    problem = _FitProblem(
-        observations=tuple(indexed),
-        bot_count=len(bot_ids),
-        ghost_index=ghost_index,
-        maximum_tie_order=maximum_tie_order,
-    )
     parameter_count = len(bot_ids) + maximum_tie_order - 1
+    problem = _FitProblem(
+        choice_sets=_compile_choice_sets(
+            tuple(indexed),
+            bot_count=len(bot_ids),
+            ghost_index=ghost_index,
+            maximum_tie_order=maximum_tie_order,
+        ),
+        parameter_count=parameter_count,
+    )
     initial = np.zeros(parameter_count, dtype=np.float64)
     bounds = [(None, None)] * len(bot_ids) + [(-_LOG_TIE_BOUND, _LOG_TIE_BOUND)] * (
         maximum_tie_order - 1
@@ -243,61 +251,77 @@ def _negative_log_likelihood(
     problem: _FitProblem,
 ) -> tuple[float, NDArray[np.float64]]:
     value = 0.0
-    gradient = np.zeros_like(parameters)
-    tie_offset = problem.bot_count
+    gradient = np.zeros(problem.parameter_count, dtype=np.float64)
+    for choice_set in problem.choice_sets:
+        log_weights = choice_set.feature_matrix @ parameters
+        log_normalizer = float(logsumexp(log_weights))
+        probabilities = np.exp(log_weights - log_normalizer)
+        value += (
+            choice_set.total_weight * log_normalizer
+            - float(choice_set.chosen_weights @ log_weights)
+        )
+        gradient += (
+            choice_set.total_weight * (probabilities @ choice_set.feature_matrix)
+            - choice_set.chosen_weights @ choice_set.feature_matrix
+        )
+    return value, gradient
 
-    def log_worth(index: int) -> float:
-        if index == problem.ghost_index:
-            return 0.0
-        return float(parameters[index])
 
-    for observation in problem.observations:
+def _compile_choice_sets(
+    observations: tuple[_IndexedObservation, ...],
+    *,
+    bot_count: int,
+    ghost_index: int,
+    maximum_tie_order: int,
+) -> tuple[_ChoiceSet, ...]:
+    selected_weights: dict[
+        tuple[int, ...],
+        dict[tuple[int, ...], float],
+    ] = {}
+    for observation in observations:
         remaining = tuple(sorted(index for group in observation.rank_groups for index in group))
         for chosen in observation.rank_groups:
             if len(remaining) == 1:
                 break
-            candidates = tuple(
-                subset
-                for order in range(
-                    1,
-                    min(problem.maximum_tie_order, len(remaining)) + 1,
-                )
-                for subset in itertools.combinations(remaining, order)
-            )
-            log_weights = np.asarray(
-                [
-                    (0.0 if len(subset) == 1 else float(parameters[tie_offset + len(subset) - 2]))
-                    + sum(log_worth(index) for index in subset) / len(subset)
-                    for subset in candidates
-                ],
-                dtype=np.float64,
-            )
             chosen_tuple = tuple(sorted(chosen))
+            by_choice = selected_weights.setdefault(remaining, {})
+            by_choice[chosen_tuple] = by_choice.get(chosen_tuple, 0.0) + observation.weight
+            chosen_set = set(chosen_tuple)
+            remaining = tuple(index for index in remaining if index not in chosen_set)
+
+    parameter_count = bot_count + maximum_tie_order - 1
+    choice_sets: list[_ChoiceSet] = []
+    for remaining, weights_by_choice in selected_weights.items():
+        candidates = tuple(
+            subset
+            for order in range(1, min(maximum_tie_order, len(remaining)) + 1)
+            for subset in itertools.combinations(remaining, order)
+        )
+        feature_matrix = np.zeros((len(candidates), parameter_count), dtype=np.float64)
+        chosen_weights = np.zeros(len(candidates), dtype=np.float64)
+        candidate_indices = {candidate: index for index, candidate in enumerate(candidates)}
+        for candidate_index, candidate in enumerate(candidates):
+            coefficient = 1.0 / len(candidate)
+            for index in candidate:
+                if index != ghost_index:
+                    feature_matrix[candidate_index, index] = coefficient
+            if len(candidate) > 1:
+                feature_matrix[candidate_index, bot_count + len(candidate) - 2] = 1.0
+        for chosen, weight in weights_by_choice.items():
             try:
-                chosen_index = candidates.index(chosen_tuple)
-            except ValueError as error:
+                chosen_weights[candidate_indices[chosen]] = weight
+            except KeyError as error:
                 raise TournamentRatingError(
                     "rank group is not a valid choice from remaining bots"
                 ) from error
-            probabilities = np.exp(log_weights - logsumexp(log_weights))
-            value += observation.weight * (
-                float(logsumexp(log_weights)) - float(log_weights[chosen_index])
+        choice_sets.append(
+            _ChoiceSet(
+                feature_matrix=feature_matrix,
+                chosen_weights=chosen_weights,
+                total_weight=float(np.sum(chosen_weights)),
             )
-            for probability, subset in zip(probabilities, candidates, strict=True):
-                contribution = observation.weight * float(probability)
-                for index in subset:
-                    if index != problem.ghost_index:
-                        gradient[index] += contribution / len(subset)
-                if len(subset) > 1:
-                    gradient[tie_offset + len(subset) - 2] += contribution
-            for index in chosen:
-                if index != problem.ghost_index:
-                    gradient[index] -= observation.weight / len(chosen)
-            if len(chosen) > 1:
-                gradient[tie_offset + len(chosen) - 2] -= observation.weight
-            chosen_set = set(chosen)
-            remaining = tuple(index for index in remaining if index not in chosen_set)
-    return value, gradient
+        )
+    return tuple(choice_sets)
 
 
 def _ratings_from_worths(worths: dict[str, float]) -> dict[str, float]:
