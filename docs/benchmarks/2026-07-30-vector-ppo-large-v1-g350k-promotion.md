@@ -22,7 +22,7 @@ any bot alias.
 
 ## Reproduction and provenance
 
-Exact command:
+Exact command used:
 
 ```bash
 uv run --extra neural garboid-promote \
@@ -31,9 +31,17 @@ uv run --extra neural garboid-promote \
   --development-corpus configs/promotion/development-v1.json \
   --held-out-corpus configs/promotion/held-out-v1.json \
   --bootstrap-samples 1000 \
+  --bootstrap-seed 0 \
   --workers 8 \
+  --batch-size 64 \
   --output-dir docs/benchmarks/promotions/2026-07-30-vector-ppo-large-v1-g350k-vs-small-v1-g1500
 ```
+
+Run it with source commit
+`5852176ff3c28b3f469a85a349be40ce41c05aa8` checked out and an empty output
+directory. The committed evidence now makes the path shown above nonempty, so
+a reproduction must either use a fresh checkout before those artifacts were
+added or replace `--output-dir` with a fresh path.
 
 - Promotion source commit:
   `5852176ff3c28b3f469a85a349be40ce41c05aa8`
