@@ -1,16 +1,12 @@
 from __future__ import annotations
 
-from itertools import product
-
 import pytest
 from pocketrocks import OBJECTIVES
 
 from garboid_pocketrocks.heuristics.objectives import (
     evaluate_objectives,
-    objective_is_met,
     requirement_vectors,
 )
-from garboid_pocketrocks.simulator.engine import _objective_is_met
 
 
 def test_every_sdk_objective_has_requirement_vectors() -> None:
@@ -18,16 +14,6 @@ def test_every_sdk_objective_has_requirement_vectors() -> None:
         vectors = requirement_vectors(objective_id)
         assert vectors
         assert all(len(vector) == 5 and sum(vector) > 0 for vector in vectors)
-
-
-@pytest.mark.parametrize("objective_id", sorted(OBJECTIVES))
-def test_objective_predicate_conforms_to_engine_for_generated_holdings(
-    objective_id: int,
-) -> None:
-    for counts in product(range(4), repeat=5):
-        assert objective_is_met(objective_id, counts) is _objective_is_met(
-            objective_id, list(counts)
-        )
 
 
 def test_immediate_completion_has_full_payout_and_no_progress() -> None:

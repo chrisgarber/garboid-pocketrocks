@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import StrEnum
+from types import SimpleNamespace
 from typing import Literal
 
 from pocketrocks import OBJECTIVES, ActionId, Suit
@@ -53,6 +54,12 @@ type PublicEvent = (
     PublicGameSetup | PublicTurnOpened | PublicAuctionResolved | PublicInformationRevealed
 )
 type PublicHistory = tuple[PublicEvent, ...]
+
+
+def public_history_from_sdk_events(events: Sequence[object]) -> PublicHistory:
+    """Convert canonical SDK sim events through the live-frame parser."""
+
+    return public_history_from_sdk_frame(SimpleNamespace(common_events=tuple(events)))
 
 
 def public_history_from_sdk_frame(frame: object) -> PublicHistory:

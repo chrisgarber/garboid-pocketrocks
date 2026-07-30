@@ -1,21 +1,17 @@
 from __future__ import annotations
 
-from pocketrocks import ActionId
-
 from garboid_pocketrocks.bots.base import BotSpec
 from garboid_pocketrocks.bots.heuristic import (
     AggressiveHeuristicBot,
     BalancedHeuristicBot,
     PassiveHeuristicBot,
 )
-from garboid_pocketrocks.rules import live_ruleset
 from garboid_pocketrocks.simulator.monte_carlo import (
     BotStatistics,
     MonteCarloConfig,
     MonteCarloResult,
     MonteCarloRunner,
 )
-from garboid_pocketrocks.simulator.sampling import FixedRulesetSampler
 
 
 def _benchmark_config(*, games: int = 1_000) -> MonteCarloConfig:
@@ -27,7 +23,7 @@ def _benchmark_config(*, games: int = 1_000) -> MonteCarloConfig:
         ),
         games=games,
         player_counts=(3,),
-        ruleset_sampler=FixedRulesetSampler(live_ruleset("A")),
+        value_charts=("A",),
         root_seed=42,
     )
 
@@ -36,19 +32,12 @@ def _statistics_by_name(result: MonteCarloResult) -> dict[str, BotStatistics]:
     return {statistics.bot_name: statistics for statistics in result.bot_statistics}
 
 
-def _loan_wins(statistics: BotStatistics) -> int:
-    return sum(
-        statistics.behavior.wins_by_action[int(action_id) - 1]
-        for action_id in (ActionId.LOAN10, ActionId.LOAN20)
-    )
-
-
 def _behavior_summary(by_name: dict[str, BotStatistics]) -> str:
     return ", ".join(
         (
             f"{name}: pass_rate={statistics.behavior.pass_rate():.6f}, "
             f"mean_nonzero_bid={statistics.behavior.mean_nonzero_bid():.6f}, "
-            f"loan_wins={_loan_wins(statistics)}"
+            f"resource_cards_won={statistics.behavior.resource_cards_won}"
         )
         for name, statistics in sorted(by_name.items())
     )
@@ -76,7 +65,7 @@ def test_seed_42_live_a_heuristic_tournament_is_reproducible_and_distinct() -> N
         > by_name["passive"].behavior.mean_nonzero_bid()
     ), summary
     assert (
-        _loan_wins(by_name["aggressive"])
-        > _loan_wins(by_name["balanced"])
-        > _loan_wins(by_name["passive"])
+        by_name["aggressive"].behavior.resource_cards_won
+        > by_name["balanced"].behavior.resource_cards_won
+        > by_name["passive"].behavior.resource_cards_won
     ), summary

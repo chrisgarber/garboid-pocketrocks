@@ -6,7 +6,7 @@ import gymnasium as gym
 import numpy as np
 from pocketrocks import ActionId, DecisionContext, Suit
 
-from garboid_pocketrocks.rules import RulesetKnowledge
+from garboid_pocketrocks.knowledge import RulesetKnowledge
 from garboid_pocketrocks.training.actions import ActionCodec
 from garboid_pocketrocks.training.bounds import EnvironmentBounds
 

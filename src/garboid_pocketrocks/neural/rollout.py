@@ -14,6 +14,7 @@ from garboid_pocketrocks.bots.heuristic import (
     BALANCED_HEURISTIC_BOT_SPEC,
     PASSIVE_HEURISTIC_BOT_SPEC,
 )
+from garboid_pocketrocks.knowledge import canonical_knowledge
 from garboid_pocketrocks.neural.config import stage1_encoder_config
 from garboid_pocketrocks.neural.encoding import (
     NeuralObservation,
@@ -23,9 +24,7 @@ from garboid_pocketrocks.neural.encoding import (
 from garboid_pocketrocks.neural.model import NeuralPolicy
 from garboid_pocketrocks.neural.policy import evaluate_masked_policy
 from garboid_pocketrocks.neural.seeding import EpisodePlan
-from garboid_pocketrocks.rules import LIVE_RULESET
-from garboid_pocketrocks.simulator.model import GameResult
-from garboid_pocketrocks.simulator.sampling import FixedRulesetSampler
+from garboid_pocketrocks.simulator.session import SessionResult
 from garboid_pocketrocks.training.bounds import EnvironmentBounds
 from garboid_pocketrocks.training.rewards import RewardBreakdown
 from garboid_pocketrocks.training.single_agent_env import PocketRocksEnv
@@ -82,7 +81,7 @@ class RolloutEpisode:
     plan: EpisodePlan
     opponent_names: tuple[str, ...]
     transitions: tuple[RolloutTransition, ...]
-    result: GameResult
+    result: SessionResult
     terminated: bool
     truncated: bool
     final_money: int
@@ -140,7 +139,7 @@ def _collect_episode(
 
     opponent_names = tuple(spec.name for spec in _STAGE1_OPPONENTS)
     metadata = RolloutMetadata(
-        ruleset_name=LIVE_RULESET.name,
+        ruleset_name=canonical_knowledge(_STAGE1_PLAYER_COUNT).name,
         player_count=_STAGE1_PLAYER_COUNT,
         learner_seat=plan.learner_seat,
         opponent_names=opponent_names,
@@ -150,7 +149,7 @@ def _collect_episode(
     )
     env = PocketRocksEnv(
         opponent_specs=_STAGE1_OPPONENTS,
-        ruleset_sampler=FixedRulesetSampler(LIVE_RULESET),
+        value_charts=("A",),
         player_count=_STAGE1_PLAYER_COUNT,
         bounds=_STAGE1_BOUNDS,
         learner_seat=plan.learner_seat,

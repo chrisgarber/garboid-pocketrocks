@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from itertools import batched
 
 from pocketrocks import ActionId, DecisionContext
+from pocketrocks.sim.constants import ACTION_WIRE_IDS
 
 from garboid_pocketrocks.bots import (
     AggressiveHeuristicBot,
@@ -17,19 +18,19 @@ from garboid_pocketrocks.bots import (
     BotSpec,
     PassiveHeuristicBot,
 )
-from garboid_pocketrocks.heuristics.belief import build_belief
+from garboid_pocketrocks.heuristics.belief import (
+    build_belief,
+    offered_resource_counts,
+)
 from garboid_pocketrocks.heuristics.reveals import _expected_price
-from garboid_pocketrocks.rules import RulesetKnowledge, live_ruleset
-from garboid_pocketrocks.simulator.engine import GameEngine
-from garboid_pocketrocks.simulator.events import EventKind
-from garboid_pocketrocks.simulator.model import Phase
+from garboid_pocketrocks.knowledge import RulesetKnowledge, canonical_knowledge
 from garboid_pocketrocks.simulator.monte_carlo import (
     GameJob,
     MonteCarloConfig,
     MonteCarloRunner,
     _execute_job,
 )
-from garboid_pocketrocks.simulator.sampling import WeightedRulesetSampler
+from garboid_pocketrocks.simulator.session import SdkGameSession
 
 BOT_CLASSES = (
     AggressiveHeuristicBot,
@@ -173,20 +174,8 @@ class ChunkSummary:
     loan_winning_by_turn: dict[tuple[str, ActionId, int], IntegerBucket]
 
 
-def _offered_resource_counts(
-    context: DecisionContext,
-    action: ActionId,
-) -> tuple[int, ...]:
-    counts = [0] * 5
-    if action in RESOURCE_ACTIONS:
-        for resource_id in context.current_resource_ids:
-            if resource_id:
-                counts[resource_id - 1] += 1
-    return tuple(counts)
-
-
 def _public_expected_prices(
-    context: object,
+    context: DecisionContext,
     knowledge: RulesetKnowledge,
 ) -> tuple[float, ...]:
     revealed_by_suit = tuple(
@@ -246,24 +235,27 @@ def _analyze_chunk(jobs: tuple[GameJob, ...]) -> ChunkSummary:
     for job in jobs:
         completed = _execute_job(job)
         replay = completed.match.replay
-        transition = GameEngine.start(
-            job.ruleset,
+        session = SdkGameSession.start(
             player_count=job.player_count,
             seed=job.seed,
+            value_chart=job.value_chart,
+            objectives_enabled=job.objectives_enabled,
         )
-        knowledge = job.ruleset.knowledge(job.player_count)
-        chart = job.ruleset.name.removeprefix("live-")
+        knowledge = canonical_knowledge(
+            job.player_count,
+            value_chart=job.value_chart,
+            objectives_enabled=job.objectives_enabled,
+        )
+        chart = job.value_chart
 
         for _, recorded_decisions in replay.decisions:
-            assert transition.pending is not None
             decisions = dict(recorded_decisions)
-            if transition.state.phase is Phase.BIDDING:
-                assert transition.state.current_action is not None
-                action = transition.state.current_action.action_id
-                turn = transition.state.turn_index + 1
+            if session.pending.decision_kind == "submitBid":
+                action = ActionId(ACTION_WIRE_IDS[session.snapshot.current_action])
+                turn = session.snapshot.turn_index + 1
                 if action in RESOURCE_ACTIONS:
-                    contexts = transition.pending.contexts_by_seat
-                    offered_counts = _offered_resource_counts(contexts[0], action)
+                    contexts = session.pending.contexts_by_seat
+                    offered_counts = offered_resource_counts(contexts[0], action)
                     offered_suits = {
                         index + 1 for index, count in enumerate(offered_counts) if count
                     }
@@ -302,27 +294,21 @@ def _analyze_chunk(jobs: tuple[GameJob, ...]) -> ChunkSummary:
                             premium_per_card=(private_value - public_value) / offered_count,
                         )
 
-            transition = GameEngine.step(transition.state, decisions)
-            for event in transition.events:
-                if event.kind is not EventKind.AUCTION_RESOLVED:
-                    continue
-                assert event.action_id is not None
-                assert event.turn_index is not None
-                assert event.amount is not None
-                assert event.seat is not None
-                winner_bot = job.lineup[event.seat].name
-                all_winning[(winner_bot, event.action_id)].add(event.amount)
-                if event.action_id in LOAN_ACTIONS:
-                    loan_winning_by_turn[(winner_bot, event.action_id, event.turn_index + 1)].add(
-                        event.amount
+            transition = session.step(decisions)
+            for record in transition.turn_records:
+                action = ActionId(ACTION_WIRE_IDS[record.action])
+                winner_bot = job.lineup[record.winner_seat].name
+                all_winning[(winner_bot, action)].add(record.paid)
+                if action in LOAN_ACTIONS:
+                    loan_winning_by_turn[(winner_bot, action, record.turn_index + 1)].add(
+                        record.paid
                     )
-                if event.action_id not in RESOURCE_ACTIONS:
+                if action not in RESOURCE_ACTIONS:
                     continue
-                action = event.action_id
-                turn = event.turn_index + 1
-                winning_by_turn[(action, turn)].add(event.amount)
-                winning_by_chart[(chart, action)].add(event.amount)
-                winning_by_chart_bot[(chart, winner_bot, action)].add(event.amount)
+                turn = record.turn_index + 1
+                winning_by_turn[(action, turn)].add(record.paid)
+                winning_by_chart[(chart, action)].add(record.paid)
+                winning_by_chart_bot[(chart, winner_bot, action)].add(record.paid)
 
         scores = completed.match.result.scores
         winning_money = max(score.final_money for score in scores)
@@ -368,12 +354,12 @@ def _merge_info(
 
 
 def main() -> None:
-    charts = tuple(live_ruleset(chart) for chart in "ABCDE")
+    charts = tuple("ABCDE")
     config = MonteCarloConfig(
         bot_specs=tuple(BotSpec.from_bot_class(bot) for bot in BOT_CLASSES),
         games=GAMES,
         player_counts=(3,),
-        ruleset_sampler=WeightedRulesetSampler(tuple((ruleset, 1) for ruleset in charts)),
+        value_charts=charts,
         root_seed=ROOT_SEED,
     )
     jobs = MonteCarloRunner.plan(config)

@@ -7,14 +7,12 @@ from pathlib import Path
 from typing import Any
 
 from garboid_pocketrocks.bots import BOT_SPECS_BY_NAME
-from garboid_pocketrocks.rules import live_ruleset
 from garboid_pocketrocks.simulator.monte_carlo import (
     MonteCarloConfig,
     MonteCarloResult,
     MonteCarloRunner,
 )
 from garboid_pocketrocks.simulator.replay import save_replay
-from garboid_pocketrocks.simulator.sampling import FixedRulesetSampler
 
 _BOT_REGISTRY = BOT_SPECS_BY_NAME
 
@@ -134,12 +132,11 @@ def main() -> None:
             f"--bots supplies {len(args.bots)} entries but --players requires "
             f"at least {args.players}"
         )
-    ruleset = live_ruleset(args.ruleset.removeprefix("live-"))
     config = MonteCarloConfig(
         bot_specs=tuple(_BOT_REGISTRY[name] for name in args.bots),
         games=args.games,
         player_counts=(args.players,),
-        ruleset_sampler=FixedRulesetSampler(ruleset),
+        value_charts=(args.ruleset.removeprefix("live-"),),
         root_seed=args.seed,
         capture_replays=args.replay_dir is not None,
     )

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from garboid_pocketrocks.bots import BotSpec, RandomBot
-from garboid_pocketrocks.simulator.model import Score
 from garboid_pocketrocks.simulator.monte_carlo import GameSummary
+from garboid_pocketrocks.simulator.session import SessionScore
 
 
 def random_specs(count: int = 5) -> tuple[BotSpec, ...]:
@@ -33,7 +33,7 @@ def game_summary(
         bot_names=bot_ids,
         bot_ids=bot_ids,
         scores=tuple(
-            Score(seat=seat, final_money=money, rank=rank)
+            SessionScore(seat=seat, final_money=money, rank=rank)
             for seat, (money, rank) in enumerate(zip(final_money, ranks, strict=True))
         ),
         decision_counts=(0,) * len(bot_ids),

@@ -10,7 +10,7 @@ from garboid_pocketrocks.heuristics.profiles import (
     HeuristicProfile,
 )
 from garboid_pocketrocks.heuristics.valuation import HeuristicValuator
-from garboid_pocketrocks.rules import RulesetKnowledge
+from garboid_pocketrocks.knowledge import RulesetKnowledge
 
 
 class HeuristicBotBrain:

@@ -7,6 +7,7 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 from pocketrocks import ActionId, BotDecision, DecisionContext
+from pocketrocks.sim.constants import VALUE_CHARTS
 
 from garboid_pocketrocks.heuristics.profiles import (
     AGGRESSIVE_PROFILE,
@@ -18,10 +19,8 @@ from garboid_pocketrocks.heuristics.valuation import (
     BidEvaluation,
     HeuristicValuator,
 )
-from garboid_pocketrocks.rules import VALUE_CHARTS, live_ruleset
-from garboid_pocketrocks.simulator.context import build_decision_batch
-from garboid_pocketrocks.simulator.engine import GameEngine
-from garboid_pocketrocks.simulator.model import Phase
+from garboid_pocketrocks.knowledge import canonical_knowledge
+from garboid_pocketrocks.simulator.session import SdkGameSession
 
 from .helpers import make_context, make_knowledge
 
@@ -67,16 +66,18 @@ def _play_and_check_every_bidding_context(
     player_count: int,
     seed: int,
 ) -> None:
-    ruleset = live_ruleset(chart)
-    knowledge = ruleset.knowledge(player_count)
-    transition = GameEngine.start(ruleset, player_count=player_count, seed=seed)
+    knowledge = canonical_knowledge(player_count, value_chart=chart)
+    session = SdkGameSession.start(
+        player_count=player_count,
+        seed=seed,
+        value_chart=chart,
+    )
     bidding_context_count = 0
 
-    while transition.result is None:
-        assert transition.pending is not None
+    while not session.terminated:
         decisions: dict[int, BotDecision] = {}
-        for seat, context in transition.pending.contexts:
-            if transition.state.phase is Phase.BIDDING:
+        for seat, context in session.pending.contexts:
+            if session.pending.decision_kind == "submitBid":
                 bidding_context_count += 1
                 for profile in PROFILES:
                     evaluator = HeuristicValuator(profile)
@@ -85,7 +86,7 @@ def _play_and_check_every_bidding_context(
                     assert first == second
                     _assert_finite_legal_evaluation(context, first)
             decisions[seat] = BotDecision.pass_turn()
-        transition = GameEngine.step(transition.state, decisions)
+        session.step(decisions)
 
     assert bidding_context_count > 0
 
@@ -106,26 +107,6 @@ def test_generated_live_games_have_finite_legal_deterministic_valuations(
     )
 
 
-@pytest.mark.parametrize("profile", PROFILES)
-def test_unobservable_deck_order_cannot_change_a_public_context_valuation(
-    profile: HeuristicProfile,
-) -> None:
-    ruleset = live_ruleset("E")
-    knowledge = ruleset.knowledge(4)
-    state = GameEngine.start(ruleset, player_count=4, seed=104_729).state
-    altered_state = replace(state, resource_deck=tuple(reversed(state.resource_deck)))
-
-    assert altered_state != state
-    contexts = build_decision_batch(state).contexts
-    altered_contexts = build_decision_batch(altered_state).contexts
-    assert contexts == altered_contexts
-
-    evaluator = HeuristicValuator(profile)
-    assert tuple(evaluator.evaluate_bid(context, knowledge) for _, context in contexts) == tuple(
-        evaluator.evaluate_bid(context, knowledge) for _, context in altered_contexts
-    )
-
-
 @pytest.mark.parametrize("chart", tuple(VALUE_CHARTS))
 @pytest.mark.parametrize("player_count", (3, 4, 5))
 @pytest.mark.parametrize("profile", PROFILES)
@@ -134,15 +115,13 @@ def test_moving_an_own_card_from_hand_to_public_reveal_preserves_resource_belief
     player_count: int,
     profile: HeuristicProfile,
 ) -> None:
-    ruleset = live_ruleset(chart)
-    knowledge = ruleset.knowledge(player_count)
-    transition = GameEngine.start(
-        ruleset,
+    knowledge = canonical_knowledge(player_count, value_chart=chart)
+    session = SdkGameSession.start(
         player_count=player_count,
         seed=player_count * 100 + ord(chart),
+        value_chart=chart,
     )
-    assert transition.pending is not None
-    context = transition.pending.contexts[0][1]
+    context = session.pending.contexts[0][1]
     revealed_suit = context.current_hand_suit_ids[0]
     revealed = [list(row) for row in context.revealed_info_counts_by_seat]
     revealed[context.bot_seat][revealed_suit - 1] += 1

@@ -70,7 +70,7 @@ def test_plan_is_seeded_unique_and_condition_balanced() -> None:
 
     condition_appearances: dict[tuple[str, int], Counter[str]] = defaultdict(Counter)
     for job in first.jobs:
-        condition = (job.ruleset.name.removeprefix("live-"), job.player_count)
+        condition = (job.value_chart, job.player_count)
         condition_appearances[condition].update(spec.bot_id for spec in job.lineup)
     for appearances in condition_appearances.values():
         counts = tuple(appearances[spec.bot_id] for spec in config.bot_specs)

@@ -5,14 +5,12 @@ import subprocess
 from pathlib import Path
 
 from garboid_pocketrocks.bots import BOT_SPECS_BY_NAME, BotSpec, RandomBot
-from garboid_pocketrocks.rules import LIVE_RULESET
 from garboid_pocketrocks.simulator.cli import _BOT_REGISTRY, _bot_names, _table
 from garboid_pocketrocks.simulator.monte_carlo import (
     MonteCarloConfig,
     MonteCarloRunner,
 )
 from garboid_pocketrocks.simulator.replay import load_replay, replay_match
-from garboid_pocketrocks.simulator.sampling import FixedRulesetSampler
 
 
 def test_simulator_cli_uses_shared_registry() -> None:
@@ -147,7 +145,7 @@ def test_table_includes_formatted_behavior_columns() -> None:
             bot_specs=(repeated, repeated, repeated),
             games=1,
             player_counts=(3,),
-            ruleset_sampler=FixedRulesetSampler(LIVE_RULESET),
+            value_charts=("A",),
             root_seed=42,
         )
     )

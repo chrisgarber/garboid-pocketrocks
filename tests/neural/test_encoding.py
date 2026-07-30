@@ -19,6 +19,10 @@ from garboid_pocketrocks.adapters.public_history import (  # noqa: E402
     PublicInformationRevealed,
     PublicTurnOpened,
 )
+from garboid_pocketrocks.knowledge import (  # noqa: E402
+    RulesetKnowledge,
+    canonical_knowledge,
+)
 from garboid_pocketrocks.neural.config import (  # noqa: E402
     NeuralEncoderConfig,
     NeuralModelConfig,
@@ -31,7 +35,6 @@ from garboid_pocketrocks.neural.encoding import (  # noqa: E402
     NeuralObservationEncoder,
     batch_observations,
 )
-from garboid_pocketrocks.rules import LIVE_RULESET, RulesetKnowledge  # noqa: E402
 from garboid_pocketrocks.training.actions import ActionCodec  # noqa: E402
 from garboid_pocketrocks.training.bounds import EnvironmentBounds  # noqa: E402
 
@@ -59,8 +62,8 @@ def _context(
         received_at=0,
         decision_kind=decision_kind,  # type: ignore[arg-type]
         player_count=player_count,
-        starting_cash=LIVE_RULESET.setup_for(player_count).starting_cash,
-        value_chart=LIVE_RULESET.value_chart,
+        starting_cash=canonical_knowledge(player_count).starting_cash,
+        value_chart=canonical_knowledge(player_count).value_chart,
         objective_ids=(1, 10),
         current_action_id=1,
         current_resource_ids=(1, 0),
@@ -87,8 +90,8 @@ def _history(
         PublicGameSetup(
             kind=PublicEventKind.GAME_SETUP,
             player_count=player_count,
-            starting_cash=LIVE_RULESET.setup_for(player_count).starting_cash,
-            value_chart=LIVE_RULESET.value_chart,
+            starting_cash=canonical_knowledge(player_count).starting_cash,
+            value_chart=canonical_knowledge(player_count).value_chart,
             initial_tiebreak_seat=initial_tiebreak_seat,
             objective_ids=(1, 10),
         ),
@@ -139,8 +142,8 @@ def test_stage1_configs_are_exact_and_json_round_trip() -> None:
     encoder_config = stage1_encoder_config()
     expected_history = (
         1
-        + (2 * sum(LIVE_RULESET.action_counts))
-        + (3 * LIVE_RULESET.setup_for(3).private_cards_per_player)
+        + (2 * sum(canonical_knowledge(3).action_counts))
+        + (3 * canonical_knowledge(3).private_cards_per_player)
     )
 
     assert encoder_config == NeuralEncoderConfig(
@@ -175,7 +178,7 @@ def test_stage1_configs_are_exact_and_json_round_trip() -> None:
 def test_live_a_encoding_has_exact_shapes_dtypes_masks_and_hand_order() -> None:
     context = _context()
     history = _history()
-    encoded = _encoder().encode(context, LIVE_RULESET.knowledge(3), history)
+    encoded = _encoder().encode(context, canonical_knowledge(3), history)
 
     assert encoded.global_ids.shape == (6,)
     assert encoded.global_numeric.shape == (21,)
@@ -236,7 +239,7 @@ def _rotated_context(player_count: int, learner_seat: int) -> DecisionContext:
         for relative_seat in range(player_count)
     )
     relative_owned = tuple((relative_seat + 1,) for relative_seat in range(player_count))
-    setup = LIVE_RULESET.setup_for(player_count)
+    setup = canonical_knowledge(player_count)
     return DecisionContext(
         request_id=f"rotation-{player_count}-{learner_seat}",
         deadline_at=0,
@@ -244,7 +247,7 @@ def _rotated_context(player_count: int, learner_seat: int) -> DecisionContext:
         decision_kind="submitBid",
         player_count=player_count,
         starting_cash=setup.starting_cash,
-        value_chart=LIVE_RULESET.value_chart,
+        value_chart=canonical_knowledge(player_count).value_chart,
         objective_ids=(1, 2, 3, 4),
         current_action_id=2,
         current_resource_ids=(4, 5),
@@ -286,7 +289,7 @@ def test_all_seat_indexed_fields_are_learner_rotation_invariant(
         context = _rotated_context(player_count, learner_seat)
         encoded = encoder.encode(
             context,
-            LIVE_RULESET.knowledge(player_count),
+            canonical_knowledge(player_count),
             _rotated_history(player_count, learner_seat),
         )
 
@@ -303,7 +306,7 @@ def test_all_seat_indexed_fields_are_learner_rotation_invariant(
 
 def test_encoder_cannot_observe_hypothetical_private_state() -> None:
     context = _context()
-    knowledge = LIVE_RULESET.knowledge(3)
+    knowledge = canonical_knowledge(3)
     history = _history()
     encoder = _encoder()
     baseline = encoder.encode(context, knowledge, history)
@@ -327,7 +330,7 @@ def test_history_longer_than_checkpoint_bound_is_rejected() -> None:
         NeuralEncodingError,
         match="^history exceeds checkpoint bound$",
     ):
-        _encoder().encode(_context(), LIVE_RULESET.knowledge(3), history)
+        _encoder().encode(_context(), canonical_knowledge(3), history)
 
 
 @dataclass(frozen=True, slots=True)
@@ -344,7 +347,7 @@ class _InvalidCase:
         pytest.param(
             _InvalidCase(
                 replace(_context(), cash_by_seat=(30, 101, 25)),
-                LIVE_RULESET.knowledge(3),
+                canonical_knowledge(3),
                 stage1_encoder_config(),
                 "cash",
             ),
@@ -354,7 +357,7 @@ class _InvalidCase:
             _InvalidCase(
                 replace(_context(), value_chart=(0, 4, 8, 12, 16, 21)),
                 replace(
-                    LIVE_RULESET.knowledge(3),
+                    canonical_knowledge(3),
                     value_chart=(0, 4, 8, 12, 16, 21),
                 ),
                 stage1_encoder_config(),
@@ -366,7 +369,7 @@ class _InvalidCase:
             _InvalidCase(
                 _context(),
                 replace(
-                    LIVE_RULESET.knowledge(3),
+                    canonical_knowledge(3),
                     resource_counts=(7, 6, 6, 6, 6),
                 ),
                 stage1_encoder_config(),
@@ -378,7 +381,7 @@ class _InvalidCase:
             _InvalidCase(
                 _context(),
                 replace(
-                    LIVE_RULESET.knowledge(3),
+                    canonical_knowledge(3),
                     action_counts=(13, 8, 3, 2, 3, 2),
                 ),
                 stage1_encoder_config(),
@@ -393,7 +396,7 @@ class _InvalidCase:
                     current_hand_suit_ids=(1, 2, 3, 4, 5, 1),
                     revealable_count=6,
                 ),
-                LIVE_RULESET.knowledge(3),
+                canonical_knowledge(3),
                 stage1_encoder_config(),
                 "hand",
             ),
@@ -402,7 +405,7 @@ class _InvalidCase:
         pytest.param(
             _InvalidCase(
                 replace(_context(), legal_max_amount=101),
-                LIVE_RULESET.knowledge(3),
+                canonical_knowledge(3),
                 stage1_encoder_config(),
                 "bid",
             ),
@@ -411,7 +414,7 @@ class _InvalidCase:
         pytest.param(
             _InvalidCase(
                 _context(),
-                LIVE_RULESET.knowledge(3),
+                canonical_knowledge(3),
                 replace(stage1_encoder_config(), max_history_events=75),
                 "history bound",
             ),
@@ -426,7 +429,7 @@ def test_values_outside_checkpoint_bounds_are_rejected(case: _InvalidCase) -> No
 
 def test_negative_private_cards_per_player_is_rejected() -> None:
     knowledge = replace(
-        LIVE_RULESET.knowledge(3),
+        canonical_knowledge(3),
         private_cards_per_player=-1,
     )
 
@@ -445,7 +448,7 @@ def test_history_bids_use_bid_bound_while_remaining_cash_normalized() -> None:
     history = _history(bids_by_seat=(2, 20, 1))
 
     with pytest.raises(NeuralEncodingError, match="history bid"):
-        encoder.encode(_context(), LIVE_RULESET.knowledge(3), history)
+        encoder.encode(_context(), canonical_knowledge(3), history)
 
 
 class _FixedMaskCodec(ActionCodec):
@@ -487,7 +490,7 @@ def test_encoder_rejects_invalid_universal_action_masks(
     with pytest.raises(NeuralEncodingError, match="action mask"):
         _encoder(action_codec=codec).encode(
             _context(),
-            LIVE_RULESET.knowledge(3),
+            canonical_knowledge(3),
             _history(),
         )
 
@@ -497,13 +500,13 @@ def test_encoder_rejects_invalid_universal_action_masks(
     (
         pytest.param(
             _context(player_count=4, learner_seat=0),
-            LIVE_RULESET.knowledge(4),
+            canonical_knowledge(4),
             "player count",
             id="player-count",
         ),
         pytest.param(
             _context(),
-            replace(LIVE_RULESET.knowledge(3), name="live-B"),
+            replace(canonical_knowledge(3), name="live-B"),
             "ruleset",
             id="ruleset",
         ),
@@ -524,7 +527,7 @@ def test_batch_observations_stacks_every_field_on_requested_device() -> None:
     encoder = _encoder()
     observation = encoder.encode(
         _context(),
-        LIVE_RULESET.knowledge(3),
+        canonical_knowledge(3),
         _history(),
     )
 

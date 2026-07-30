@@ -4,17 +4,15 @@ import itertools
 from collections import Counter, deque
 from dataclasses import dataclass, replace
 
+from pocketrocks.sim.constants import VALUE_CHARTS
+
 from garboid_pocketrocks.bots import BotSpec
-from garboid_pocketrocks.rules import VALUE_CHARTS, live_ruleset
 from garboid_pocketrocks.simulator.monte_carlo import (
     GameJob,
     MonteCarloConfig,
 )
 from garboid_pocketrocks.simulator.runner import FaultMode
-from garboid_pocketrocks.simulator.sampling import (
-    WeightedRulesetSampler,
-    derive_seed,
-)
+from garboid_pocketrocks.simulator.seeding import derive_seed
 
 
 @dataclass(frozen=True, slots=True)
@@ -94,7 +92,6 @@ class TournamentPlanner:
         jobs: list[GameJob] = []
 
         for quota in quotas:
-            ruleset = live_ruleset(quota.chart)
             for _ in range(quota.games):
                 game_index = len(jobs)
                 selected = _select_lineup(
@@ -119,7 +116,8 @@ class TournamentPlanner:
                         root_seed=config.root_seed,
                         seed=derive_seed(config.root_seed, "tournament-game", game_index),
                         player_count=quota.player_count,
-                        ruleset=ruleset,
+                        value_chart=quota.chart,
+                        objectives_enabled=True,
                         lineup=lineup,
                         fault_mode=config.fault_mode,
                     )
@@ -135,12 +133,11 @@ class TournamentPlanner:
                 )
 
         jobs = list(_rebalance_seats(tuple(jobs)))
-        rulesets = tuple(live_ruleset(chart) for chart in config.charts)
         monte_carlo_config = MonteCarloConfig(
             bot_specs=config.bot_specs,
             games=config.games,
             player_counts=config.player_counts,
-            ruleset_sampler=WeightedRulesetSampler(tuple((ruleset, 1) for ruleset in rulesets)),
+            value_charts=config.charts,
             root_seed=config.root_seed,
             fault_mode=config.fault_mode,
         )

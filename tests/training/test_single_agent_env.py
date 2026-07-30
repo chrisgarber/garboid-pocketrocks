@@ -9,8 +9,7 @@ from gymnasium.utils.env_checker import check_env
 from garboid_pocketrocks.adapters import PublicEventKind
 from garboid_pocketrocks.bots.base import BotBrain, BotSpec
 from garboid_pocketrocks.bots.random_bot import RandomBot, RandomBotBrain
-from garboid_pocketrocks.rules import LIVE_RULESET
-from garboid_pocketrocks.simulator.sampling import FixedRulesetSampler
+from garboid_pocketrocks.knowledge import canonical_knowledge
 from garboid_pocketrocks.training import EnvironmentBounds, RewardConfig
 from garboid_pocketrocks.training.single_agent_env import (
     InvalidActionMode,
@@ -30,7 +29,7 @@ def _make_env(
 ) -> PocketRocksEnv:
     return PocketRocksEnv(
         opponent_specs=_opponents() if opponent_specs is None else opponent_specs,
-        ruleset_sampler=FixedRulesetSampler(LIVE_RULESET),
+        value_charts=("A",),
         player_count=3,
         bounds=EnvironmentBounds(max_bid=100, max_hand_size=5),
         learner_seat=learner_seat,
@@ -65,7 +64,7 @@ def test_reset_exposes_current_public_learner_inputs_and_history() -> None:
     observation, _ = env.reset(seed=3, options={"opponent_seed": 91})
 
     assert env.learner_context.bot_seat == env.learner_seat
-    assert env.ruleset_knowledge == LIVE_RULESET.knowledge(3)
+    assert env.ruleset_knowledge == canonical_knowledge(3)
     assert env.public_history[0].kind is PublicEventKind.GAME_SETUP
     before = env.public_history
     action = int(np.flatnonzero(observation["action_mask"])[0])
@@ -112,7 +111,7 @@ def _reset_with_recorded_opponent_seeds(
     env.reset(seed=environment_seed, options={"opponent_seed": opponent_seed})
 
     assert env.transition is not None
-    return env.transition.state, tuple(factory.seeds)
+    return env.transition.snapshot, tuple(factory.seeds)
 
 
 def test_opponent_seed_is_independent_from_environment_seed() -> None:
@@ -201,13 +200,13 @@ def test_learner_bid_runs_opponents_and_resolves_joint_batch() -> None:
     env = _make_env()
     observation, _ = env.reset(seed=3)
     assert env.transition is not None
-    before = env.transition.state
+    before = env.transition.snapshot
 
     action = int(np.flatnonzero(observation["action_mask"])[0])
     observation, _, terminated, truncated, _ = env.step(action)
 
     assert env.transition is not None
-    assert env.transition.state != before
+    assert env.transition.snapshot != before
     assert not truncated
     assert not terminated or observation["action_mask"][0] == 1
 
