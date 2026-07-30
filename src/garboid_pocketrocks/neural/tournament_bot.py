@@ -1,11 +1,11 @@
-"""Frozen neural policy used by the standard local tournament."""
+"""Frozen neural policies used by the standard local tournament."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from pocketrocks import BotDecision, DecisionContext
 
@@ -20,8 +20,11 @@ if TYPE_CHECKING:
     from garboid_pocketrocks.neural.model import NeuralPolicy
     from garboid_pocketrocks.training.actions import ActionCodec
 
+CHECKPOINTS_PATH = Path(__file__).with_name("checkpoints")
 SMOKE_BOT_NAME = "vector_ppo_small_v1_g1500"
-SMOKE_CHECKPOINT_PATH = Path(__file__).with_name("checkpoints") / SMOKE_BOT_NAME
+LARGE_BOT_NAME = "vector_ppo_large_v1_g350k"
+SMOKE_CHECKPOINT_PATH = CHECKPOINTS_PATH / SMOKE_BOT_NAME
+LARGE_CHECKPOINT_PATH = CHECKPOINTS_PATH / LARGE_BOT_NAME
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,7 +36,7 @@ class _Runtime:
 
 
 @cache
-def _runtime() -> _Runtime:
+def _runtime(checkpoint_path: Path) -> _Runtime:
     import torch
 
     from garboid_pocketrocks.neural.checkpoint import load_inference_checkpoint
@@ -43,7 +46,7 @@ def _runtime() -> _Runtime:
 
     torch.set_num_threads(1)
     device = torch.device("cpu")
-    loaded = load_inference_checkpoint(SMOKE_CHECKPOINT_PATH, device=device)
+    loaded = load_inference_checkpoint(checkpoint_path, device=device)
     bounds = EnvironmentBounds(
         loaded.manifest.encoder_config.max_bid,
         loaded.manifest.encoder_config.max_hand_size,
@@ -61,12 +64,14 @@ def _runtime() -> _Runtime:
     )
 
 
-class VectorPpoSmallV1G1500Brain:
-    """Deterministic inference wrapper for the frozen smoke checkpoint."""
+class _FrozenNeuralBrain:
+    """Deterministic inference wrapper shared by frozen checkpoints."""
+
+    checkpoint_path: ClassVar[Path]
 
     def __init__(self, seed: int | None = None) -> None:
         del seed
-        self._runtime = _runtime()
+        self._runtime = _runtime(self.checkpoint_path)
 
     def choose_decision(
         self,
@@ -74,7 +79,7 @@ class VectorPpoSmallV1G1500Brain:
         ruleset: RulesetKnowledge,
     ) -> BotDecision:
         del context, ruleset
-        raise RuntimeError("smoke neural policy requires public history")
+        raise RuntimeError("frozen neural policy requires public history")
 
     def choose_decision_with_history(
         self,
@@ -100,7 +105,23 @@ class VectorPpoSmallV1G1500Brain:
         return self._runtime.codec.decode(int(selection.actions[0].item()))
 
 
+class VectorPpoSmallV1G1500Brain(_FrozenNeuralBrain):
+    """Frozen 1,500-game smoke policy."""
+
+    checkpoint_path = SMOKE_CHECKPOINT_PATH
+
+
+class VectorPpoLargeV1G350kBrain(_FrozenNeuralBrain):
+    """Frozen 349,860-game large policy."""
+
+    checkpoint_path = LARGE_CHECKPOINT_PATH
+
+
 VECTOR_PPO_SMALL_V1_G1500_BOT_SPEC = BotSpec.for_simulation(
     SMOKE_BOT_NAME,
     VectorPpoSmallV1G1500Brain,
+)
+VECTOR_PPO_LARGE_V1_G350K_BOT_SPEC = BotSpec.for_simulation(
+    LARGE_BOT_NAME,
+    VectorPpoLargeV1G350kBrain,
 )
