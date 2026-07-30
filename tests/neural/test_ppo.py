@@ -1,29 +1,36 @@
 from __future__ import annotations
 
 import math
-from dataclasses import fields
 
 import pytest
 
 torch = pytest.importorskip("torch")
 
 from garboid_pocketrocks.neural.advantages import compute_gae  # noqa: E402
+from garboid_pocketrocks.neural.collector import collect_self_play  # noqa: E402
 from garboid_pocketrocks.neural.config import (  # noqa: E402
     stage1_encoder_config,
     stage1_model_config,
+    training_encoder_config,
 )
+from garboid_pocketrocks.neural.metrics import gameplay_metrics  # noqa: E402
 from garboid_pocketrocks.neural.model import NeuralPolicy  # noqa: E402
+from garboid_pocketrocks.neural.planning import plan_mirror_episodes  # noqa: E402
 from garboid_pocketrocks.neural.ppo import (  # noqa: E402
     PPOConfig,
     PPOTrainer,
     ppo_loss,
 )
-from garboid_pocketrocks.neural.rollout import collect_rollout  # noqa: E402
+from garboid_pocketrocks.neural.rollout import (  # noqa: E402
+    PackedRollout,
+    collect_rollout,
+)
 from garboid_pocketrocks.neural.seeding import (  # noqa: E402
     configure_deterministic_torch,
     derive_seed,
     plan_stage1_episodes,
 )
+from garboid_pocketrocks.training.rewards import RewardConfig  # noqa: E402
 
 
 def _model(root_seed: int) -> NeuralPolicy:
@@ -109,13 +116,27 @@ def test_update_flattens_valid_transitions_and_is_deterministic() -> None:
     assert len(first_metrics.entropies) == first_metrics.transition_count
     assert len(first_metrics.pre_clip_gradient_norms) == first_metrics.optimizer_steps
     assert len(first_metrics.post_clip_gradient_norms) == first_metrics.optimizer_steps
+    diagnostic_fields = (
+        "total_loss",
+        "policy_loss",
+        "value_loss",
+        "entropy",
+        "advantages",
+        "ratios",
+        "values",
+        "entropies",
+        "pre_clip_gradient_norms",
+        "post_clip_gradient_norms",
+        "approximate_kl",
+        "clip_fraction",
+    )
     assert all(
         math.isfinite(value)
-        for field in fields(first_metrics)
+        for name in diagnostic_fields
         for value in (
-            getattr(first_metrics, field.name)
-            if isinstance(getattr(first_metrics, field.name), tuple)
-            else (getattr(first_metrics, field.name),)
+            getattr(first_metrics, name)
+            if isinstance(getattr(first_metrics, name), tuple)
+            else (getattr(first_metrics, name),)
         )
     )
     assert max(first_metrics.post_clip_gradient_norms) <= 0.5
@@ -194,3 +215,52 @@ def test_update_uses_stored_masks_when_recomputing_policy_loss() -> None:
     assert changed_metrics.value_loss == baseline_metrics.value_loss
     assert changed_metrics.entropy == baseline_metrics.entropy
     assert changed_metrics.ratios == baseline_metrics.ratios
+
+
+def test_packed_rollout_and_multi_epoch_ppo_support_all_seats() -> None:
+    configure_deterministic_torch(401)
+    encoder_config = training_encoder_config()
+    model = NeuralPolicy(encoder_config, stage1_model_config())
+    plans = plan_mirror_episodes(
+        root_seed=401,
+        update_index=0,
+        games_per_cell=1,
+        policy_identity="current",
+    )[:1]
+    rollout, _ = collect_self_play(
+        {"current": model},
+        plans,
+        encoder_config=encoder_config,
+        reward_config=RewardConfig(),
+        device=torch.device("cpu"),
+        active_games=1,
+        max_inference_batch=32,
+    )
+
+    packed = PackedRollout.from_batch(rollout)
+    gameplay = gameplay_metrics(rollout)
+    metrics = PPOTrainer(
+        model,
+        PPOConfig(epochs=2, minibatch_size=16),
+    ).update(rollout, update_seed=17)
+
+    assert len(packed) == len(rollout.transitions)
+    assert len(packed.trajectory_ranges) == 3
+    assert packed.observation(0).action_mask[packed.actions[0]]
+    assert not packed.actions.flags.writeable
+    assert set(packed.phase_buckets.tolist()) == {0, 1, 2}
+    assert gameplay[0].metrics.games == 3
+    assert gameplay[0].metrics.decisions == len(packed)
+    assert gameplay[1].key == "live-A/3"
+    assert metrics.epochs == 2
+    assert metrics.optimizer_steps == 2 * math.ceil(len(packed) / 16)
+    assert metrics.transition_count == len(packed)
+    assert math.isfinite(metrics.approximate_kl)
+    assert 0.0 <= metrics.clip_fraction <= 1.0
+    assert metrics.value.count == metrics.transition_count
+    assert {item.dimension for item in metrics.value_slices} == {
+        "all",
+        "ruleset",
+        "player_count",
+        "phase",
+    }
