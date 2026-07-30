@@ -38,6 +38,11 @@ class CollectorMetrics:
     inference_batches: int
     inference_batch_sizes: tuple[int, ...]
     cell_games: tuple[tuple[str, int, int], ...]
+    queue_wait_seconds: float = 0.0
+    ipc_seconds: float = 0.0
+    worker_busy_seconds: float = 0.0
+    inference_batch_p50: float = 0.0
+    inference_batch_p95: float = 0.0
 
     @property
     def games_per_second(self) -> float:
@@ -180,6 +185,9 @@ def collect_self_play(
             (ruleset_name, player_count, count)
             for (ruleset_name, player_count), count in sorted(cell_counts.items())
         ),
+        worker_busy_seconds=elapsed_seconds,
+        inference_batch_p50=_percentile(inference_batch_sizes, 0.50),
+        inference_batch_p95=_percentile(inference_batch_sizes, 0.95),
     )
     return RolloutBatch.from_multi_seat(completed), metrics
 
@@ -249,3 +257,11 @@ def _restore_policy_modes(
 ) -> None:
     for model, was_training in prior_modes:
         model.train(was_training)
+
+
+def _percentile(values: Sequence[int], quantile: float) -> float:
+    ordered = sorted(values)
+    if not ordered:
+        return 0.0
+    index = round((len(ordered) - 1) * quantile)
+    return float(ordered[index])
