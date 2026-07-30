@@ -1,5 +1,15 @@
 """Deterministic multiplayer bot tournaments and strength analysis."""
 
+from garboid_pocketrocks.tournament.analysis import (
+    BootstrapSummary,
+    CalibrationBin,
+    ConditionStatistics,
+    RatingInterval,
+    TournamentAnalysis,
+    TournamentBotRow,
+    analyze_tournament,
+    bootstrap_rating_intervals,
+)
 from garboid_pocketrocks.tournament.rating import (
     PLBotRating,
     PLFitDiagnostics,
@@ -19,17 +29,25 @@ from garboid_pocketrocks.tournament.schedule import (
 )
 
 __all__ = [
+    "BootstrapSummary",
+    "CalibrationBin",
     "ConditionQuota",
+    "ConditionStatistics",
     "PLBotRating",
     "PLFitDiagnostics",
     "PairExposure",
     "PlackettLuceFit",
     "RankingObservation",
+    "RatingInterval",
     "TiePrevalence",
+    "TournamentAnalysis",
+    "TournamentBotRow",
     "TournamentConfig",
     "TournamentPlan",
     "TournamentPlanner",
     "TournamentRatingError",
+    "analyze_tournament",
+    "bootstrap_rating_intervals",
     "fit_plackett_luce",
     "observations_from_games",
 ]
