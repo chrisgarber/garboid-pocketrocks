@@ -149,12 +149,27 @@ def _load_json_object(path: Path) -> dict[str, object]:
     def reject_nonfinite_number(value: str) -> NoReturn:
         raise _NonFiniteJsonNumber(value)
 
+    def reject_duplicate_object_keys(
+        pairs: list[tuple[str, object]],
+    ) -> dict[str, object]:
+        decoded_object: dict[str, object] = {}
+        for key, value in pairs:
+            if key in decoded_object:
+                raise PromotionCorpusError(
+                    "duplicate_json_key",
+                    f"{path} contains duplicate JSON key {key!r}; "
+                    "the key appears more than once in the same object.",
+                )
+            decoded_object[key] = value
+        return decoded_object
+
     try:
         decoded = cast(
             object,
             json.loads(
                 path.read_text(encoding="utf-8"),
                 parse_constant=reject_nonfinite_number,
+                object_pairs_hook=reject_duplicate_object_keys,
             ),
         )
     except (json.JSONDecodeError, _NonFiniteJsonNumber) as error:

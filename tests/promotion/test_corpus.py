@@ -257,6 +257,52 @@ def test_malformed_or_nonfinite_json_is_rejected(tmp_path: Path, source: str) ->
 
 
 @pytest.mark.parametrize(
+    ("duplicate_key", "replacement"),
+    (("root_seed", 18), ("purpose", "held_out")),
+)
+def test_duplicate_recipe_keys_are_rejected_before_a_value_can_be_overwritten(
+    tmp_path: Path,
+    duplicate_key: str,
+    replacement: object,
+) -> None:
+    payload = _recipe_payload()
+    original_entry = f'"{duplicate_key}": {json.dumps(payload[duplicate_key])}'
+    duplicate_entry = f'{original_entry}, "{duplicate_key}": {json.dumps(replacement)}'
+    source = json.dumps(payload).replace(original_entry, duplicate_entry)
+    assert source.count(f'"{duplicate_key}"') == 2
+    path = tmp_path / "fixture.json"
+    path.write_text(source, encoding="utf-8")
+
+    with pytest.raises(PromotionCorpusError) as captured:
+        load_promotion_corpus(path, registry=BOT_SPECS_BY_NAME)
+
+    assert captured.value.code == "duplicate_json_key"
+    assert duplicate_key in str(captured.value)
+    assert "appears more than once" in str(captured.value)
+
+
+def test_duplicate_keys_in_nested_json_objects_are_also_rejected(tmp_path: Path) -> None:
+    payload = _recipe_payload()
+    source = json.dumps(
+        {
+            **payload,
+            "metadata": {"explanation": "first"},
+        }
+    ).replace(
+        '"explanation": "first"',
+        '"explanation": "first", "explanation": "second"',
+    )
+    path = tmp_path / "fixture.json"
+    path.write_text(source, encoding="utf-8")
+
+    with pytest.raises(PromotionCorpusError) as captured:
+        load_promotion_corpus(path, registry=BOT_SPECS_BY_NAME)
+
+    assert captured.value.code == "duplicate_json_key"
+    assert "explanation" in str(captured.value)
+
+
+@pytest.mark.parametrize(
     ("filename", "purpose"),
     (("development-v1.json", "held_out"), ("held-out-v1.json", "development")),
 )
@@ -392,7 +438,6 @@ def test_committed_corpora_have_exact_coverage_and_disjoint_seeds() -> None:
     assert held_out.recipe.purpose == "held_out"
     assert held_out.recipe.repetitions_per_seat_cell == 8
     assert len(held_out.cases) == 480
-    assert development.digest
-    assert held_out.digest
-    assert development.digest != held_out.digest
+    assert development.digest == "17c016350dbe717641b8cd499b0908e3bc0faa811a3b4f5e574f8713a5bf2b3d"
+    assert held_out.digest == "de686b97e9318d840554514d71158e7d30e4b1603c6692d68b73bc77947b10da"
     validate_corpus_separation(development, held_out)
