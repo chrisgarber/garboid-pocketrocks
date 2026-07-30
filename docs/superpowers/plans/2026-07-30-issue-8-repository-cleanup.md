@@ -124,10 +124,7 @@ def validate_runtime_support(config: TrainingRunConfig) -> None:
         unsupported.append("keep_periodic_checkpoints")
     if config.evaluation_interval_seconds is not None:
         unsupported.append("evaluation_interval_seconds")
-    if (
-        config.evaluation_games_per_seat_cell
-        != TrainingRunConfig().evaluation_games_per_seat_cell
-    ):
+    if config.evaluation_games_per_seat_cell != TrainingRunConfig().evaluation_games_per_seat_cell:
         unsupported.append("evaluation_games_per_seat_cell")
     if config.evaluate_at_start:
         unsupported.append("evaluate_at_start")
@@ -345,9 +342,7 @@ class RolloutBatch:
         if not collected:
             raise ValueError("rollout batch must contain at least one episode")
         if not any(
-            trajectory.trainable
-            for episode in collected
-            for trajectory in episode.trajectories
+            trajectory.trainable for episode in collected for trajectory in episode.trajectories
         ):
             raise ValueError("rollout batch must contain a trainable trajectory")
         return cls(episodes=collected)
@@ -889,11 +884,7 @@ Add:
 
 ```python
 def _validate_update_seed(update_seed: int) -> None:
-    if (
-        not isinstance(update_seed, int)
-        or isinstance(update_seed, bool)
-        or update_seed < 0
-    ):
+    if not isinstance(update_seed, int) or isinstance(update_seed, bool) or update_seed < 0:
         raise PPOError("update seed must be a nonnegative integer")
 
 
@@ -906,9 +897,7 @@ def _iter_minibatch_indices(
 ) -> Iterator[NDArray[np.int64]]:
     for epoch_index in range(epochs):
         generator = torch.Generator(device="cpu")
-        generator.manual_seed(
-            _derive_local_seed(update_seed, "epoch", epoch_index)
-        )
+        generator.manual_seed(_derive_local_seed(update_seed, "epoch", epoch_index))
         permutation = torch.randperm(
             transition_count,
             generator=generator,
