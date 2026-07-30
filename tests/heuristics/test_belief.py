@@ -11,6 +11,7 @@ from hypothesis import strategies as st
 from pocketrocks import ActionId, BotDecision, DecisionContext, Suit
 from pocketrocks.sim.constants import VALUE_CHARTS
 
+from garboid_pocketrocks.heuristics import belief as belief_module
 from garboid_pocketrocks.heuristics.belief import build_belief
 from garboid_pocketrocks.heuristics.errors import HeuristicInputError
 from garboid_pocketrocks.knowledge import RulesetKnowledge, canonical_knowledge
@@ -107,6 +108,31 @@ def test_expected_future_biddable_counts_and_horizon_conserve_cards() -> None:
     assert belief.expected_future_biddable_counts == pytest.approx((0.75, 0.75, 1.5, 1.5, 1.5))
     assert sum(belief.expected_future_biddable_counts) == pytest.approx(6.0)
     assert belief.normalized_horizon == pytest.approx(6 / 7)
+
+
+def test_public_card_accounting_is_the_conserved_posterior_boundary() -> None:
+    context = make_context(
+        current_resources=(int(Suit.BRICK), 0),
+        hand=(int(Suit.WOOD),),
+    )
+    knowledge = make_knowledge(private_cards=1)
+
+    accounting = belief_module._account_public_cards(
+        context,
+        knowledge,
+        ActionId.AUCTION1,
+    )
+
+    assert accounting == belief_module._PublicCardAccounting(
+        known_terminal_reveals=(0, 1, 0, 0, 0),
+        unseen_by_suit=(1, 1, 2, 2, 2),
+        known_future_by_suit=(0, 0, 0, 0, 0),
+        opponent_hidden_slots=2,
+        unseen_population=8,
+        unknown_future_biddable=6,
+        future_biddable=6,
+        total_biddable=7,
+    )
 
 
 def test_two_card_auction_subtracts_both_offered_cards() -> None:

@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from garboid_pocketrocks.knowledge import value_chart_from_ruleset_name
 from garboid_pocketrocks.simulator.monte_carlo import (
     GameSummary,
     MonteCarloResult,
@@ -136,7 +137,7 @@ def analyze_tournament(
     for game in result.game_summaries:
         scores_by_seat = {score.seat: score for score in game.scores}
         first_place_count = sum(score.rank == 1 for score in game.scores)
-        chart = game.ruleset_name.removeprefix("live-")
+        chart = value_chart_from_ruleset_name(game.ruleset_name)
         for seat, (bot_id, bot_name) in enumerate(zip(game.bot_ids, game.bot_names, strict=True)):
             names.setdefault(bot_id, bot_name)
             score = scores_by_seat[seat]

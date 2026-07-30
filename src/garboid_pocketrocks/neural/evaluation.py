@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass
 
+from garboid_pocketrocks.knowledge import ruleset_name
 from garboid_pocketrocks.neural.planning import (
     SeatPolicy,
     SelfPlayEpisodePlan,
@@ -49,7 +50,7 @@ def plan_paired_evaluation(
                         SelfPlayEpisodePlan(
                             update_index=0,
                             episode_index=index,
-                            ruleset_name=f"live-{chart}",
+                            ruleset_name=ruleset_name(chart),
                             player_count=player_count,
                             engine_seed=_seed(
                                 root_seed,

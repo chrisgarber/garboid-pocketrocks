@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -15,8 +16,8 @@ from garboid_pocketrocks.neural.checkpoint import (  # noqa: E402
     parameter_digest,
 )
 from garboid_pocketrocks.neural.config import (  # noqa: E402
-    stage1_model_config,
     training_encoder_config,
+    training_model_config,
 )
 from garboid_pocketrocks.neural.model import NeuralPolicy  # noqa: E402
 from garboid_pocketrocks.neural.ppo import PPOConfig  # noqa: E402
@@ -37,7 +38,7 @@ def _components() -> tuple[
     TrainingCheckpointManifest,
 ]:
     torch.manual_seed(81)
-    model = NeuralPolicy(training_encoder_config(), stage1_model_config())
+    model = NeuralPolicy(training_encoder_config(), training_model_config("small"))
     optimizer = torch.optim.Adam(model.parameters(), lr=3e-4, foreach=False)
     loss = torch.stack(tuple(parameter.square().mean() for parameter in model.parameters())).sum()
     loss.backward()
@@ -97,6 +98,34 @@ def test_training_checkpoint_contains_exact_validated_files(
     assert loaded.optimizer.state_dict()["state"]
     assert loaded.generator_states["policy"].dtype == torch.uint8
     assert loaded.metrics["games_per_second"] == 123.5
+
+
+def test_training_checkpoint_loads_historical_unsupported_run_controls(
+    tmp_path: Path,
+) -> None:
+    model, optimizer, manifest = _components()
+    historical_config = replace(
+        manifest.run_config,
+        checkpoint_interval_seconds=60.0,
+        keep_periodic_checkpoints=2,
+        evaluation_interval_seconds=120.0,
+        evaluation_games_per_seat_cell=4,
+        evaluate_at_start=True,
+        evaluate_at_end=True,
+        league_fraction=0.2,
+    )
+    checkpoint = save_training_checkpoint(
+        tmp_path / "historical-checkpoint",
+        model=model,
+        optimizer=optimizer,
+        manifest=replace(manifest, run_config=historical_config),
+        generator_states={"policy": torch.Generator(device="cpu").manual_seed(7).get_state()},
+        metrics={},
+    )
+
+    loaded = load_training_checkpoint(checkpoint, device=torch.device("cpu"))
+
+    assert loaded.manifest.run_config == historical_config
 
 
 def test_failed_save_does_not_replace_last_valid_checkpoint(

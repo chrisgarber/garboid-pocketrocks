@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import io
 import multiprocessing
 import threading
 import time
@@ -25,14 +24,15 @@ from garboid_pocketrocks.neural.collector import (
 from garboid_pocketrocks.neural.config import NeuralEncoderConfig
 from garboid_pocketrocks.neural.model import NeuralPolicy
 from garboid_pocketrocks.neural.planning import SelfPlayEpisodePlan
+from garboid_pocketrocks.neural.policy_snapshot import (
+    PolicySnapshot,
+    load_policy_snapshots,
+    snapshot_policies,
+)
 from garboid_pocketrocks.neural.rollout import MultiSeatEpisode, RolloutBatch
 from garboid_pocketrocks.neural.vector_collector import (
     collect_self_play_vectorized,
     vector_plan_batches,
-)
-from garboid_pocketrocks.neural.vector_parallel import (
-    _PolicySnapshot,
-    _state_bytes,
 )
 from garboid_pocketrocks.training.rewards import RewardConfig
 
@@ -45,7 +45,7 @@ class VectorPoolError(RuntimeError):
 class _CollectCommand:
     request_id: int
     plans: tuple[SelfPlayEpisodePlan, ...]
-    snapshots: tuple[_PolicySnapshot, ...]
+    snapshots: tuple[PolicySnapshot, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -162,97 +162,27 @@ class VectorActorPool:
         dispatched = False
         try:
             self._ensure_open()
-            collected_plans = tuple(plans)
-            _validate_collection(
+            request_id, shards, snapshots = self._prepare_collect_command(
                 policies,
-                collected_plans,
-                encoder_config=self._encoder_config,
-                device=torch.device("cpu"),
-                active_games=self._engine_batch_size,
-                max_inference_batch=self._max_inference_batch,
+                plans,
             )
-            units = vector_plan_batches(
-                collected_plans,
-                batch_size=self._engine_batch_size,
-            )
-            active_workers = min(self._worker_count, len(units))
-            shards = tuple(
-                tuple(
-                    plan
-                    for unit_index, unit in enumerate(units)
-                    if unit_index % active_workers == worker_id
-                    for plan in unit
-                )
-                for worker_id in range(active_workers)
-            )
-            snapshots = tuple(
-                _PolicySnapshot(
-                    identity=identity,
-                    encoder_config=model.encoder_config,
-                    model_config=model.model_config,
-                    state_bytes=_state_bytes(model),
-                )
-                for identity, model in sorted(policies.items())
-            )
-            request_id = self._next_request_id
-            self._next_request_id += 1
             started = time.perf_counter()
-            ipc_seconds = 0.0
-            pending: dict[Connection, int] = {}
             dispatched = True
-            for worker_id, shard in enumerate(shards):
-                process = self._processes[worker_id]
-                if not process.is_alive():
-                    raise VectorPoolError(
-                        f"vector actor {worker_id} exited before request {request_id}"
-                    )
-                connection = self._connections[worker_id]
-                ipc_started = time.perf_counter()
-                connection.send(
-                    _CollectCommand(
-                        request_id=request_id,
-                        plans=shard,
-                        snapshots=snapshots,
-                    )
-                )
-                ipc_seconds += time.perf_counter() - ipc_started
-                pending[connection] = worker_id
-
-            results: list[_WorkerResult] = []
-            queue_wait_seconds = 0.0
-            while pending:
-                wait_started = time.perf_counter()
-                ready = [cast(Connection, connection) for connection in wait(pending)]
-                queue_wait_seconds += time.perf_counter() - wait_started
-                for connection in ready:
-                    worker_id = pending.pop(connection)
-                    ipc_started = time.perf_counter()
-                    try:
-                        message = connection.recv()
-                    except EOFError as error:
-                        raise VectorPoolError(
-                            f"vector actor {worker_id} exited without "
-                            f"a result for request {request_id}"
-                        ) from error
-                    ipc_seconds += time.perf_counter() - ipc_started
-                    if isinstance(message, _WorkerFailure):
-                        raise VectorPoolError(
-                            f"vector actor {message.worker_id} failed: "
-                            f"{message.message}\n{message.traceback_text}"
-                        )
-                    if not isinstance(message, _WorkerResult):
-                        raise VectorPoolError(
-                            f"vector actor {worker_id} returned an unknown message"
-                        )
-                    if message.request_id != request_id or message.worker_id != worker_id:
-                        raise VectorPoolError(f"vector actor {worker_id} returned a stale result")
-                    results.append(message)
+            pending, dispatch_ipc_seconds = self._dispatch_collect_commands(
+                request_id=request_id,
+                shards=shards,
+                snapshots=snapshots,
+            )
+            results, queue_wait_seconds, receive_ipc_seconds = _receive_collect_results(
+                pending,
+                request_id=request_id,
+            )
 
             return self._combine_results(
                 results,
                 elapsed_seconds=time.perf_counter() - started,
                 queue_wait_seconds=queue_wait_seconds,
-                ipc_seconds=ipc_seconds,
+                ipc_seconds=dispatch_ipc_seconds + receive_ipc_seconds,
             )
         except BaseException:
             if dispatched:
@@ -295,6 +225,71 @@ class VectorActorPool:
         if self._closed:
             raise VectorPoolError("vector actor pool is closed")
 
+    def _prepare_collect_command(
+        self,
+        policies: Mapping[str, NeuralPolicy],
+        plans: Sequence[SelfPlayEpisodePlan],
+    ) -> tuple[
+        int,
+        tuple[tuple[SelfPlayEpisodePlan, ...], ...],
+        tuple[PolicySnapshot, ...],
+    ]:
+        collected_plans = tuple(plans)
+        _validate_collection(
+            policies,
+            collected_plans,
+            encoder_config=self._encoder_config,
+            device=torch.device("cpu"),
+            active_games=self._engine_batch_size,
+            max_inference_batch=self._max_inference_batch,
+        )
+        units = vector_plan_batches(
+            collected_plans,
+            batch_size=self._engine_batch_size,
+        )
+        active_workers = min(self._worker_count, len(units))
+        shards = tuple(
+            tuple(
+                plan
+                for unit_index, unit in enumerate(units)
+                if unit_index % active_workers == worker_id
+                for plan in unit
+            )
+            for worker_id in range(active_workers)
+        )
+        snapshots = snapshot_policies(policies)
+        request_id = self._next_request_id
+        self._next_request_id += 1
+        return request_id, shards, snapshots
+
+    def _dispatch_collect_commands(
+        self,
+        *,
+        request_id: int,
+        shards: Sequence[tuple[SelfPlayEpisodePlan, ...]],
+        snapshots: tuple[PolicySnapshot, ...],
+    ) -> tuple[dict[Connection, int], float]:
+        pending: dict[Connection, int] = {}
+        ipc_seconds = 0.0
+        for worker_id, shard in enumerate(shards):
+            process = self._processes[worker_id]
+            if not process.is_alive():
+                raise VectorPoolError(
+                    f"vector actor {worker_id} exited before request {request_id}"
+                )
+            connection = self._connections[worker_id]
+            ipc_started = time.perf_counter()
+            connection.send(
+                _CollectCommand(
+                    request_id=request_id,
+                    plans=shard,
+                    snapshots=snapshots,
+                )
+            )
+            ipc_seconds += time.perf_counter() - ipc_started
+            pending[connection] = worker_id
+        return pending, ipc_seconds
+
     @staticmethod
     def _require_positive_integer(name: str, value: object) -> None:
         if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
@@ -308,20 +303,21 @@ class VectorActorPool:
         queue_wait_seconds: float,
         ipc_seconds: float,
     ) -> tuple[RolloutBatch, CollectorMetrics]:
-        episodes = [episode for result in results for episode in result.episodes]
+        ordered_results = tuple(sorted(results, key=lambda result: result.worker_id))
+        episodes = [episode for result in ordered_results for episode in result.episodes]
         episodes.sort(key=lambda episode: episode.plan.episode_index)
         inference_sizes = tuple(
-            size for result in results for size in result.metrics.inference_batch_sizes
+            size for result in ordered_results for size in result.metrics.inference_batch_sizes
         )
         cells = Counter(
             (episode.plan.ruleset_name, episode.plan.player_count) for episode in episodes
         )
-        decisions = sum(result.metrics.decisions for result in results)
+        decisions = sum(result.metrics.decisions for result in ordered_results)
         metrics = CollectorMetrics(
             games=len(episodes),
             decisions=decisions,
             elapsed_seconds=elapsed_seconds,
-            inference_seconds=sum(result.metrics.inference_seconds for result in results),
+            inference_seconds=sum(result.metrics.inference_seconds for result in ordered_results),
             inference_batches=len(inference_sizes),
             inference_batch_sizes=inference_sizes,
             cell_games=tuple(
@@ -329,11 +325,60 @@ class VectorActorPool:
             ),
             queue_wait_seconds=queue_wait_seconds,
             ipc_seconds=ipc_seconds,
-            worker_busy_seconds=sum(result.metrics.elapsed_seconds for result in results),
+            worker_busy_seconds=sum(result.metrics.elapsed_seconds for result in ordered_results),
             inference_batch_p50=_percentile(inference_sizes, 0.50),
             inference_batch_p95=_percentile(inference_sizes, 0.95),
         )
         return RolloutBatch.from_multi_seat(episodes), metrics
+
+
+def _receive_collect_results(
+    pending: dict[Connection, int],
+    *,
+    request_id: int,
+) -> tuple[tuple[_WorkerResult, ...], float, float]:
+    results: list[_WorkerResult] = []
+    queue_wait_seconds = 0.0
+    ipc_seconds = 0.0
+    while pending:
+        wait_started = time.perf_counter()
+        ready = [cast(Connection, connection) for connection in wait(pending)]
+        queue_wait_seconds += time.perf_counter() - wait_started
+        for connection in ready:
+            worker_id = pending.pop(connection)
+            ipc_started = time.perf_counter()
+            try:
+                message = connection.recv()
+            except EOFError as error:
+                raise VectorPoolError(
+                    f"vector actor {worker_id} exited without a result for request {request_id}"
+                ) from error
+            ipc_seconds += time.perf_counter() - ipc_started
+            results.append(
+                _validate_worker_result(
+                    message,
+                    worker_id=worker_id,
+                    request_id=request_id,
+                )
+            )
+    return tuple(results), queue_wait_seconds, ipc_seconds
+
+
+def _validate_worker_result(
+    message: object,
+    *,
+    worker_id: int,
+    request_id: int,
+) -> _WorkerResult:
+    if isinstance(message, _WorkerFailure):
+        raise VectorPoolError(
+            f"vector actor {message.worker_id} failed: {message.message}\n{message.traceback_text}"
+        )
+    if not isinstance(message, _WorkerResult):
+        raise VectorPoolError(f"vector actor {worker_id} returned an unknown message")
+    if message.request_id != request_id or message.worker_id != worker_id:
+        raise VectorPoolError(f"vector actor {worker_id} returned a stale result")
+    return message
 
 
 def _run_vector_actor(
@@ -365,21 +410,7 @@ def _run_vector_actor(
                 )
                 continue
             try:
-                policies = {}
-                for snapshot in command.snapshots:
-                    model = NeuralPolicy(
-                        snapshot.encoder_config,
-                        snapshot.model_config,
-                    )
-                    model.load_state_dict(
-                        torch.load(
-                            io.BytesIO(snapshot.state_bytes),
-                            map_location="cpu",
-                            weights_only=True,
-                        ),
-                        strict=True,
-                    )
-                    policies[snapshot.identity] = model
+                policies = load_policy_snapshots(command.snapshots)
                 rollout, metrics = collect_self_play_vectorized(
                     policies,
                     command.plans,
@@ -393,7 +424,7 @@ def _run_vector_actor(
                     _WorkerResult(
                         request_id=command.request_id,
                         worker_id=worker_id,
-                        episodes=rollout.multi_seat_episodes,
+                        episodes=rollout.episodes,
                         metrics=metrics,
                     )
                 )

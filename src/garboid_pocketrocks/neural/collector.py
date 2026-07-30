@@ -101,51 +101,21 @@ def collect_self_play(
     try:
         fill_active()
         while active:
-            requests = sorted(
-                (request for game in active.values() for request in game.pending_requests()),
-                key=lambda request: (
-                    request.policy_identity,
-                    request.episode_index,
-                    request.seat,
-                    request.decision_index,
-                ),
+            requests = tuple(
+                request for game in active.values() for request in game.pending_requests()
             )
             decisions += len(requests)
             responses_by_episode: dict[int, list[PolicyResponse]] = defaultdict(list)
-            by_policy: dict[str, list[PendingPolicyRequest]] = defaultdict(list)
-            for request in requests:
-                by_policy[request.policy_identity].append(request)
-
-            for identity in sorted(by_policy):
-                model = policies[identity]
-                policy_requests = by_policy[identity]
-                for offset in range(0, len(policy_requests), max_inference_batch):
-                    chunk = policy_requests[offset : offset + max_inference_batch]
-                    inference_start = time.perf_counter()
-                    batch = batch_observations(
-                        tuple(request.observation for request in chunk),
-                        device,
-                    )
-                    with torch.no_grad():
-                        output = model(batch)
-                        selection = evaluate_row_seeded_policy(
-                            output,
-                            batch,
-                            row_seeds=tuple(request.sampling_seed for request in chunk),
-                        )
-                    inference_seconds += time.perf_counter() - inference_start
-                    inference_batch_sizes.append(len(chunk))
-                    for row, request in enumerate(chunk):
-                        responses_by_episode[request.episode_index].append(
-                            PolicyResponse(
-                                episode_index=request.episode_index,
-                                seat=request.seat,
-                                decision_index=request.decision_index,
-                                action=int(selection.actions[row].item()),
-                                old_log_probability=float(selection.log_probability[row].item()),
-                                old_value=float(selection.value[row].item()),
-                            )
-                        )
+            responses, elapsed = _infer_policy_requests(
+                policies,
+                requests,
+                device=device,
+                max_inference_batch=max_inference_batch,
+                inference_batch_sizes=inference_batch_sizes,
+            )
+            inference_seconds += elapsed
+            for response in responses:
+                responses_by_episode[response.episode_index].append(response)
 
             for episode_index in tuple(sorted(active)):
                 game = active[episode_index]
@@ -178,6 +148,64 @@ def collect_self_play(
         inference_batch_p95=_percentile(inference_batch_sizes, 0.95),
     )
     return RolloutBatch.from_multi_seat(completed), metrics
+
+
+def _infer_policy_requests(
+    policies: Mapping[str, NeuralPolicy],
+    requests: Sequence[PendingPolicyRequest],
+    *,
+    device: torch.device,
+    max_inference_batch: int,
+    inference_batch_sizes: list[int],
+) -> tuple[tuple[PolicyResponse, ...], float]:
+    if not requests:
+        return (), 0.0
+    by_policy: dict[str, list[PendingPolicyRequest]] = defaultdict(list)
+    for request in requests:
+        by_policy[request.policy_identity].append(request)
+    responses: list[PolicyResponse] = []
+    elapsed = 0.0
+    prior_modes = _freeze_policies(policies)
+    try:
+        for identity in sorted(by_policy):
+            ordered = sorted(
+                by_policy[identity],
+                key=lambda request: (
+                    request.episode_index,
+                    request.seat,
+                    request.decision_index,
+                ),
+            )
+            for offset in range(0, len(ordered), max_inference_batch):
+                chunk = ordered[offset : offset + max_inference_batch]
+                started = time.perf_counter()
+                batch = batch_observations(
+                    tuple(request.observation for request in chunk),
+                    device,
+                )
+                with torch.no_grad():
+                    output = policies[identity](batch)
+                    selection = evaluate_row_seeded_policy(
+                        output,
+                        batch,
+                        row_seeds=tuple(request.sampling_seed for request in chunk),
+                    )
+                elapsed += time.perf_counter() - started
+                inference_batch_sizes.append(len(chunk))
+                for row, request in enumerate(chunk):
+                    responses.append(
+                        PolicyResponse(
+                            episode_index=request.episode_index,
+                            seat=request.seat,
+                            decision_index=request.decision_index,
+                            action=int(selection.actions[row].item()),
+                            old_log_probability=float(selection.log_probability[row].item()),
+                            old_value=float(selection.value[row].item()),
+                        )
+                    )
+    finally:
+        _restore_policy_modes(prior_modes)
+    return tuple(responses), elapsed
 
 
 def _validate_collection(

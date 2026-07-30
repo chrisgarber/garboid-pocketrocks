@@ -26,8 +26,7 @@ from garboid_pocketrocks.knowledge import (  # noqa: E402
 from garboid_pocketrocks.neural.config import (  # noqa: E402
     NeuralEncoderConfig,
     NeuralModelConfig,
-    stage1_encoder_config,
-    stage1_model_config,
+    training_encoder_config,
     training_model_config,
 )
 from garboid_pocketrocks.neural.encoding import (  # noqa: E402
@@ -119,7 +118,7 @@ def _encoder(
     action_codec: ActionCodec | None = None,
 ) -> NeuralObservationEncoder:
     return NeuralObservationEncoder(
-        config or stage1_encoder_config(),
+        config or training_encoder_config(),
         _BOUNDS,
         action_codec=action_codec,
     )
@@ -139,18 +138,20 @@ def _assert_equal(left: NeuralObservation, right: NeuralObservation) -> None:
     assert np.array_equal(left.action_mask, right.action_mask)
 
 
-def test_stage1_configs_are_exact_and_json_round_trip() -> None:
-    encoder_config = stage1_encoder_config()
-    expected_history = (
+def test_training_configs_are_exact_and_json_round_trip() -> None:
+    encoder_config = training_encoder_config()
+    expected_history = max(
         1
-        + (2 * sum(canonical_knowledge(3).action_counts))
-        + (3 * canonical_knowledge(3).private_cards_per_player)
+        + (2 * sum(canonical_knowledge(players, value_chart=chart).action_counts))
+        + (players * canonical_knowledge(players, value_chart=chart).private_cards_per_player)
+        for chart in "ABCDE"
+        for players in (3, 4, 5)
     )
 
     assert encoder_config == NeuralEncoderConfig(
         schema_version=1,
-        supported_ruleset_names=("live-A",),
-        supported_player_counts=(3,),
+        supported_ruleset_names=tuple(f"live-{chart}" for chart in "ABCDE"),
+        supported_player_counts=(3, 4, 5),
         max_bid=100,
         max_hand_size=5,
         max_history_events=expected_history,
@@ -159,8 +160,8 @@ def test_stage1_configs_are_exact_and_json_round_trip() -> None:
         max_resource_cards=30,
         max_action_cards=30,
     )
-    assert expected_history == 76
-    assert stage1_model_config() == NeuralModelConfig(
+    assert expected_history == 77
+    assert training_model_config("small") == NeuralModelConfig(
         categorical_embedding_size=8,
         suit_embedding_size=4,
         seat_hidden_size=32,
@@ -171,9 +172,9 @@ def test_stage1_configs_are_exact_and_json_round_trip() -> None:
     )
 
     encoder_payload: Any = json.loads(json.dumps(asdict(encoder_config)))
-    model_payload: Any = json.loads(json.dumps(asdict(stage1_model_config())))
+    model_payload: Any = json.loads(json.dumps(asdict(training_model_config("small"))))
     assert NeuralEncoderConfig(**encoder_payload) == encoder_config
-    assert NeuralModelConfig(**model_payload) == stage1_model_config()
+    assert NeuralModelConfig(**model_payload) == training_model_config("small")
 
 
 def test_live_a_encoding_has_exact_shapes_dtypes_masks_and_hand_order() -> None:
@@ -189,8 +190,8 @@ def test_live_a_encoding_has_exact_shapes_dtypes_masks_and_hand_order() -> None:
     assert encoded.private_hand_ids.shape == (5,)
     assert encoded.private_hand_ids.tolist() == [2, 5, 0, 0, 0]
     assert encoded.hand_valid.tolist() == [True, True, False, False, False]
-    assert encoded.history_ids.shape == (76, 6)
-    assert encoded.history_numeric.shape == (76, 42)
+    assert encoded.history_ids.shape == (77, 6)
+    assert encoded.history_numeric.shape == (77, 42)
     assert int(encoded.history_valid.sum()) == len(history)
     assert np.array_equal(
         encoded.action_mask,
@@ -279,7 +280,7 @@ def test_all_seat_indexed_fields_are_learner_rotation_invariant(
     player_count: int,
 ) -> None:
     config = replace(
-        stage1_encoder_config(),
+        training_encoder_config(),
         supported_player_counts=(3, 4, 5),
         max_history_events=77,
     )
@@ -325,7 +326,7 @@ def test_encoder_cannot_observe_hypothetical_private_state() -> None:
 def test_history_longer_than_checkpoint_bound_is_rejected() -> None:
     setup = _history()[0]
     turn = _history()[1]
-    history = cast(PublicHistory, (setup,) + ((turn,) * 76))
+    history = cast(PublicHistory, (setup,) + ((turn,) * 77))
 
     with pytest.raises(
         NeuralEncodingError,
@@ -349,7 +350,7 @@ class _InvalidCase:
             _InvalidCase(
                 replace(_context(), cash_by_seat=(30, 101, 25)),
                 canonical_knowledge(3),
-                stage1_encoder_config(),
+                training_encoder_config(),
                 "cash",
             ),
             id="cash",
@@ -361,7 +362,7 @@ class _InvalidCase:
                     canonical_knowledge(3),
                     value_chart=(0, 4, 8, 12, 16, 21),
                 ),
-                stage1_encoder_config(),
+                training_encoder_config(),
                 "chart",
             ),
             id="chart",
@@ -373,7 +374,7 @@ class _InvalidCase:
                     canonical_knowledge(3),
                     resource_counts=(7, 6, 6, 6, 6),
                 ),
-                stage1_encoder_config(),
+                training_encoder_config(),
                 "resource",
             ),
             id="resource-counts",
@@ -385,7 +386,7 @@ class _InvalidCase:
                     canonical_knowledge(3),
                     action_counts=(13, 8, 3, 2, 3, 2),
                 ),
-                stage1_encoder_config(),
+                training_encoder_config(),
                 "action",
             ),
             id="action-counts",
@@ -398,7 +399,7 @@ class _InvalidCase:
                     revealable_count=6,
                 ),
                 canonical_knowledge(3),
-                stage1_encoder_config(),
+                training_encoder_config(),
                 "hand",
             ),
             id="hand-size",
@@ -407,7 +408,7 @@ class _InvalidCase:
             _InvalidCase(
                 replace(_context(), legal_max_amount=101),
                 canonical_knowledge(3),
-                stage1_encoder_config(),
+                training_encoder_config(),
                 "bid",
             ),
             id="bid-maximum",
@@ -416,7 +417,7 @@ class _InvalidCase:
             _InvalidCase(
                 _context(),
                 canonical_knowledge(3),
-                replace(stage1_encoder_config(), max_history_events=75),
+                replace(training_encoder_config(), max_history_events=75),
                 "history bound",
             ),
             id="ruleset-history-bound",
@@ -440,7 +441,7 @@ def test_negative_private_cards_per_player_is_rejected() -> None:
 
 def test_history_bids_use_bid_bound_while_remaining_cash_normalized() -> None:
     config = replace(
-        stage1_encoder_config(),
+        training_encoder_config(),
         max_bid=10,
         max_cash=100,
     )
@@ -496,31 +497,12 @@ def test_encoder_rejects_invalid_universal_action_masks(
         )
 
 
-@pytest.mark.parametrize(
-    ("context", "knowledge", "message"),
-    (
-        pytest.param(
-            _context(player_count=4, learner_seat=0),
-            canonical_knowledge(4),
-            "player count",
-            id="player-count",
-        ),
-        pytest.param(
-            _context(),
-            replace(canonical_knowledge(3), name="live-B"),
-            "ruleset",
-            id="ruleset",
-        ),
-    ),
-)
-def test_stage1_encoder_rejects_inputs_outside_live_a_three_player_support(
-    context: DecisionContext,
-    knowledge: RulesetKnowledge,
-    message: str,
-) -> None:
-    history = _history(player_count=context.player_count)
+def test_training_encoder_rejects_inputs_outside_supported_rulesets() -> None:
+    context = _context()
+    knowledge = replace(canonical_knowledge(3), name="live-X")
+    history = _history()
 
-    with pytest.raises(NeuralEncodingError, match=message):
+    with pytest.raises(NeuralEncodingError, match="ruleset"):
         _encoder().encode(context, knowledge, history)
 
 
@@ -541,9 +523,9 @@ def test_batch_observations_stacks_every_field_on_requested_device() -> None:
     assert batch.seat_valid.shape == (2, 5)
     assert batch.private_hand_ids.shape == (2, 5)
     assert batch.hand_valid.shape == (2, 5)
-    assert batch.history_ids.shape == (2, 76, 6)
-    assert batch.history_numeric.shape == (2, 76, 42)
-    assert batch.history_valid.shape == (2, 76)
+    assert batch.history_ids.shape == (2, 77, 6)
+    assert batch.history_numeric.shape == (2, 77, 42)
+    assert batch.history_valid.shape == (2, 77)
     assert batch.action_mask.shape == (2, 106)
     assert batch.global_ids.dtype == torch.int64
     assert batch.global_numeric.dtype == torch.float32
@@ -557,7 +539,15 @@ def test_training_model_profiles_increase_capacity() -> None:
     medium = training_model_config("medium")
     large = training_model_config("large")
 
-    assert small == stage1_model_config()
+    assert small == NeuralModelConfig(
+        categorical_embedding_size=8,
+        suit_embedding_size=4,
+        seat_hidden_size=32,
+        event_embedding_size=64,
+        gru_hidden_size=64,
+        snapshot_hidden_size=128,
+        trunk_hidden_size=128,
+    )
     assert small.trunk_hidden_size < medium.trunk_hidden_size
     assert medium.trunk_hidden_size < large.trunk_hidden_size
     with pytest.raises(ValueError, match="model profile"):

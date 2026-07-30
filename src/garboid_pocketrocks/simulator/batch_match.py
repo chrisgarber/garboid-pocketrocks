@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-import random
 from collections.abc import Sequence
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from typing import Protocol
 
 import numpy as np
-from pocketrocks import BotDecision, DecisionContext
-from pocketrocks.sim import BatchSimEngine, RevealRecord, ScoreRow, TurnRecord
+from numpy.typing import NDArray
+from pocketrocks import BotDecision
+from pocketrocks.sim import BatchSimEngine, BatchTurnOutcome, RevealRecord, ScoreRow, TurnRecord
 from pocketrocks.sim.constants import ACTION_WIRE_IDS
 
 from garboid_pocketrocks.adapters.public_history import (
@@ -17,19 +17,20 @@ from garboid_pocketrocks.adapters.public_history import (
     PublicEvent,
     PublicEventKind,
     PublicGameSetup,
-    PublicHistory,
     PublicInformationRevealed,
     PublicTurnOpened,
 )
-from garboid_pocketrocks.bots.base import BotBrain, BotSpec, HistoryAwareBotBrain
+from garboid_pocketrocks.bots.base import BotBrain, BotSpec
 from garboid_pocketrocks.knowledge import RulesetKnowledge, canonical_knowledge
 from garboid_pocketrocks.simulator.batch_context import build_batch_context
-from garboid_pocketrocks.simulator.replay import MatchReplay
-from garboid_pocketrocks.simulator.runner import (
+from garboid_pocketrocks.simulator.bot_execution import (
     BotFault,
     FaultMode,
-    MatchResult,
+    choose_brain_decision,
+    initialize_brains,
 )
+from garboid_pocketrocks.simulator.replay import MatchReplay
+from garboid_pocketrocks.simulator.runner import MatchResult
 from garboid_pocketrocks.simulator.session import (
     SessionResult,
     SessionScore,
@@ -62,49 +63,60 @@ class BatchGameJob(Protocol):
     def fault_mode(self) -> FaultMode: ...
 
 
-def run_batch_matches(jobs: Sequence[BatchGameJob]) -> tuple[MatchResult, ...]:
-    """Run a nonempty homogeneous-player-count chunk in deterministic row order."""
+@dataclass(slots=True)
+class _BatchRunState:
+    jobs: tuple[BatchGameJob, ...]
+    player_count: int
+    engine: BatchSimEngine
+    brains: list[tuple[BotBrain | None, ...]]
+    faults: list[list[BotFault]]
+    knowledge: list[RulesetKnowledge]
+    histories: list[list[PublicEvent]]
+    decisions: list[list[tuple[int, tuple[tuple[int, BotDecision], ...]]]]
+    turns: list[list[TurnRecord]]
+    step_indices: list[int]
 
-    if not jobs:
-        return ()
+
+@dataclass(slots=True)
+class _PendingBatchTurn:
+    action_ids: NDArray[np.uint8]
+    active_rows: NDArray[np.int64]
+    resources_before: NDArray[np.uint8]
+    objective_claimants_before: NDArray[np.int8]
+    turn_indices: NDArray[np.int64]
+    legal_max_bids: NDArray[np.int16]
+    raw_bids: NDArray[np.int16]
+
+
+def _validate_batch_jobs(jobs: tuple[BatchGameJob, ...]) -> int:
     player_count = jobs[0].player_count
     if any(job.player_count != player_count for job in jobs):
         raise ValueError("batch match jobs must share one player count")
     if any(len(job.lineup) != player_count for job in jobs):
         raise ValueError("batch match lineup length must match player count")
+    return player_count
 
+
+def _initialize_batch(jobs: tuple[BatchGameJob, ...]) -> _BatchRunState:
+    player_count = _validate_batch_jobs(jobs)
     engine = BatchSimEngine.start(
         player_count=player_count,
         seeds=tuple(job.seed for job in jobs),
         value_charts=tuple(job.value_chart for job in jobs),
         objectives_enabled=tuple(job.objectives_enabled for job in jobs),
     )
-    brains: list[list[BotBrain | None]] = []
+    brains: list[tuple[BotBrain | None, ...]] = []
     faults: list[list[BotFault]] = [[] for _ in jobs]
     knowledge: list[RulesetKnowledge] = []
     histories: list[list[PublicEvent]] = []
-    decisions: list[list[tuple[int, tuple[tuple[int, BotDecision], ...]]]] = [[] for _ in jobs]
-    turns: list[list[TurnRecord]] = [[] for _ in jobs]
-    step_indices = [0] * len(jobs)
-
     for row, job in enumerate(jobs):
-        brain_rng = random.Random(job.seed)
-        row_brains: list[BotBrain | None] = []
-        for seat, spec in enumerate(job.lineup):
-            try:
-                row_brains.append(spec.make_brain(seed=brain_rng.randrange(2**63)))
-            except Exception as error:
-                if job.fault_mode is FaultMode.RAISE:
-                    raise
-                row_brains.append(None)
-                _record_fault(
-                    faults[row],
-                    turn_index=0,
-                    seat=seat,
-                    bot_name=spec.name,
-                    error=error,
-                )
+        row_brains, construction_faults = initialize_brains(
+            job.lineup,
+            seed=job.seed,
+            fault_mode=job.fault_mode,
+        )
         brains.append(row_brains)
+        faults[row].extend(construction_faults)
         game_knowledge = canonical_knowledge(
             player_count,
             value_chart=job.value_chart,
@@ -125,177 +137,230 @@ def run_batch_matches(jobs: Sequence[BatchGameJob]) -> tuple[MatchResult, ...]:
                 )
             ]
         )
+    return _BatchRunState(
+        jobs=jobs,
+        player_count=player_count,
+        engine=engine,
+        brains=brains,
+        faults=faults,
+        knowledge=knowledge,
+        histories=histories,
+        decisions=[[] for _ in jobs],
+        turns=[[] for _ in jobs],
+        step_indices=[0] * len(jobs),
+    )
 
-    while True:
-        action_ids = engine.flip_actions()
-        active_rows = np.flatnonzero(action_ids)
-        if not len(active_rows):
-            break
-        resources_before = engine.upcoming.copy()
-        objective_claimants_before = engine.objective_claimants.copy()
-        turn_indices = engine.turn_indices.astype(np.int64, copy=True)
-        legal = engine.legal_max_bids()
-        raw_bids = np.zeros((len(jobs), player_count), dtype=np.int16)
-        for raw_row in active_rows:
-            row = int(raw_row)
-            histories[row].append(
-                PublicTurnOpened(
-                    kind=PublicEventKind.TURN_OPENED,
-                    action_id=int(action_ids[row]),
-                    resource_ids=(
-                        int(resources_before[row, 0]),
-                        int(resources_before[row, 1]),
-                    ),
-                )
-            )
 
-        for raw_row in active_rows:
-            row = int(raw_row)
-            job = jobs[row]
-            action_id = int(action_ids[row])
-            resource_ids = (
-                int(resources_before[row, 0]),
-                int(resources_before[row, 1]),
-            )
-            recorded: list[tuple[int, BotDecision]] = []
-            for seat in range(player_count):
-                context = build_batch_context(
-                    engine,
-                    row=row,
-                    seat=seat,
-                    decision_kind="submitBid",
-                    action_id=action_id,
-                    resource_ids=resource_ids,
-                    turn_index=int(turn_indices[row]),
-                    legal_max_amount=int(legal[row, seat]),
-                )
-                decision = _choose_decision(
-                    brain=brains[row][seat],
-                    context=context,
-                    knowledge=knowledge[row],
-                    history=tuple(histories[row]),
-                    fault_mode=job.fault_mode,
-                    faults=faults[row],
-                    turn_index=int(turn_indices[row]),
-                    seat=seat,
-                    bot_name=job.lineup[seat].name,
-                )
-                recorded.append((seat, decision))
-                if decision.action_kind == "submitBid":
-                    assert decision.value is not None
-                    raw_bids[row, seat] = decision.value
-            decisions[row].append((step_indices[row], tuple(recorded)))
-            step_indices[row] += 1
+def _prepare_next_turn(state: _BatchRunState) -> _PendingBatchTurn | None:
+    action_ids = state.engine.flip_actions()
+    active_rows = np.flatnonzero(action_ids)
+    if not len(active_rows):
+        return None
+    return _PendingBatchTurn(
+        action_ids=action_ids,
+        active_rows=active_rows,
+        resources_before=state.engine.upcoming.copy(),
+        objective_claimants_before=state.engine.objective_claimants.copy(),
+        turn_indices=state.engine.turn_indices.astype(np.int64, copy=True),
+        legal_max_bids=state.engine.legal_max_bids(),
+        raw_bids=np.zeros((len(state.jobs), state.player_count), dtype=np.int16),
+    )
 
-        outcome = engine.resolve_bids(raw_bids)
-        for raw_row in active_rows:
-            row = int(raw_row)
-            histories[row].append(
-                PublicAuctionResolved(
-                    kind=PublicEventKind.AUCTION_RESOLVED,
-                    bids_by_seat=tuple(int(value) for value in outcome.effective_bids[row]),
-                )
-            )
-        for raw_row in active_rows:
-            row = int(raw_row)
-            action_id = int(action_ids[row])
-            winner = int(outcome.winner_seats[row])
-            upcoming_before = tuple(
-                int(resource) for resource in resources_before[row] if resource > 0
-            )
-            previously_claimed = {
-                int(engine.objective_ids[row, index])
-                for index, claimant in enumerate(objective_claimants_before[row])
-                if claimant >= 0
-            }
-            claimed = tuple(
-                int(objective_id)
-                for index, objective_id in enumerate(engine.objective_ids[row])
-                if (
-                    objective_id > 0
-                    and engine.objective_claimants[row, index] == winner
-                    and int(objective_id) not in previously_claimed
-                )
-            )
-            grant_count = _RESOURCE_GRANTS.get(action_id, 0)
-            turns[row].append(
-                TurnRecord(
-                    turn_index=int(turn_indices[row]),
-                    action=_ACTION_BY_WIRE_ID[action_id],
-                    upcoming_before=upcoming_before,
-                    raw_bids=tuple(int(value) for value in raw_bids[row]),
-                    effective_bids=tuple(int(value) for value in outcome.effective_bids[row]),
-                    winner_seat=winner,
-                    paid=int(outcome.paid[row]),
-                    bundle_suits=upcoming_before[:grant_count],
-                    claimed_objective_wire_ids=claimed,
-                    reveal=None,
-                )
-            )
 
-        reveal_indices = np.full(len(jobs), -1, dtype=np.int16)
-        for raw_row in active_rows:
-            row = int(raw_row)
-            mode = int(outcome.reveal_modes[row])
-            if mode == 0:
-                continue
-            winner = int(outcome.winner_seats[row])
-            reveal_index = 0
-            auto = mode == 1
-            if mode == 2:
-                job = jobs[row]
-                context = build_batch_context(
-                    engine,
-                    row=row,
-                    seat=winner,
-                    decision_kind="selectInfoToReveal",
-                    action_id=int(action_ids[row]),
-                    resource_ids=(
-                        int(resources_before[row, 0]),
-                        int(resources_before[row, 1]),
-                    ),
-                    turn_index=int(turn_indices[row]),
-                    legal_max_amount=None,
-                )
-                decision = _choose_decision(
-                    brain=brains[row][winner],
-                    context=context,
-                    knowledge=knowledge[row],
-                    history=tuple(histories[row]),
-                    fault_mode=job.fault_mode,
-                    faults=faults[row],
-                    turn_index=int(engine.turn_indices[row]),
-                    seat=winner,
-                    bot_name=job.lineup[winner].name,
-                )
-                decisions[row].append((step_indices[row], ((winner, decision),)))
-                step_indices[row] += 1
-                if decision.action_kind == "selectInfoToReveal":
-                    assert decision.value is not None
-                    reveal_index = decision.value
-            reveal_indices[row] = reveal_index
-            revealed_suit = int(engine.hand_cards[row, winner, reveal_index])
-            histories[row].append(
-                PublicInformationRevealed(
-                    kind=PublicEventKind.INFORMATION_REVEALED,
-                    seat=winner,
-                    suit_id=revealed_suit,
-                )
+def _record_turn_opened(state: _BatchRunState, pending: _PendingBatchTurn) -> None:
+    for raw_row in pending.active_rows:
+        row = int(raw_row)
+        state.histories[row].append(
+            PublicTurnOpened(
+                kind=PublicEventKind.TURN_OPENED,
+                action_id=int(pending.action_ids[row]),
+                resource_ids=(
+                    int(pending.resources_before[row, 0]),
+                    int(pending.resources_before[row, 1]),
+                ),
             )
-            turns[row][-1] = replace(
-                turns[row][-1],
-                reveal=RevealRecord(
+        )
+
+
+def _collect_bid_decisions(state: _BatchRunState, pending: _PendingBatchTurn) -> None:
+    for raw_row in pending.active_rows:
+        row = int(raw_row)
+        job = state.jobs[row]
+        action_id = int(pending.action_ids[row])
+        resource_ids = (
+            int(pending.resources_before[row, 0]),
+            int(pending.resources_before[row, 1]),
+        )
+        recorded: list[tuple[int, BotDecision]] = []
+        for seat in range(state.player_count):
+            context = build_batch_context(
+                state.engine,
+                row=row,
+                seat=seat,
+                decision_kind="submitBid",
+                action_id=action_id,
+                resource_ids=resource_ids,
+                turn_index=int(pending.turn_indices[row]),
+                legal_max_amount=int(pending.legal_max_bids[row, seat]),
+            )
+            decision = choose_brain_decision(
+                brain=state.brains[row][seat],
+                context=context,
+                knowledge=state.knowledge[row],
+                history=tuple(state.histories[row]),
+                fault_mode=job.fault_mode,
+                faults=state.faults[row],
+                turn_index=int(pending.turn_indices[row]),
+                seat=seat,
+                bot_name=job.lineup[seat].name,
+            )
+            recorded.append((seat, decision))
+            if decision.action_kind == "submitBid":
+                assert decision.value is not None
+                pending.raw_bids[row, seat] = decision.value
+        state.decisions[row].append((state.step_indices[row], tuple(recorded)))
+        state.step_indices[row] += 1
+
+
+def _resolve_bids(
+    state: _BatchRunState,
+    pending: _PendingBatchTurn,
+) -> BatchTurnOutcome:
+    return state.engine.resolve_bids(pending.raw_bids)
+
+
+def _record_bid_outcomes(
+    state: _BatchRunState,
+    pending: _PendingBatchTurn,
+    outcome: BatchTurnOutcome,
+) -> None:
+    for raw_row in pending.active_rows:
+        row = int(raw_row)
+        state.histories[row].append(
+            PublicAuctionResolved(
+                kind=PublicEventKind.AUCTION_RESOLVED,
+                bids_by_seat=tuple(int(value) for value in outcome.effective_bids[row]),
+            )
+        )
+    for raw_row in pending.active_rows:
+        row = int(raw_row)
+        action_id = int(pending.action_ids[row])
+        winner = int(outcome.winner_seats[row])
+        upcoming_before = tuple(
+            int(resource) for resource in pending.resources_before[row] if resource > 0
+        )
+        previously_claimed = {
+            int(state.engine.objective_ids[row, index])
+            for index, claimant in enumerate(pending.objective_claimants_before[row])
+            if claimant >= 0
+        }
+        claimed = tuple(
+            int(objective_id)
+            for index, objective_id in enumerate(state.engine.objective_ids[row])
+            if (
+                objective_id > 0
+                and state.engine.objective_claimants[row, index] == winner
+                and int(objective_id) not in previously_claimed
+            )
+        )
+        grant_count = _RESOURCE_GRANTS.get(action_id, 0)
+        state.turns[row].append(
+            TurnRecord(
+                turn_index=int(pending.turn_indices[row]),
+                action=_ACTION_BY_WIRE_ID[action_id],
+                upcoming_before=upcoming_before,
+                raw_bids=tuple(int(value) for value in pending.raw_bids[row]),
+                effective_bids=tuple(int(value) for value in outcome.effective_bids[row]),
+                winner_seat=winner,
+                paid=int(outcome.paid[row]),
+                bundle_suits=upcoming_before[:grant_count],
+                claimed_objective_wire_ids=claimed,
+                reveal=None,
+            )
+        )
+
+
+def _resolve_reveals(
+    state: _BatchRunState,
+    pending: _PendingBatchTurn,
+    outcome: BatchTurnOutcome,
+) -> tuple[tuple[int, RevealRecord], ...]:
+    reveal_indices = np.full(len(state.jobs), -1, dtype=np.int16)
+    resolved_reveals: list[tuple[int, RevealRecord]] = []
+    for raw_row in pending.active_rows:
+        row = int(raw_row)
+        mode = int(outcome.reveal_modes[row])
+        if mode == 0:
+            continue
+        winner = int(outcome.winner_seats[row])
+        reveal_index = 0
+        auto = mode == 1
+        if mode == 2:
+            job = state.jobs[row]
+            context = build_batch_context(
+                state.engine,
+                row=row,
+                seat=winner,
+                decision_kind="selectInfoToReveal",
+                action_id=int(pending.action_ids[row]),
+                resource_ids=(
+                    int(pending.resources_before[row, 0]),
+                    int(pending.resources_before[row, 1]),
+                ),
+                turn_index=int(pending.turn_indices[row]),
+                legal_max_amount=None,
+            )
+            decision = choose_brain_decision(
+                brain=state.brains[row][winner],
+                context=context,
+                knowledge=state.knowledge[row],
+                history=tuple(state.histories[row]),
+                fault_mode=job.fault_mode,
+                faults=state.faults[row],
+                turn_index=int(state.engine.turn_indices[row]),
+                seat=winner,
+                bot_name=job.lineup[winner].name,
+            )
+            state.decisions[row].append((state.step_indices[row], ((winner, decision),)))
+            state.step_indices[row] += 1
+            if decision.action_kind == "selectInfoToReveal":
+                assert decision.value is not None
+                reveal_index = decision.value
+        reveal_indices[row] = reveal_index
+        resolved_reveals.append(
+            (
+                row,
+                RevealRecord(
                     seat=winner,
-                    suit=revealed_suit,
+                    suit=int(state.engine.hand_cards[row, winner, reveal_index]),
                     auto=auto,
                 ),
             )
-        engine.apply_reveals(reveal_indices)
+        )
+    state.engine.apply_reveals(reveal_indices)
+    return tuple(resolved_reveals)
 
-    scores = engine.scores()
-    rankings = engine.rankings()
+
+def _record_reveals(
+    state: _BatchRunState,
+    reveals: tuple[tuple[int, RevealRecord], ...],
+) -> None:
+    for row, reveal in reveals:
+        state.histories[row].append(
+            PublicInformationRevealed(
+                kind=PublicEventKind.INFORMATION_REVEALED,
+                seat=reveal.seat,
+                suit_id=reveal.suit,
+            )
+        )
+        state.turns[row][-1] = replace(state.turns[row][-1], reveal=reveal)
+
+
+def _build_match_results(state: _BatchRunState) -> tuple[MatchResult, ...]:
+    scores = state.engine.scores()
+    rankings = state.engine.rankings()
     results: list[MatchResult] = []
-    for row, job in enumerate(jobs):
+    for row, job in enumerate(state.jobs):
         score_rows = tuple(
             ScoreRow(
                 seat=seat,
@@ -307,7 +372,7 @@ def run_batch_matches(jobs: Sequence[BatchGameJob]) -> tuple[MatchResult, ...]:
                 loans_value=int(scores.loans[row, seat]),
                 total=int(scores.total[row, seat]),
             )
-            for seat in range(player_count)
+            for seat in range(state.player_count)
         )
         session_result = SessionResult(
             scores=tuple(
@@ -317,97 +382,53 @@ def run_batch_matches(jobs: Sequence[BatchGameJob]) -> tuple[MatchResult, ...]:
                     rank=1
                     + sum(
                         int(scores.total[row, other]) > int(scores.total[row, seat])
-                        for other in range(player_count)
+                        for other in range(state.player_count)
                     ),
                 )
-                for seat in range(player_count)
+                for seat in range(state.player_count)
             ),
             rows=score_rows,
             ranking=tuple(int(seat) for seat in rankings[row]),
         )
         replay = MatchReplay(
             schema_version=2,
-            player_count=player_count,
+            player_count=state.player_count,
             seed=job.seed,
             value_chart=job.value_chart.upper(),
             objectives_enabled=job.objectives_enabled,
             root_seed=None,
             game_index=None,
             bot_names=tuple(spec.name for spec in job.lineup),
-            decisions=tuple(decisions[row]),
-            turns=tuple(turns[row]),
+            decisions=tuple(state.decisions[row]),
+            turns=tuple(state.turns[row]),
             result=session_result,
         )
         results.append(
             MatchResult(
                 result=session_result,
                 events=(),
-                turns=tuple(turns[row]),
-                faults=tuple(faults[row]),
+                turns=tuple(state.turns[row]),
+                faults=tuple(state.faults[row]),
                 replay=replay,
             )
         )
     return tuple(results)
 
 
-def _choose_decision(
-    *,
-    brain: BotBrain | None,
-    context: DecisionContext,
-    knowledge: RulesetKnowledge,
-    history: PublicHistory,
-    fault_mode: FaultMode,
-    faults: list[BotFault],
-    turn_index: int,
-    seat: int,
-    bot_name: str,
-) -> BotDecision:
-    if brain is None:
-        return _fallback(context)
-    try:
-        if isinstance(brain, HistoryAwareBotBrain):
-            decision = brain.choose_decision_with_history(
-                context,
-                knowledge,
-                history,
-            )
-        else:
-            decision = brain.choose_decision(context, knowledge)
-        context.validate(decision)
-        return decision
-    except Exception as error:
-        if fault_mode is FaultMode.RAISE:
-            raise
-        _record_fault(
-            faults,
-            turn_index=turn_index,
-            seat=seat,
-            bot_name=bot_name,
-            error=error,
-        )
-        return _fallback(context)
+def run_batch_matches(jobs: Sequence[BatchGameJob]) -> tuple[MatchResult, ...]:
+    """Run a nonempty homogeneous-player-count chunk in deterministic row order."""
 
+    batch_jobs = tuple(jobs)
+    if not batch_jobs:
+        return ()
+    state = _initialize_batch(batch_jobs)
 
-def _fallback(context: DecisionContext) -> BotDecision:
-    if context.decision_kind == "selectInfoToReveal":
-        return BotDecision.select_info_to_reveal(0)
-    return BotDecision.submit_bid(0)
+    while pending := _prepare_next_turn(state):
+        _record_turn_opened(state, pending)
+        _collect_bid_decisions(state, pending)
+        outcome = _resolve_bids(state, pending)
+        _record_bid_outcomes(state, pending, outcome)
+        reveals = _resolve_reveals(state, pending, outcome)
+        _record_reveals(state, reveals)
 
-
-def _record_fault(
-    faults: list[BotFault],
-    *,
-    turn_index: int,
-    seat: int,
-    bot_name: str,
-    error: Exception,
-) -> None:
-    faults.append(
-        BotFault(
-            turn_index=turn_index,
-            seat=seat,
-            bot_name=bot_name,
-            error_type=type(error).__name__,
-            message=str(error),
-        )
-    )
+    return _build_match_results(state)

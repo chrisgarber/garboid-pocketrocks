@@ -30,9 +30,34 @@ class RulesetKnowledge:
     objectives_enabled: bool
 
 
-def _variant_name(value_chart: str, objectives_enabled: bool) -> str:
+def ruleset_name(value_chart: str, objectives_enabled: bool = True) -> str:
+    """Return the canonical ruleset name for one SDK-supported value chart."""
+
+    chart = value_chart.upper()
+    if chart not in VALUE_CHARTS:
+        raise ValueError(f"unknown value chart {value_chart!r} (expected A-E)")
     suffix = "" if objectives_enabled else "-no-objectives"
-    return f"live-{value_chart}{suffix}"
+    return f"live-{chart}{suffix}"
+
+
+def value_chart_from_ruleset_name(name: str) -> str:
+    """Return the SDK value chart encoded by a canonical ruleset name."""
+
+    prefix = "live-"
+    suffix = "-no-objectives"
+    if not name.startswith(prefix):
+        raise ValueError(f"unknown ruleset name {name!r}")
+    chart = name.removeprefix(prefix)
+    objectives_enabled = not chart.endswith(suffix)
+    if not objectives_enabled:
+        chart = chart.removesuffix(suffix)
+    try:
+        expected = ruleset_name(chart, objectives_enabled=objectives_enabled)
+    except (AttributeError, ValueError) as error:
+        raise ValueError(f"unknown ruleset name {name!r}") from error
+    if name != expected:
+        raise ValueError(f"unknown ruleset name {name!r}")
+    return chart
 
 
 def _resource_counts() -> tuple[int, ...]:
@@ -65,7 +90,7 @@ def canonical_knowledge(
     except KeyError as error:
         raise ValueError(f"unknown value chart {value_chart!r} (expected A-E)") from error
     return RulesetKnowledge(
-        name=_variant_name(chart, objectives_enabled),
+        name=ruleset_name(chart, objectives_enabled),
         player_count=player_count,
         starting_cash=starting_cash,
         private_cards_per_player=private_cards,
