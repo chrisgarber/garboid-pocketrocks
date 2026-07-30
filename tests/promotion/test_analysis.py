@@ -14,12 +14,16 @@ from garboid_pocketrocks.promotion.analysis import (
     bootstrap_paired_rating_differences,
 )
 from garboid_pocketrocks.simulator.session import SessionScore
-from garboid_pocketrocks.tournament.rating import TournamentRatingError
+from garboid_pocketrocks.tournament.rating import (
+    TournamentRatingError,
+    observations_from_games,
+)
 
 from .helpers import (
     promotion_plan,
     replace_summary,
     result_for_plan,
+    summary_for_job,
 )
 
 
@@ -147,6 +151,74 @@ def test_any_nonzero_fault_is_counted_by_identity_and_fails() -> None:
     assert analysis.faults_by_identity == expected_faults
 
 
+def test_faults_remain_attributed_when_the_same_summary_has_a_seed_mismatch() -> None:
+    plan = promotion_plan(pair_count=1)
+    result = result_for_plan(plan)
+    faulty = replace(
+        result.game_summaries[0],
+        seed=-1,
+        fault_counts=(2, 0, 3),
+    )
+    result = replace(result, game_summaries=(faulty, result.game_summaries[1]))
+
+    analysis = analyze_promotion(
+        plan,
+        result,
+        bootstrap_samples=10,
+        bootstrap_seed=42,
+    )
+
+    assert _failure_codes(analysis) == ("bot_fault", "seed_mismatch")
+    assert analysis.faults_by_identity == tuple(
+        sorted(
+            (
+                (faulty.bot_ids[0], 2),
+                (faulty.bot_ids[2], 3),
+            )
+        )
+    )
+    assert analysis.promoted is False
+
+
+@pytest.mark.parametrize(
+    "changes",
+    (
+        {
+            "bot_names": ("untrusted-name", "opponent-a", "opponent-b"),
+            "fault_counts": (4, 0, 0),
+        },
+        {
+            "bot_ids": ("untrusted-id", "opponent-a", "opponent-b"),
+            "fault_counts": (4, 0, 0),
+        },
+        {
+            "bot_ids": ("candidate", "opponent-a"),
+            "fault_counts": (4, 0, 0),
+        },
+        {
+            "bot_ids": ("candidate", "opponent-a", "opponent-b"),
+            "fault_counts": (4, 0),
+        },
+    ),
+)
+def test_faults_are_not_attributed_through_malformed_or_mismatched_identities(
+    changes: dict[str, object],
+) -> None:
+    plan = promotion_plan(pair_count=1)
+    result = replace_summary(result_for_plan(plan), 0, **changes)
+
+    analysis = analyze_promotion(
+        plan,
+        result,
+        bootstrap_samples=10,
+        bootstrap_seed=42,
+    )
+
+    assert "bot_fault" in _failure_codes(analysis)
+    assert analysis.faults_by_identity == ()
+    assert analysis.promoted is False
+
+
 def test_fits_rating_difference_and_deterministic_interval() -> None:
     plan = promotion_plan()
     result = result_for_plan(plan)
@@ -175,11 +247,45 @@ def test_fits_rating_difference_and_deterministic_interval() -> None:
 
 def test_bootstrap_resamples_complete_pairs(monkeypatch: pytest.MonkeyPatch) -> None:
     plan = promotion_plan()
-    result = result_for_plan(plan)
-    pairs = tuple(
-        (result.game_summaries[index], result.game_summaries[index + 1])
-        for index in range(0, len(result.game_summaries), 2)
+    candidate_rankings = (
+        {"candidate": 1, "opponent-a": 2, "opponent-b": 3},
+        {"candidate": 1, "opponent-a": 3, "opponent-b": 2},
+        {"candidate": 1, "opponent-a": 2, "opponent-b": 2},
     )
+    incumbent_rankings = (
+        {"incumbent": 3, "opponent-a": 1, "opponent-b": 2},
+        {"incumbent": 3, "opponent-a": 2, "opponent-b": 1},
+        {"incumbent": 2, "opponent-a": 1, "opponent-b": 1},
+    )
+    pairs = tuple(
+        (
+            summary_for_job(
+                pair.candidate_game,
+                final_money=(100, 50, 0),
+                ranks=tuple(
+                    candidate_rankings[pair.pair_index][spec.bot_id]
+                    for spec in pair.candidate_game.lineup
+                ),
+            ),
+            summary_for_job(
+                pair.incumbent_game,
+                final_money=(100, 50, 0),
+                ranks=tuple(
+                    incumbent_rankings[pair.pair_index][spec.bot_id]
+                    for spec in pair.incumbent_game.lineup
+                ),
+            ),
+        )
+        for pair in plan.pairs
+    )
+    pair_signatures = tuple(
+        (
+            observations_from_games((candidate_game,))[0].rank_groups,
+            observations_from_games((incumbent_game,))[0].rank_groups,
+        )
+        for candidate_game, incumbent_game in pairs
+    )
+    assert len({signature for pair in pair_signatures for signature in pair}) == 6
     recorded_groups: list[tuple[tuple[tuple[str, ...], ...], ...]] = []
     real_fit = analysis_module.fit_plackett_luce
 
@@ -199,15 +305,8 @@ def test_bootstrap_resamples_complete_pairs(monkeypatch: pytest.MonkeyPatch) -> 
     )
 
     for replicate in recorded_groups:
-        candidate_games = sum(
-            plan.candidate.bot_id in {bot_id for group in observation for bot_id in group}
-            for observation in replicate
-        )
-        incumbent_games = sum(
-            plan.incumbent.bot_id in {bot_id for group in observation for bot_id in group}
-            for observation in replicate
-        )
-        assert candidate_games == incumbent_games == len(plan.pairs)
+        for candidate_signature, incumbent_signature in pair_signatures:
+            assert replicate.count(candidate_signature) == replicate.count(incumbent_signature)
 
 
 def test_parallel_bootstrap_failure_retries_all_samples_serially(
