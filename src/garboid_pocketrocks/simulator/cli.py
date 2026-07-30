@@ -6,28 +6,15 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
-from garboid_pocketrocks.bots import (
-    AggressiveHeuristicBot,
-    BalancedHeuristicBot,
-    BotSpec,
-    PassiveHeuristicBot,
-    RandomBot,
-)
-from garboid_pocketrocks.rules import live_ruleset
+from garboid_pocketrocks.bots import BOT_SPECS_BY_NAME
 from garboid_pocketrocks.simulator.monte_carlo import (
     MonteCarloConfig,
     MonteCarloResult,
     MonteCarloRunner,
 )
 from garboid_pocketrocks.simulator.replay import save_replay
-from garboid_pocketrocks.simulator.sampling import FixedRulesetSampler
 
-_BOT_REGISTRY = {
-    RandomBot.BOT_NAME: BotSpec.from_bot_class(RandomBot),
-    AggressiveHeuristicBot.BOT_NAME: BotSpec.from_bot_class(AggressiveHeuristicBot),
-    BalancedHeuristicBot.BOT_NAME: BotSpec.from_bot_class(BalancedHeuristicBot),
-    PassiveHeuristicBot.BOT_NAME: BotSpec.from_bot_class(PassiveHeuristicBot),
-}
+_BOT_REGISTRY = BOT_SPECS_BY_NAME
 
 
 def _positive_int(value: str) -> int:
@@ -55,7 +42,10 @@ def _parser() -> argparse.ArgumentParser:
         "--bots",
         required=True,
         type=_bot_names,
-        help="comma-separated registered bot names (random, aggressive, balanced, passive)",
+        help=(
+            "comma-separated registered bot names "
+            f"({', '.join(_BOT_REGISTRY)})"
+        ),
     )
     parser.add_argument("--games", required=True, type=_positive_int)
     parser.add_argument("--players", required=True, type=int, choices=(3, 4, 5))
@@ -142,12 +132,11 @@ def main() -> None:
             f"--bots supplies {len(args.bots)} entries but --players requires "
             f"at least {args.players}"
         )
-    ruleset = live_ruleset(args.ruleset.removeprefix("live-"))
     config = MonteCarloConfig(
         bot_specs=tuple(_BOT_REGISTRY[name] for name in args.bots),
         games=args.games,
         player_counts=(args.players,),
-        ruleset_sampler=FixedRulesetSampler(ruleset),
+        value_charts=(args.ruleset.removeprefix("live-"),),
         root_seed=args.seed,
         capture_replays=args.replay_dir is not None,
     )

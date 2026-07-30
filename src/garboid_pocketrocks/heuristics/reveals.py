@@ -6,7 +6,7 @@ from pocketrocks import DecisionContext, Suit
 
 from garboid_pocketrocks.heuristics.belief import build_belief
 from garboid_pocketrocks.heuristics.errors import HeuristicInputError
-from garboid_pocketrocks.rules import RulesetKnowledge
+from garboid_pocketrocks.knowledge import RulesetKnowledge
 
 _CHART_BUCKET_COUNT = 6
 _SUIT_COUNT = len(Suit)

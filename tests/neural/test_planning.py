@@ -18,7 +18,7 @@ from garboid_pocketrocks.neural.run_config import (  # noqa: E402
     ParallelConfig,
     TrainingRunConfig,
 )
-from garboid_pocketrocks.rules import live_ruleset  # noqa: E402
+from garboid_pocketrocks.knowledge import canonical_knowledge  # noqa: E402
 
 
 def test_training_encoder_covers_every_live_chart_and_player_count() -> None:
@@ -33,14 +33,17 @@ def test_training_encoder_covers_every_live_chart_and_player_count() -> None:
     )
     assert config.supported_player_counts == (3, 4, 5)
     for chart in "ABCDE":
-        ruleset = live_ruleset(chart)
         for player_count in (3, 4, 5):
+            knowledge = canonical_knowledge(
+                player_count,
+                value_chart=chart,
+            )
             required = (
                 1
-                + (2 * sum(ruleset.action_counts))
+                + (2 * sum(knowledge.action_counts))
                 + (
                     player_count
-                    * ruleset.setup_for(player_count).private_cards_per_player
+                    * knowledge.private_cards_per_player
                 )
             )
             assert required <= config.max_history_events

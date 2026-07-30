@@ -31,8 +31,6 @@ from garboid_pocketrocks.neural.smoke import (  # noqa: E402
     run_smoke,
     smoke_run_config,
 )
-from garboid_pocketrocks.rules import LIVE_RULESET  # noqa: E402
-from garboid_pocketrocks.simulator.sampling import FixedRulesetSampler  # noqa: E402
 from garboid_pocketrocks.training.bounds import EnvironmentBounds  # noqa: E402
 from garboid_pocketrocks.training.single_agent_env import PocketRocksEnv  # noqa: E402
 
@@ -60,7 +58,7 @@ def test_canonical_checkpoint_fixture_is_a_reachable_environment_decision() -> N
             BALANCED_HEURISTIC_BOT_SPEC,
             PASSIVE_HEURISTIC_BOT_SPEC,
         ),
-        ruleset_sampler=FixedRulesetSampler(LIVE_RULESET),
+        value_charts=("A",),
         player_count=3,
         bounds=bounds,
         learner_seat=0,

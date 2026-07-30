@@ -8,21 +8,18 @@ from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures.process import BrokenProcessPool
 from dataclasses import dataclass, field, replace
 
+from pocketrocks.sim.constants import ACTION_WIRE_IDS, VALUE_CHARTS
+
 from garboid_pocketrocks.bots.base import BotSpec
-from garboid_pocketrocks.rules import Ruleset
 from garboid_pocketrocks.simulator.errors import SimulationError
-from garboid_pocketrocks.simulator.events import EventKind
-from garboid_pocketrocks.simulator.model import Score
 from garboid_pocketrocks.simulator.replay import MatchReplay
 from garboid_pocketrocks.simulator.runner import (
     FaultMode,
     MatchResult,
     MatchRunner,
 )
-from garboid_pocketrocks.simulator.sampling import (
-    RulesetSampler,
-    derive_seed,
-)
+from garboid_pocketrocks.simulator.seeding import derive_seed
+from garboid_pocketrocks.simulator.session import SessionScore
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,8 +27,9 @@ class MonteCarloConfig:
     bot_specs: tuple[BotSpec, ...]
     games: int
     player_counts: tuple[int, ...]
-    ruleset_sampler: RulesetSampler
+    value_charts: tuple[str, ...]
     root_seed: int
+    objectives_enabled: tuple[bool, ...] = (True,)
     fault_mode: FaultMode = FaultMode.RAISE
     capture_replays: bool = False
 
@@ -42,21 +40,20 @@ class MonteCarloConfig:
             raise ValueError("player_counts must be nonempty")
         if not self.bot_specs:
             raise ValueError("bot_specs must be nonempty")
+        if not self.value_charts:
+            raise ValueError("value_charts must be nonempty")
+        normalized_charts = tuple(chart.upper() for chart in self.value_charts)
+        if any(chart not in VALUE_CHARTS for chart in normalized_charts):
+            raise ValueError("value charts must use SDK chart names A-E")
+        object.__setattr__(self, "value_charts", normalized_charts)
+        if not self.objectives_enabled:
+            raise ValueError("objectives_enabled must be nonempty")
+        if any(not isinstance(enabled, bool) for enabled in self.objectives_enabled):
+            raise ValueError("objectives_enabled values must be booleans")
         if any(player_count < 3 or player_count > 5 for player_count in self.player_counts):
             raise ValueError("player counts must be between 3 and 5")
         if len(self.bot_specs) < max(self.player_counts):
             raise ValueError("not enough bot specs for the requested player counts")
-        support = self.ruleset_sampler.support()
-        if not support:
-            raise ValueError("ruleset sampler support must be nonempty")
-        rulesets_by_name: dict[str, Ruleset] = {}
-        for ruleset in support:
-            existing = rulesets_by_name.get(ruleset.name)
-            if existing is not None and existing != ruleset:
-                raise ValueError(f"different rulesets must not use the same name {ruleset.name!r}")
-            rulesets_by_name[ruleset.name] = ruleset
-            for player_count in self.player_counts:
-                ruleset.setup_for(player_count)
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,7 +62,8 @@ class GameJob:
     root_seed: int
     seed: int
     player_count: int
-    ruleset: Ruleset
+    value_chart: str
+    objectives_enabled: bool
     lineup: tuple[BotSpec, ...]
     fault_mode: FaultMode
 
@@ -79,7 +77,7 @@ class GameSummary:
     ruleset_name: str
     bot_names: tuple[str, ...]
     bot_ids: tuple[str, ...]
-    scores: tuple[Score, ...]
+    scores: tuple[SessionScore, ...]
     decision_counts: tuple[int, ...]
     fault_counts: tuple[int, ...]
 
@@ -246,7 +244,7 @@ class _StatisticsAccumulator:
     def record(
         self,
         *,
-        score: Score,
+        score: SessionScore,
         outright_win: bool,
         first_place_tie: bool,
         score_margin: int,
@@ -274,6 +272,11 @@ class _BehaviorAccumulator:
     objectives_claimed: int = 0
 
 
+def _variant_name(value_chart: str, objectives_enabled: bool) -> str:
+    suffix = "" if objectives_enabled else "-no-objectives"
+    return f"live-{value_chart}{suffix}"
+
+
 class MonteCarloRunner:
     @staticmethod
     def plan(config: MonteCarloConfig) -> tuple[GameJob, ...]:
@@ -287,15 +290,18 @@ class MonteCarloRunner:
                 base_lineups[player_count] = tuple(shuffled)
 
         jobs: list[GameJob] = []
+        variants = tuple(
+            (chart, objectives_enabled)
+            for chart in config.value_charts
+            for objectives_enabled in config.objectives_enabled
+        )
         for game_index in range(config.games):
             player_count = random.Random(
                 derive_seed(config.root_seed, "player_count", game_index)
             ).choice(config.player_counts)
-            ruleset = config.ruleset_sampler.sample(
-                root_seed=config.root_seed,
-                game_index=game_index,
-            )
-            ruleset.setup_for(player_count)
+            value_chart, objectives_enabled = random.Random(
+                derive_seed(config.root_seed, "variant", game_index)
+            ).choice(variants)
             if player_count in base_lineups:
                 selected = list(base_lineups[player_count])
             else:
@@ -310,7 +316,8 @@ class MonteCarloRunner:
                     root_seed=config.root_seed,
                     seed=derive_seed(config.root_seed, "game", game_index),
                     player_count=player_count,
-                    ruleset=ruleset,
+                    value_chart=value_chart,
+                    objectives_enabled=objectives_enabled,
                     lineup=lineup,
                     fault_mode=config.fault_mode,
                 )
@@ -323,9 +330,19 @@ class MonteCarloRunner:
         *,
         workers: int = 1,
     ) -> MonteCarloResult:
+        jobs = MonteCarloRunner.plan(config)
+        return MonteCarloRunner.run_jobs(config, jobs, workers=workers)
+
+    @staticmethod
+    def run_jobs(
+        config: MonteCarloConfig,
+        jobs: tuple[GameJob, ...],
+        *,
+        workers: int = 1,
+    ) -> MonteCarloResult:
         if workers < 1:
             raise ValueError("workers must be positive")
-        jobs = MonteCarloRunner.plan(config)
+        _validate_jobs(config, jobs)
         if workers == 1:
             completed = tuple(_execute_job(job) for job in jobs)
         else:
@@ -339,6 +356,36 @@ class MonteCarloRunner:
                     f"process workers failed to load bot specs: {names}"
                 ) from error
         return _aggregate(config, completed)
+
+
+def _validate_jobs(
+    config: MonteCarloConfig,
+    jobs: tuple[GameJob, ...],
+) -> None:
+    if len(jobs) != config.games:
+        raise ValueError(f"job count {len(jobs)} does not match configured games {config.games}")
+    if tuple(job.game_index for job in jobs) != tuple(range(config.games)):
+        raise ValueError("game indices must be contiguous and start at zero")
+    if any(job.root_seed != config.root_seed for job in jobs):
+        raise ValueError("every job root seed must match the configuration")
+
+    supported_variants = {
+        (value_chart, objectives_enabled)
+        for value_chart in config.value_charts
+        for objectives_enabled in config.objectives_enabled
+    }
+    configured_bot_ids = {spec.bot_id for spec in config.bot_specs}
+    for job in jobs:
+        if job.player_count not in config.player_counts:
+            raise ValueError(f"job {job.game_index} uses an unconfigured player count")
+        if (job.value_chart, job.objectives_enabled) not in supported_variants:
+            raise ValueError(f"job {job.game_index} uses an unsupported SDK variant")
+        if len(job.lineup) != job.player_count:
+            raise ValueError(f"job {job.game_index} lineup length does not match player count")
+        if any(spec.bot_id not in configured_bot_ids for spec in job.lineup):
+            raise ValueError(f"job {job.game_index} uses an unconfigured bot identity")
+        if job.fault_mode is not config.fault_mode:
+            raise ValueError(f"job {job.game_index} fault mode does not match the configuration")
 
 
 def _validate_picklable_bot_specs(bot_specs: tuple[BotSpec, ...]) -> None:
@@ -380,9 +427,10 @@ def _execute_job(job: GameJob) -> _CompletedGame:
         job=job,
         match=MatchRunner.run(
             job.lineup,
-            ruleset=job.ruleset,
             player_count=job.player_count,
             seed=job.seed,
+            value_chart=job.value_chart,
+            objectives_enabled=job.objectives_enabled,
             fault_mode=job.fault_mode,
         ),
     )
@@ -399,6 +447,11 @@ def _aggregate(
     per_seat: dict[str, dict[int, _StatisticsAccumulator]] = {}
     per_ruleset: dict[str, dict[str, _StatisticsAccumulator]] = {}
     behavior: dict[str, _BehaviorAccumulator] = {}
+    variant_names = tuple(
+        _variant_name(chart, enabled)
+        for chart in config.value_charts
+        for enabled in config.objectives_enabled
+    )
     for spec in config.bot_specs:
         if spec.bot_id in total:
             continue
@@ -409,8 +462,8 @@ def _aggregate(
             seat: _StatisticsAccumulator.with_rank_count(rank_count) for seat in range(rank_count)
         }
         per_ruleset[spec.bot_id] = {
-            ruleset.name: _StatisticsAccumulator.with_rank_count(rank_count)
-            for ruleset in config.ruleset_sampler.support()
+            variant_name: _StatisticsAccumulator.with_rank_count(rank_count)
+            for variant_name in variant_names
         }
         behavior[spec.bot_id] = _BehaviorAccumulator()
 
@@ -419,6 +472,7 @@ def _aggregate(
     for completed in sorted(completed_games, key=lambda item: item.job.game_index):
         job = completed.job
         match = completed.match
+        variant_name = _variant_name(job.value_chart, job.objectives_enabled)
         decisions_by_seat = tuple(
             sum(
                 decision_seat == seat
@@ -436,7 +490,7 @@ def _aggregate(
                 root_seed=job.root_seed,
                 seed=job.seed,
                 player_count=job.player_count,
-                ruleset_name=job.ruleset.name,
+                ruleset_name=variant_name,
                 bot_names=tuple(spec.name for spec in job.lineup),
                 bot_ids=tuple(spec.bot_id for spec in job.lineup),
                 scores=match.result.scores,
@@ -466,7 +520,7 @@ def _aggregate(
             for accumulator in (
                 total[spec.bot_id],
                 per_seat[spec.bot_id][seat],
-                per_ruleset[spec.bot_id][job.ruleset.name],
+                per_ruleset[spec.bot_id][variant_name],
             ):
                 accumulator.record(
                     score=score,
@@ -518,19 +572,11 @@ def _record_behavior(
                 assert decision.value is not None
                 accumulator.reveal_choices.append(decision.value)
 
-    for event in replay.events:
-        if event.seat is None:
-            continue
-        accumulator = accumulators[bot_ids_by_seat[event.seat]]
-        if event.kind is EventKind.AUCTION_RESOLVED:
-            assert event.action_id is not None
-            accumulator.wins_by_action[int(event.action_id) - 1] += 1
-        elif event.kind is EventKind.RESOURCES_AWARDED:
-            assert event.resource_ids is not None
-            accumulator.resource_cards_won += len(event.resource_ids)
-        elif event.kind is EventKind.OBJECTIVE_CLAIMED:
-            assert event.objective_ids is not None
-            accumulator.objectives_claimed += len(event.objective_ids)
+    for turn in replay.turns:
+        accumulator = accumulators[bot_ids_by_seat[turn.winner_seat]]
+        accumulator.wins_by_action[ACTION_WIRE_IDS[turn.action] - 1] += 1
+        accumulator.resource_cards_won += len(turn.bundle_suits)
+        accumulator.objectives_claimed += len(turn.claimed_objective_wire_ids)
 
 
 def _freeze_bot_statistics(

@@ -19,8 +19,8 @@ from garboid_pocketrocks.adapters.public_history import (
     PublicInformationRevealed,
     PublicTurnOpened,
 )
+from garboid_pocketrocks.knowledge import RulesetKnowledge
 from garboid_pocketrocks.neural.config import NeuralEncoderConfig
-from garboid_pocketrocks.rules import RulesetKnowledge
 from garboid_pocketrocks.training.actions import ActionCodec
 from garboid_pocketrocks.training.bounds import EnvironmentBounds
 

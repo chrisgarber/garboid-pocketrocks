@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from garboid_pocketrocks.rules import LIVE_RULESET, live_ruleset
+from garboid_pocketrocks.knowledge import canonical_knowledge
 
 
 @dataclass(frozen=True, slots=True)
@@ -92,13 +92,13 @@ def stage1_encoder_config() -> NeuralEncoderConfig:
     """Return the exact live-A, three-player Stage 1 encoder contract."""
 
     player_count = 3
-    setup = LIVE_RULESET.setup_for(player_count)
+    knowledge = canonical_knowledge(player_count)
     history_bound = (
-        1 + (2 * sum(LIVE_RULESET.action_counts)) + (player_count * setup.private_cards_per_player)
+        1 + (2 * sum(knowledge.action_counts)) + (player_count * knowledge.private_cards_per_player)
     )
     return NeuralEncoderConfig(
         schema_version=1,
-        supported_ruleset_names=(LIVE_RULESET.name,),
+        supported_ruleset_names=(knowledge.name,),
         supported_player_counts=(player_count,),
         max_bid=100,
         max_hand_size=5,
@@ -127,21 +127,21 @@ def stage1_model_config() -> NeuralModelConfig:
 def training_encoder_config() -> NeuralEncoderConfig:
     """Return the finite live-chart, three-to-five-player training contract."""
 
-    rulesets = tuple(live_ruleset(chart) for chart in "ABCDE")
     player_counts = (3, 4, 5)
+    variants = tuple(
+        canonical_knowledge(player_count, value_chart=chart)
+        for chart in "ABCDE"
+        for player_count in player_counts
+    )
     max_history_events = max(
         1
-        + (2 * sum(ruleset.action_counts))
-        + (
-            player_count
-            * ruleset.setup_for(player_count).private_cards_per_player
-        )
-        for ruleset in rulesets
-        for player_count in player_counts
+        + (2 * sum(knowledge.action_counts))
+        + (knowledge.player_count * knowledge.private_cards_per_player)
+        for knowledge in variants
     )
     return NeuralEncoderConfig(
         schema_version=1,
-        supported_ruleset_names=tuple(ruleset.name for ruleset in rulesets),
+        supported_ruleset_names=tuple(f"live-{chart}" for chart in "ABCDE"),
         supported_player_counts=player_counts,
         max_bid=100,
         max_hand_size=5,
@@ -149,7 +149,9 @@ def training_encoder_config() -> NeuralEncoderConfig:
         max_cash=100,
         max_abs_chart=20,
         max_resource_cards=max(
-            sum(ruleset.resource_counts) for ruleset in rulesets
+            sum(knowledge.resource_counts) for knowledge in variants
         ),
-        max_action_cards=max(sum(ruleset.action_counts) for ruleset in rulesets),
+        max_action_cards=max(
+            sum(knowledge.action_counts) for knowledge in variants
+        ),
     )

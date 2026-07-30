@@ -9,11 +9,12 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 from pocketrocks import ActionId, BotDecision, DecisionContext, Suit
+from pocketrocks.sim.constants import VALUE_CHARTS
 
 from garboid_pocketrocks.heuristics.belief import build_belief
 from garboid_pocketrocks.heuristics.errors import HeuristicInputError
-from garboid_pocketrocks.rules import VALUE_CHARTS, RulesetKnowledge, live_ruleset
-from garboid_pocketrocks.simulator.engine import GameEngine
+from garboid_pocketrocks.knowledge import RulesetKnowledge, canonical_knowledge
+from garboid_pocketrocks.simulator.session import SdkGameSession
 
 from .helpers import make_context, make_knowledge
 
@@ -344,24 +345,39 @@ def test_engine_generated_contexts_preserve_exact_belief_properties(
     game_seed: int,
     decision_seed: int,
 ) -> None:
-    ruleset = live_ruleset(chart_name)
-    knowledge = ruleset.knowledge(player_count)
-    transition = GameEngine.start(ruleset, player_count=player_count, seed=game_seed)
+    knowledge = canonical_knowledge(player_count, value_chart=chart_name)
+    session = SdkGameSession.start(
+        player_count=player_count,
+        seed=game_seed,
+        value_chart=chart_name,
+    )
     decision_rng = random.Random(decision_seed)
     total_biddable = sum(knowledge.resource_counts) - (
         player_count * knowledge.private_cards_per_player
     )
 
-    while transition.pending is not None:
-        for _seat, context in transition.pending.contexts:
+    while not session.terminated:
+        for _seat, context in session.pending.contexts:
             belief = build_belief(context, knowledge)
             won_count = sum(count for row in context.won_resource_counts_by_seat for count in row)
-            offered_count = (
+            if context.decision_kind == "submitBid" and context.current_action_id == int(
+                ActionId.AUCTION1
+            ):
+                offered_count = int(context.current_resource_ids[0] != 0)
+            elif context.decision_kind == "submitBid" and context.current_action_id == int(
+                ActionId.AUCTION2
+            ):
+                offered_count = sum(
+                    resource_id != 0 for resource_id in context.current_resource_ids
+                )
+            else:
+                offered_count = 0
+            visible_count = (
                 sum(resource_id != 0 for resource_id in context.current_resource_ids)
                 if context.decision_kind == "submitBid"
-                and context.current_action_id in (int(ActionId.AUCTION1), int(ActionId.AUCTION2))
                 else 0
             )
+            known_future_count = visible_count - offered_count
             future_biddable = total_biddable - won_count - offered_count
             hidden_slots = sum(
                 knowledge.private_cards_per_player - sum(context.revealed_info_counts_by_seat[seat])
@@ -373,7 +389,9 @@ def test_engine_generated_contexts_preserve_exact_belief_properties(
             assert len(belief.suits) == len(Suit)
             assert all(suit.opponent_hidden_slots == hidden_slots for suit in belief.suits)
             assert (
-                sum(suit.unseen_suit_count for suit in belief.suits) - hidden_slots
+                sum(suit.unseen_suit_count for suit in belief.suits)
+                - hidden_slots
+                + known_future_count
                 == future_biddable
             )
             assert sum(belief.expected_future_biddable_counts) == pytest.approx(future_biddable)
@@ -412,7 +430,7 @@ def test_engine_generated_contexts_preserve_exact_belief_properties(
                 assert build_belief(after_reveal, knowledge) == belief
 
         decisions: dict[int, BotDecision] = {}
-        for seat, context in transition.pending.contexts:
+        for seat, context in session.pending.contexts:
             if context.decision_kind == "submitBid":
                 assert context.legal_max_amount is not None
                 decisions[seat] = BotDecision.submit_bid(
@@ -424,4 +442,4 @@ def test_engine_generated_contexts_preserve_exact_belief_properties(
                 )
             else:
                 decisions[seat] = BotDecision.pass_turn()
-        transition = GameEngine.step(transition.state, decisions)
+        session.step(decisions)

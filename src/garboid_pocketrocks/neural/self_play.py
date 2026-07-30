@@ -9,9 +9,10 @@ from dataclasses import dataclass
 from pocketrocks import BotDecision, DecisionContext
 from pocketrocks.exceptions import InvalidBotDecision
 
-from garboid_pocketrocks.adapters.simulator_history import (
-    SimulatorPublicHistoryAdapter,
+from garboid_pocketrocks.adapters.public_history import (
+    public_history_from_sdk_events,
 )
+from garboid_pocketrocks.knowledge import canonical_knowledge
 from garboid_pocketrocks.neural.config import NeuralEncoderConfig
 from garboid_pocketrocks.neural.encoding import (
     NeuralObservation,
@@ -28,8 +29,7 @@ from garboid_pocketrocks.neural.rollout import (
     SeatTrajectory,
     _immutable_observation,
 )
-from garboid_pocketrocks.rules import live_ruleset
-from garboid_pocketrocks.simulator.engine import EngineTransition, GameEngine
+from garboid_pocketrocks.simulator.session import SdkGameSession
 from garboid_pocketrocks.training.actions import ActionCodec
 from garboid_pocketrocks.training.bounds import EnvironmentBounds
 from garboid_pocketrocks.training.rewards import (
@@ -90,10 +90,10 @@ class SelfPlayGame:
         *,
         encoder_config: NeuralEncoderConfig,
         reward_config: RewardConfig,
-        transition: EngineTransition,
-        history: SimulatorPublicHistoryAdapter,
+        session: SdkGameSession,
         reward_tracker: RewardTracker,
     ) -> None:
+        del reward_config
         self.plan = plan
         self.encoder_config = encoder_config
         self.bounds = EnvironmentBounds(
@@ -102,10 +102,11 @@ class SelfPlayGame:
         )
         self.codec = ActionCodec(self.bounds)
         self.encoder = NeuralObservationEncoder(encoder_config, self.bounds)
-        self.ruleset = transition.state.ruleset
-        self.knowledge = self.ruleset.knowledge(plan.player_count)
-        self.transition = transition
-        self.history = history
+        self.knowledge = canonical_knowledge(
+            plan.player_count,
+            value_chart=plan.ruleset_name.removeprefix("live-"),
+        )
+        self.session = session
         self.reward_tracker = reward_tracker
         self._pending_contexts: dict[int, DecisionContext] = {}
         self._pending_requests: tuple[PendingPolicyRequest, ...] = ()
@@ -134,27 +135,24 @@ class SelfPlayGame:
         if plan.player_count not in encoder_config.supported_player_counts:
             raise SelfPlayError("episode player count is outside encoder support")
         chart = plan.ruleset_name.removeprefix("live-")
-        ruleset = live_ruleset(chart)
-        transition = GameEngine.start(
-            ruleset,
+        session = SdkGameSession.start(
             player_count=plan.player_count,
             seed=plan.engine_seed,
+            value_chart=chart,
         )
-        history = SimulatorPublicHistoryAdapter.from_initial_transition(transition)
         reward_tracker = RewardTracker(reward_config)
-        reward_tracker.reset(transition.state)
+        reward_tracker.reset(session.snapshot)
         return cls(
             plan,
             encoder_config=encoder_config,
             reward_config=reward_config,
-            transition=transition,
-            history=history,
+            session=session,
             reward_tracker=reward_tracker,
         )
 
     @property
     def terminated(self) -> bool:
-        return self.transition.terminated
+        return self.session.terminated
 
     def pending_requests(self) -> tuple[PendingPolicyRequest, ...]:
         """Return the cached complete request batch for the current engine phase."""
@@ -215,9 +213,8 @@ class SelfPlayGame:
             )
             self._decision_counts[seat] += 1
 
-        self.transition = GameEngine.step(self.transition.state, decisions)
-        self.history.append(self.transition.events)
-        rewards = self.reward_tracker.update(self.transition)
+        transition = self.session.step(decisions)
+        rewards = self.reward_tracker.update(transition)
         for seat, reward in rewards.items():
             self._pending_rewards[seat] = _add_breakdowns(
                 self._pending_rewards[seat],
@@ -235,7 +232,7 @@ class SelfPlayGame:
     def episode(self) -> MultiSeatEpisode:
         """Return the complete immutable game after termination."""
 
-        if not self.terminated or self.transition.result is None:
+        if not self.terminated or self.session.result is None:
             raise SelfPlayError("episode is available only after the game terminated")
         trajectories = tuple(
             SeatTrajectory(
@@ -251,13 +248,14 @@ class SelfPlayGame:
         return MultiSeatEpisode(
             plan=self.plan,
             trajectories=trajectories,
-            result=self.transition.result,
+            result=self.session.result,
         )
 
     def _prepare_pending_requests(self) -> None:
-        if self.transition.pending is None:
+        if self.session.terminated:
             raise SelfPlayError("active game has no pending decision batch")
-        contexts = dict(self.transition.pending.contexts)
+        contexts = dict(self.session.pending.contexts)
+        history = public_history_from_sdk_events(self.session.events)
         requests: list[PendingPolicyRequest] = []
         for seat in sorted(contexts):
             if seat in self._open_by_seat:
@@ -266,7 +264,7 @@ class SelfPlayGame:
             observation = self.encoder.encode(
                 context,
                 self.knowledge,
-                self.history.history,
+                history,
             )
             policy = self.plan.seat_policies[seat]
             decision_index = self._decision_counts[seat]

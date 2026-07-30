@@ -9,7 +9,7 @@ from pocketrocks.testing import FakeTransport, decode_frames, scenario
 
 from garboid_pocketrocks.bots.base import BotSpec, PocketRocksFastBot
 from garboid_pocketrocks.bots.random_bot import RandomBot, RandomBotBrain
-from garboid_pocketrocks.rules import LIVE_RULESET
+from garboid_pocketrocks.knowledge import canonical_knowledge
 
 RANDOM_BOT_ID = "bot_e0e2c541-1615-4f47-983c-224e7d888d89"
 
@@ -64,12 +64,12 @@ def test_random_bot_has_static_public_identity() -> None:
 def test_random_brain_and_async_bridge_return_same_decision() -> None:
     context = _bid_context(7)
     brain = RandomBotBrain(seed=42)
-    expected = brain.choose_decision(context, LIVE_RULESET.knowledge(3))
+    expected = brain.choose_decision(context, canonical_knowledge(3))
     bot = _bot(seed=42)
 
     assert _choose(bot, context) == expected
     assert _bot(seed=42).choose_decision_sync(context) == RandomBotBrain(seed=42).choose_decision(
-        context, LIVE_RULESET.knowledge(3)
+        context, canonical_knowledge(3)
     )
 
 

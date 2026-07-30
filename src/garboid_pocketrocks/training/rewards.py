@@ -2,12 +2,26 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
+from enum import StrEnum
 
 from pocketrocks import OBJECTIVES
 
-from garboid_pocketrocks.simulator.engine import EngineTransition
-from garboid_pocketrocks.simulator.events import EventKind
-from garboid_pocketrocks.simulator.model import GameState, PlayerState, Seat
+from garboid_pocketrocks.simulator.session import (
+    PlayerSnapshot,
+    SessionSnapshot,
+    SessionTransition,
+)
+
+type Seat = int
+
+
+class RewardEventKind(StrEnum):
+    AUCTION_RESOLVED = "auction_resolved"
+    RESOURCES_AWARDED = "resources_awarded"
+    LOAN_ACQUIRED = "loan_acquired"
+    INVESTMENT_ACQUIRED = "investment_acquired"
+    OBJECTIVE_CLAIMED = "objective_claimed"
+    INFORMATION_REVEALED = "information_revealed"
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,10 +44,10 @@ class RewardConfig:
             raise ValueError("reward coefficients must be finite")
         if self.invalid_action_penalty < 0:
             raise ValueError("invalid action penalty must be nonnegative")
-        event_kinds = tuple(kind for kind, _ in self.event_bonuses)
+        event_kinds = tuple(kind for kind, _bonus in self.event_bonuses)
         if len(set(event_kinds)) != len(event_kinds):
             raise ValueError("event bonuses must not contain duplicate event kinds")
-        unknown = set(event_kinds) - {kind.value for kind in EventKind}
+        unknown = set(event_kinds) - {kind.value for kind in RewardEventKind}
         if unknown:
             raise ValueError(f"event bonuses contain unknown event kinds: {sorted(unknown)!r}")
 
@@ -55,29 +69,28 @@ class RewardBreakdown:
 
 @dataclass(slots=True)
 class RewardTracker:
-    """Tracks per-seat public potential and decomposes every reward source."""
+    """Tracks public SDK-state potential and decomposes every reward source."""
 
     config: RewardConfig = RewardConfig()
     _previous_potential: dict[Seat, int] = field(default_factory=dict, init=False)
     _starting_cash: dict[Seat, int] = field(default_factory=dict, init=False)
     _terminal: bool = field(default=False, init=False)
 
-    def reset(self, state: GameState) -> None:
-        starting_cash = state.ruleset.setup_for(state.player_count).starting_cash
+    def reset(self, snapshot: SessionSnapshot) -> None:
         self._previous_potential = {
-            player.seat: _public_potential(player) for player in state.players
+            player.seat: _public_potential(player) for player in snapshot.players
         }
-        self._starting_cash = {player.seat: starting_cash for player in state.players}
+        self._starting_cash = {player.seat: player.cash for player in snapshot.players}
         self._terminal = False
 
-    def update(self, transition: EngineTransition) -> dict[Seat, RewardBreakdown]:
+    def update(self, transition: SessionTransition) -> dict[Seat, RewardBreakdown]:
         if not self._previous_potential:
             raise ValueError("reward tracker must be reset before update")
         if self._terminal:
             return {seat: RewardBreakdown() for seat in self._previous_potential}
 
         rewards = {seat: RewardBreakdown() for seat in self._previous_potential}
-        for player in transition.state.players:
+        for player in transition.snapshot.players:
             seat = player.seat
             current = _public_potential(player)
             accounting = self.config.accounting_weight * (
@@ -100,22 +113,56 @@ class RewardTracker:
     def _apply_event_shaping(
         self,
         rewards: dict[Seat, RewardBreakdown],
-        transition: EngineTransition,
+        transition: SessionTransition,
     ) -> dict[Seat, RewardBreakdown]:
-        event_bonuses = dict(self.config.event_bonuses)
-        shaping_by_seat = {seat: 0.0 for seat in rewards}
-        for event in transition.events:
-            if event.seat is not None:
-                shaping_by_seat[event.seat] += event_bonuses.get(event.kind.value, 0.0)
+        bonuses = dict(self.config.event_bonuses)
+        shaping = {seat: 0.0 for seat in rewards}
+        reveal_only = (
+            bool(transition.decisions)
+            and len(transition.decisions) == 1
+            and transition.before.current_action is None
+        )
+        for turn in transition.turn_records:
+            seat = turn.winner_seat
+            if reveal_only:
+                if turn.reveal is not None:
+                    shaping[seat] += bonuses.get(
+                        RewardEventKind.INFORMATION_REVEALED.value,
+                        0.0,
+                    )
+                continue
+            shaping[seat] += bonuses.get(RewardEventKind.AUCTION_RESOLVED.value, 0.0)
+            if turn.bundle_suits:
+                shaping[seat] += bonuses.get(
+                    RewardEventKind.RESOURCES_AWARDED.value,
+                    0.0,
+                )
+            elif turn.action.startswith("Loan"):
+                shaping[seat] += bonuses.get(RewardEventKind.LOAN_ACQUIRED.value, 0.0)
+            elif turn.action.startswith("Invest"):
+                shaping[seat] += bonuses.get(
+                    RewardEventKind.INVESTMENT_ACQUIRED.value,
+                    0.0,
+                )
+            if turn.claimed_objective_wire_ids:
+                shaping[seat] += bonuses.get(
+                    RewardEventKind.OBJECTIVE_CLAIMED.value,
+                    0.0,
+                )
+            if turn.reveal is not None:
+                shaping[seat] += bonuses.get(
+                    RewardEventKind.INFORMATION_REVEALED.value,
+                    0.0,
+                )
         return {
-            seat: _replace_breakdown(reward, shaping=shaping_by_seat[seat])
+            seat: _replace_breakdown(reward, shaping=shaping[seat])
             for seat, reward in rewards.items()
         }
 
     def _apply_terminal_rewards(
         self,
         rewards: dict[Seat, RewardBreakdown],
-        transition: EngineTransition,
+        transition: SessionTransition,
     ) -> dict[Seat, RewardBreakdown]:
         assert transition.result is not None
         winners = tuple(score.seat for score in transition.result.scores if score.rank == 1)
@@ -138,12 +185,12 @@ class RewardTracker:
         return final_rewards
 
 
-def _public_potential(player: PlayerState) -> int:
+def _public_potential(player: PlayerSnapshot) -> int:
     return (
         player.cash
-        + sum(investment.locked + investment.payout for investment in player.investments)
-        - sum(loan.principal for loan in player.loans)
-        + sum(OBJECTIVES[objective_id].payout for objective_id in player.owned_objective_ids)
+        + sum(locked + payout for locked, payout in player.investments)
+        - sum(player.loans)
+        + sum(OBJECTIVES[objective_id].payout for objective_id in player.objective_ids)
     )
 
 
@@ -156,9 +203,9 @@ def _replace_breakdown(
 ) -> RewardBreakdown:
     return RewardBreakdown(
         accounting=reward.accounting,
-        terminal_resource=reward.terminal_resource
-        if terminal_resource is None
-        else terminal_resource,
+        terminal_resource=(
+            reward.terminal_resource if terminal_resource is None else terminal_resource
+        ),
         placement=reward.placement if placement is None else placement,
         shaping=reward.shaping if shaping is None else shaping,
         penalty=reward.penalty,

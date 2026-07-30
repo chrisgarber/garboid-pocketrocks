@@ -1,25 +1,10 @@
-"""Local PocketRocks game simulation and evaluation."""
+"""SDK-backed PocketRocks simulation and evaluation."""
 
-from garboid_pocketrocks.simulator.context import DecisionBatch, build_decision_batch
-from garboid_pocketrocks.simulator.engine import EngineTransition, GameEngine
 from garboid_pocketrocks.simulator.errors import (
     ActingSeatsError,
-    ActionDeckExhaustedError,
     IllegalDecisionError,
     InvalidPhaseError,
     SimulationError,
-)
-from garboid_pocketrocks.simulator.events import EventKind, GameEvent
-from garboid_pocketrocks.simulator.model import (
-    ActionCard,
-    GameResult,
-    GameState,
-    InvestmentPosition,
-    LoanPosition,
-    Phase,
-    PlayerState,
-    ResourceCard,
-    Score,
 )
 from garboid_pocketrocks.simulator.monte_carlo import (
     BehaviorStatistics,
@@ -46,58 +31,45 @@ from garboid_pocketrocks.simulator.runner import (
     MatchResult,
     MatchRunner,
 )
-from garboid_pocketrocks.simulator.sampling import (
-    FixedRulesetSampler,
-    RulesetSampler,
-    RulesetVariationSampler,
-    WeightedRulesetSampler,
-    derive_seed,
+from garboid_pocketrocks.simulator.seeding import derive_seed
+from garboid_pocketrocks.simulator.session import (
+    PendingDecisions,
+    PlayerSnapshot,
+    SdkGameSession,
+    SessionResult,
+    SessionScore,
+    SessionSnapshot,
+    SessionTransition,
 )
-from garboid_pocketrocks.simulator.setup import SetupResult, build_setup
 
 __all__ = [
-    "ActionCard",
     "ActingSeatsError",
-    "ActionDeckExhaustedError",
-    "BotFault",
     "BehaviorStatistics",
+    "BotFault",
     "BotStatistics",
-    "DecisionBatch",
-    "EngineTransition",
-    "EventKind",
     "FaultMode",
-    "GameEvent",
-    "GameEngine",
     "GameJob",
-    "GameResult",
-    "GameState",
     "GameSummary",
     "IllegalDecisionError",
-    "InvestmentPosition",
     "InvalidPhaseError",
-    "LoanPosition",
     "MatchReplay",
     "MatchResult",
     "MatchRunner",
     "MonteCarloConfig",
     "MonteCarloResult",
     "MonteCarloRunner",
-    "Phase",
-    "PlayerState",
-    "ResourceCard",
-    "RulesetSampler",
-    "RulesetStatistics",
-    "RulesetVariationSampler",
+    "PendingDecisions",
+    "PlayerSnapshot",
     "ReplayDivergence",
     "ReplayedMatch",
-    "Score",
+    "RulesetStatistics",
+    "SdkGameSession",
     "SeatStatistics",
+    "SessionResult",
+    "SessionScore",
+    "SessionSnapshot",
+    "SessionTransition",
     "SimulationError",
-    "SetupResult",
-    "WeightedRulesetSampler",
-    "FixedRulesetSampler",
-    "build_decision_batch",
-    "build_setup",
     "derive_seed",
     "load_replay",
     "replay_match",

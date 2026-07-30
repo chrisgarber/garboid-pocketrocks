@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from typing import Any, ClassVar, Protocol
 
 from pocketrocks import BotDecision, DecisionContext, PocketRocksBot
 
-from garboid_pocketrocks.rules import LIVE_RULESET, Ruleset, RulesetKnowledge
+from garboid_pocketrocks.knowledge import RulesetKnowledge, knowledge_for_context
 
 
 class BotBrain(Protocol):
@@ -30,33 +30,18 @@ class PocketRocksFastBot(PocketRocksBot):
         *,
         seed: int | None = None,
         brain: BotBrain | None = None,
-        ruleset: Ruleset = LIVE_RULESET,
         **sdk_options: Any,
     ) -> None:
         sdk_options.setdefault("bot_id", self.BOT_ID)
         super().__init__(**sdk_options)
         self._brain = brain if brain is not None else self.build_brain(seed)
-        self._ruleset = ruleset
 
     @classmethod
     def build_brain(cls, seed: int | None) -> BotBrain:
         raise NotImplementedError
 
     def _knowledge_for_context(self, context: DecisionContext) -> RulesetKnowledge:
-        knowledge = self._ruleset.knowledge(context.player_count)
-        private_cards = knowledge.private_cards_per_player
-        if 0 <= context.bot_seat < len(context.revealed_info_counts_by_seat):
-            private_cards = sum(context.revealed_info_counts_by_seat[context.bot_seat]) + len(
-                context.current_hand_suit_ids
-            )
-        return replace(
-            knowledge,
-            starting_cash=context.starting_cash,
-            private_cards_per_player=private_cards,
-            value_chart=context.value_chart,
-            active_objective_count=len(context.objective_ids),
-            objectives_enabled=bool(context.objective_ids),
-        )
+        return knowledge_for_context(context)
 
     def choose_decision_sync(self, context: DecisionContext) -> BotDecision:
         knowledge = self._knowledge_for_context(context)
@@ -82,6 +67,15 @@ class BotSpec:
             bot_id=bot_class.BOT_ID,
             brain_factory=bot_class.build_brain,
         )
+
+    @classmethod
+    def for_simulation(
+        cls,
+        name: str,
+        brain_factory: BrainFactory,
+    ) -> BotSpec:
+        """Create a local-only spec whose simulation identity is its name."""
+        return cls(name=name, bot_id=name, brain_factory=brain_factory)
 
     def make_brain(self, *, seed: int | None = None) -> BotBrain:
         return self.brain_factory(seed)
