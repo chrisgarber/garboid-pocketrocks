@@ -116,6 +116,11 @@ money samples, first-place margins, seat buckets, ruleset buckets, decision
 counts, and faults. Distribution helpers provide mean, median, population
 spread, and quantiles.
 
+To reproduce the 100,000-game heuristic analysis and its tournament, auction,
+information-asymmetry, value-chart, endgame, and cash-constraint
+visualizations, follow the
+[heuristic bot visualization runbook](docs/analysis/heuristic-bot-visualizations.md).
+
 ## Configurable rules
 
 `LIVE_RULESET` models the current public 30-resource and 30-action decks,
