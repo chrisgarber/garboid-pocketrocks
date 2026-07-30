@@ -11,22 +11,31 @@ from garboid_pocketrocks.simulator.monte_carlo import MonteCarloResult
 from garboid_pocketrocks.tournament.analysis import (
     BootstrapSummary,
     RatingInterval,
+    TournamentAnalysis,
     analyze_tournament,
 )
 from garboid_pocketrocks.tournament.rating import (
+    PlackettLuceFit,
     fit_plackett_luce,
     observations_from_games,
 )
 from garboid_pocketrocks.tournament.reporting import write_tournament_artifacts
 from garboid_pocketrocks.tournament.schedule import (
     TournamentConfig,
+    TournamentPlan,
     TournamentPlanner,
 )
 
 from .helpers import game_summary, random_specs
 
 
-def _report_inputs():
+def _report_inputs() -> tuple[
+    TournamentConfig,
+    TournamentPlan,
+    PlackettLuceFit,
+    TournamentAnalysis,
+    BootstrapSummary,
+]:
     config = TournamentConfig(
         bot_specs=random_specs(3),
         games=1,
@@ -85,6 +94,10 @@ def test_artifacts_contain_machine_data_and_three_svg_charts(tmp_path: Path) -> 
     assert "PL rating leaderboard" in html
     assert "Rating versus mean winning money" in html
     assert "PL calibration" in html
+    assert 'class="axis-label">PL rating</text>' in html
+    assert 'class="axis-label">Mean winning final money</text>' in html
+    assert 'class="axis-label">Predicted pairwise score</text>' in html
+    assert 'class="axis-label">Observed pairwise score</text>' in html
     assert "&lt;alpha&gt;" in html
     assert "<alpha>" not in html
 

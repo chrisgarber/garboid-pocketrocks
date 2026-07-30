@@ -6,8 +6,8 @@ from dataclasses import dataclass
 
 import numpy as np
 from numpy.typing import NDArray
-from scipy.optimize import minimize
-from scipy.special import logsumexp
+from scipy.optimize import minimize  # type: ignore[import-untyped]
+from scipy.special import logsumexp  # type: ignore[import-untyped]
 
 from garboid_pocketrocks.simulator.monte_carlo import GameSummary
 

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from types import MappingProxyType
-from typing import Mapping
 
 from garboid_pocketrocks.bots.base import BotSpec
 from garboid_pocketrocks.bots.heuristic import (

@@ -104,6 +104,65 @@ money samples, first-place margins, seat buckets, ruleset buckets, decision
 counts, and faults. Distribution helpers provide mean, median, population
 spread, and quantiles.
 
+## Multiplayer bot tournaments
+
+Rank every registered simulator bot with 10,000 deterministic games:
+
+```bash
+uv run garboid-tournament \
+  --games 10000 \
+  --players 3,4,5 \
+  --charts A,B,C,D,E \
+  --seed 42 \
+  --workers 4 \
+  --output-dir tournament-results
+```
+
+Those game, player, chart, seed, and bootstrap settings are the defaults.
+Lineups contain distinct bot identities, condition exposure is balanced across
+the 15 chart/player-count cells, and seats are rotated fairly. A fixed seed
+produces identical game summaries and rankings regardless of worker count.
+
+The current registry has four distinct bots, so the full default correctly
+fails its five-player preflight until the in-progress v2 heuristic bots land.
+Run the currently available population across three- and four-player games
+with:
+
+```bash
+uv run garboid-tournament \
+  --players 3,4 \
+  --output-dir tournament-results
+```
+
+Adding each v2 bot's `BotSpec` to the shared registry automatically includes it
+in future tournaments. Use `--bots` or `--exclude-bots` for a reproducible
+subset and `--bootstrap-samples 0` for quick experiments.
+
+The estimator fits complete multiplayer finishes with a tie-aware
+Plackett–Luce model. `worth` is the fitted positive strength normalized across
+the field. `PL rating` is the same result on a familiar display scale:
+
+```text
+1500 + 400 * log10(worth / geometric mean worth)
+```
+
+It is not a sequence of pairwise Elo updates. A 400-point difference represents
+10:1 worth odds. Weak ghost comparisons keep undefeated, winless, and newly
+added bots finite; confidence intervals bootstrap complete games rather than
+pairwise fragments.
+
+Each run writes:
+
+- `ratings.csv` for spreadsheets and diffs;
+- `summary.json` with exact configuration, model diagnostics, condition
+  statistics, and calibration bins;
+- `report.html` with the leaderboard, bootstrap intervals, PL rating versus
+  mean winning money, and pairwise calibration implied by the listwise fit.
+
+The global worth averages across value charts, player counts, opponent
+mixtures, and seats. Use the condition statistics and calibration chart to
+spot interactions that a single global number cannot represent.
+
 ## Configurable rules
 
 `LIVE_RULESET` models the current public 30-resource and 30-action decks,

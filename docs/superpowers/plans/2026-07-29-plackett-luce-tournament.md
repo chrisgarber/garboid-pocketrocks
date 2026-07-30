@@ -224,8 +224,7 @@ git commit -m "feat: execute explicit Monte Carlo job plans"
 ```python
 def five_random_specs() -> tuple[BotSpec, ...]:
     return tuple(
-        BotSpec(f"random-{index}", f"random-{index}", RandomBot.build_brain)
-        for index in range(5)
+        BotSpec(f"random-{index}", f"random-{index}", RandomBot.build_brain) for index in range(5)
     )
 
 
@@ -287,8 +286,7 @@ def test_default_plan_allocates_exactly_ten_thousand_games() -> None:
 def test_plan_is_seeded_unique_and_balanced() -> None:
     config = TournamentConfig(
         bot_specs=tuple(
-            BotSpec(f"bot-{index}", f"bot-{index}", RandomBot.build_brain)
-            for index in range(8)
+            BotSpec(f"bot-{index}", f"bot-{index}", RandomBot.build_brain) for index in range(8)
         ),
         games=150,
         root_seed=42,
@@ -381,9 +379,7 @@ def test_observations_preserve_multiplayer_ties() -> None:
         final_money=(30, 20, 20, 10),
         ranks=(1, 2, 2, 4),
     )
-    assert observations_from_games((game,)) == (
-        RankingObservation((("a",), ("b", "c"), ("d",))),
-    )
+    assert observations_from_games((game,)) == (RankingObservation((("a",), ("b", "c"), ("d",))),)
 
 
 def test_rating_transform_maps_ten_to_one_worth_to_four_hundred_points() -> None:

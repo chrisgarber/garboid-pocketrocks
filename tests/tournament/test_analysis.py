@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import pytest
 
-from garboid_pocketrocks.simulator.monte_carlo import MonteCarloResult
+from garboid_pocketrocks.simulator.monte_carlo import GameSummary, MonteCarloResult
 from garboid_pocketrocks.tournament.analysis import (
     analyze_tournament,
     bootstrap_rating_intervals,
 )
 from garboid_pocketrocks.tournament.rating import (
+    PlackettLuceFit,
     RankingObservation,
     fit_plackett_luce,
 )
@@ -15,7 +16,7 @@ from garboid_pocketrocks.tournament.rating import (
 from .helpers import game_summary
 
 
-def _games():
+def _games() -> tuple[GameSummary, ...]:
     return (
         game_summary(
             ("a", "b", "c"),
@@ -39,7 +40,7 @@ def _games():
     )
 
 
-def _fit():
+def _fit() -> PlackettLuceFit:
     return fit_plackett_luce(
         (
             RankingObservation((("a",), ("b",), ("c",))),

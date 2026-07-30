@@ -285,15 +285,18 @@ def _rebalance_seats(jobs: tuple[GameJob, ...]) -> tuple[GameJob, ...]:
             if best is None:
                 break
             _, index, first_seat, second_seat = best
-            lineup = list(balanced[index].lineup)
-            first = lineup[first_seat].bot_id
-            second = lineup[second_seat].bot_id
+            mutable_lineup = list(balanced[index].lineup)
+            first = mutable_lineup[first_seat].bot_id
+            second = mutable_lineup[second_seat].bot_id
             counts[first, first_seat] -= 1
             counts[first, second_seat] += 1
             counts[second, first_seat] += 1
             counts[second, second_seat] -= 1
-            lineup[first_seat], lineup[second_seat] = lineup[second_seat], lineup[first_seat]
-            balanced[index] = replace(balanced[index], lineup=tuple(lineup))
+            mutable_lineup[first_seat], mutable_lineup[second_seat] = (
+                mutable_lineup[second_seat],
+                mutable_lineup[first_seat],
+            )
+            balanced[index] = replace(balanced[index], lineup=tuple(mutable_lineup))
         _repair_seat_spreads(
             balanced,
             indexes=indexes,
@@ -348,23 +351,26 @@ def _repair_seat_spreads(
 
         path: list[int] = []
         current = target
-        while previous[current] is not None:
-            parent, index = previous[current]
+        while True:
+            edge = previous[current]
+            if edge is None:
+                break
+            parent, index = edge
             path.append(index)
             current = parent
         for index in reversed(path):
-            lineup = list(jobs[index].lineup)
-            first = lineup[surplus_seat].bot_id
-            second = lineup[deficit_seat].bot_id
+            mutable_lineup = list(jobs[index].lineup)
+            first = mutable_lineup[surplus_seat].bot_id
+            second = mutable_lineup[deficit_seat].bot_id
             counts[first, surplus_seat] -= 1
             counts[first, deficit_seat] += 1
             counts[second, surplus_seat] += 1
             counts[second, deficit_seat] -= 1
-            lineup[surplus_seat], lineup[deficit_seat] = (
-                lineup[deficit_seat],
-                lineup[surplus_seat],
+            mutable_lineup[surplus_seat], mutable_lineup[deficit_seat] = (
+                mutable_lineup[deficit_seat],
+                mutable_lineup[surplus_seat],
             )
-            jobs[index] = replace(jobs[index], lineup=tuple(lineup))
+            jobs[index] = replace(jobs[index], lineup=tuple(mutable_lineup))
 
 
 def _pair(first_bot_id: str, second_bot_id: str) -> tuple[str, str]:

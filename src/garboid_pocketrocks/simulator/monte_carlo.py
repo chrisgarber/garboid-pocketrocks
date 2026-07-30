@@ -356,9 +356,7 @@ def _validate_jobs(
     jobs: tuple[GameJob, ...],
 ) -> None:
     if len(jobs) != config.games:
-        raise ValueError(
-            f"job count {len(jobs)} does not match configured games {config.games}"
-        )
+        raise ValueError(f"job count {len(jobs)} does not match configured games {config.games}")
     if tuple(job.game_index for job in jobs) != tuple(range(config.games)):
         raise ValueError("game indices must be contiguous and start at zero")
     if any(job.root_seed != config.root_seed for job in jobs):

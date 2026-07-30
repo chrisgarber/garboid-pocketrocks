@@ -221,6 +221,8 @@ svg {{ display: block; height: auto; margin: 1rem 0 2rem; max-width: 100%; }}
 .grid {{ stroke: currentColor; stroke-opacity: .18; }}
 .mark {{ fill: #2563eb; stroke: #1e3a8a; }}
 .interval {{ stroke: #2563eb; stroke-width: 2; }}
+.axis {{ stroke: currentColor; stroke-width: 1; }}
+.axis-label {{ fill: currentColor; font-size: 12px; }}
 .label {{ fill: currentColor; font-size: 12px; }}
 @media (prefers-color-scheme: dark) {{
   .meta {{ color: #aaa; }}
@@ -289,7 +291,9 @@ def _rating_svg(
         '<title id="rating-title">PL rating leaderboard</title>'
         '<desc id="rating-desc">Bot ratings with optional 95 percent bootstrap intervals.</desc>'
         + "".join(marks)
-        + "</svg>"
+        + f'<line class="axis" x1="190" x2="760" y1="{height - 24}" y2="{height - 24}"/>'
+        + f'<text x="475" y="{height - 5}" text-anchor="middle" class="axis-label">'
+        "PL rating</text>" + "</svg>"
     )
 
 
@@ -300,26 +304,34 @@ def _money_svg(analysis: TournamentAnalysis) -> str:
         marks = '<text class="label" x="20" y="40">No winning-money samples</text>'
     else:
         x_low, x_high = _domain([row.pl_rating for row in rows])
-        y_low, y_high = _domain(
-            [float(row.mean_winning_money) for row in rows if row.mean_winning_money is not None]
-        )
-        marks = "".join(
-            (
+        money_values = [
+            row.mean_winning_money for row in rows if row.mean_winning_money is not None
+        ]
+        y_low, y_high = _domain(money_values)
+        mark_items: list[str] = []
+        for row in rows:
+            winning_money = row.mean_winning_money
+            assert winning_money is not None
+            mark_items.append(
                 f'<circle class="mark" cx="{_scale(row.pl_rating, x_low, x_high, 70, 750):.2f}" '
-                f'cy="{_scale(float(row.mean_winning_money), y_low, y_high, 370, 35):.2f}" r="5"/>'
+                f'cy="{_scale(winning_money, y_low, y_high, 370, 35):.2f}" r="5"/>'
                 f'<text class="label" '
                 f'x="{_scale(row.pl_rating, x_low, x_high, 70, 750) + 8:.2f}" '
-                f'y="{_scale(float(row.mean_winning_money), y_low, y_high, 370, 35) + 4:.2f}">'
+                f'y="{_scale(winning_money, y_low, y_high, 370, 35) + 4:.2f}">'
                 f"{html.escape(row.bot_name)}</text>"
             )
-            for row in rows
-        )
+        marks = "".join(mark_items)
     return (
         f'<svg viewBox="0 0 {width} {height}" role="img" '
         'aria-labelledby="money-title money-desc">'
         '<title id="money-title">Rating versus mean winning money</title>'
         '<desc id="money-desc">Scatter plot comparing PL rating with final money '
-        "in first-place finishes.</desc>" + marks + "</svg>"
+        "in first-place finishes.</desc>"
+        '<line class="axis" x1="70" x2="750" y1="370" y2="370"/>'
+        '<line class="axis" x1="70" x2="70" y1="35" y2="370"/>'
+        '<text x="410" y="410" text-anchor="middle" class="axis-label">PL rating</text>'
+        '<text x="18" y="202" text-anchor="middle" transform="rotate(-90 18 202)" '
+        'class="axis-label">Mean winning final money</text>' + marks + "</svg>"
     )
 
 
@@ -343,7 +355,13 @@ def _calibration_svg(analysis: TournamentAnalysis) -> str:
         'aria-labelledby="calibration-title calibration-desc">'
         '<title id="calibration-title">PL calibration</title>'
         '<desc id="calibration-desc">Predicted pairwise probability versus observed '
-        "result, including ties as one half.</desc>" + diagonal + marks + "</svg>"
+        "result, including ties as one half.</desc>"
+        '<line class="axis" x1="70" x2="750" y1="370" y2="370"/>'
+        '<line class="axis" x1="70" x2="70" y1="35" y2="370"/>'
+        '<text x="410" y="410" text-anchor="middle" class="axis-label">'
+        "Predicted pairwise score</text>"
+        '<text x="18" y="202" text-anchor="middle" transform="rotate(-90 18 202)" '
+        'class="axis-label">Observed pairwise score</text>' + diagonal + marks + "</svg>"
     )
 
 
