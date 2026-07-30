@@ -1380,6 +1380,15 @@ def test_league_games_train_only_current_policy_seats() -> None:
         historical_identities=("champion", "older"),
         league_fraction=0.2,
     )
+    assert any(
+        any(not seat.trainable for seat in plan.seat_policies)
+        for plan in plans
+    )
+    assert all(
+        seat.trainable == (seat.identity == "current")
+        for plan in plans
+        for seat in plan.seat_policies
+    )
 
 
 def test_heuristic_evaluation_covers_all_cells_and_candidate_seats() -> None:
@@ -1392,15 +1401,6 @@ def test_heuristic_evaluation_covers_all_cells_and_candidate_seats() -> None:
     assert len(report.cell_metrics) == 15
     assert report.illegal_actions == 0
     assert report.faults == 0
-    assert any(
-        any(not seat.trainable for seat in plan.seat_policies)
-        for plan in plans
-    )
-    assert all(
-        seat.trainable == (seat.identity == "current")
-        for plan in plans
-        for seat in plan.seat_policies
-    )
 ```
 
 - [ ] **Step 2: Run RED**
@@ -1662,6 +1662,7 @@ periodic checkpoints as the pre-calibration starting settings. It sets
 `long-8h.json` uses root 42, `games_per_cell=null`, a 28,800-second limit, three PPO epochs,
 checkpoint interval 900 seconds, evaluation interval 1,800 seconds, and
 `target_decisions_per_update=32768`, `league_fraction=0.2`, and four retained
+periodic checkpoints. The initial run's recommendation may override the
 decision target in the resolved config. It sets `evaluate_at_end=true` and
 `evaluation_games_per_seat_cell=4`.
 
