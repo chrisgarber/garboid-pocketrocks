@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 from pocketrocks import DecisionContext
 
-from garboid_pocketrocks.rules import LIVE_RULESET
+from garboid_pocketrocks.knowledge import canonical_knowledge
 from garboid_pocketrocks.training.bounds import EnvironmentBounds
 from garboid_pocketrocks.training.observations import ObservationEncoder
 
@@ -37,7 +37,7 @@ def _context(*, decision_kind: str = "submitBid") -> DecisionContext:
 
 def test_observation_space_has_public_fixed_keys_and_contains_bid_and_reveal() -> None:
     encoder = ObservationEncoder(EnvironmentBounds(max_bid=100, max_hand_size=5))
-    knowledge = LIVE_RULESET.knowledge(3)
+    knowledge = canonical_knowledge(3)
 
     assert set(encoder.observation_space.spaces) == {
         "phase",
@@ -76,7 +76,7 @@ def test_observation_space_has_public_fixed_keys_and_contains_bid_and_reveal() -
 def test_observation_uses_no_hidden_engine_state() -> None:
     encoder = ObservationEncoder(EnvironmentBounds(max_bid=100, max_hand_size=5))
     context = _context()
-    knowledge = LIVE_RULESET.knowledge(3)
+    knowledge = canonical_knowledge(3)
 
     baseline = encoder.encode(context, knowledge)
     # Private opponent cards and deck order are unavailable in DecisionContext,
@@ -90,7 +90,7 @@ def test_observation_uses_no_hidden_engine_state() -> None:
 def test_observation_conditions_on_public_ruleset_knowledge() -> None:
     encoder = ObservationEncoder(EnvironmentBounds(max_bid=100, max_hand_size=5))
     context = _context()
-    knowledge = LIVE_RULESET.knowledge(3)
+    knowledge = canonical_knowledge(3)
 
     baseline = encoder.encode(context, knowledge)
     changed = encoder.encode(
@@ -106,7 +106,7 @@ def test_hidden_public_ruleset_field_is_zero_filled_only_for_that_field() -> Non
         EnvironmentBounds(max_bid=100, max_hand_size=5),
         hidden_ruleset_fields=frozenset({"rules_action_counts"}),
     )
-    encoded = encoder.encode(_context(), LIVE_RULESET.knowledge(3))
+    encoded = encoder.encode(_context(), canonical_knowledge(3))
 
     assert np.array_equal(encoded["rules_action_counts"], np.zeros(6, dtype=np.int16))
     assert np.any(encoded["rules_resource_counts"])
@@ -123,7 +123,7 @@ def test_encoder_rejects_incompatible_bounds_and_unknown_hidden_fields() -> None
     with pytest.raises(ValueError, match="legal maximum"):
         encoder.encode(
             replace(_context(), legal_max_amount=101),
-            LIVE_RULESET.knowledge(3),
+            canonical_knowledge(3),
         )
 
 
@@ -133,7 +133,7 @@ def test_observation_accepts_negative_chart_values_within_int16() -> None:
 
     encoded = encoder.encode(
         context,
-        replace(LIVE_RULESET.knowledge(3), value_chart=context.value_chart),
+        replace(canonical_knowledge(3), value_chart=context.value_chart),
     )
 
     assert encoder.observation_space.contains(encoded)
@@ -160,4 +160,4 @@ def test_observation_rejects_values_outside_numeric_dtype_bounds(
     encoder = ObservationEncoder(EnvironmentBounds(max_bid=100, max_hand_size=5))
 
     with pytest.raises(ValueError, match=message):
-        encoder.encode(context, LIVE_RULESET.knowledge(3))
+        encoder.encode(context, canonical_knowledge(3))

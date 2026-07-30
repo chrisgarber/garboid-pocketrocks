@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import random
 from dataclasses import asdict
 from typing import Any
 
@@ -9,39 +10,46 @@ from pettingzoo import AECEnv  # type: ignore[import-untyped]
 from pettingzoo.utils import AgentSelector  # type: ignore[import-untyped]
 from pocketrocks import BotDecision, DecisionContext
 
-from garboid_pocketrocks.rules import Ruleset, RulesetKnowledge
-from garboid_pocketrocks.simulator.engine import EngineTransition, GameEngine
-from garboid_pocketrocks.simulator.model import Seat
-from garboid_pocketrocks.simulator.sampling import RulesetSampler
+from garboid_pocketrocks.knowledge import RulesetKnowledge, canonical_knowledge
+from garboid_pocketrocks.simulator.seeding import derive_seed
+from garboid_pocketrocks.simulator.session import SdkGameSession, SessionTransition
 from garboid_pocketrocks.training.actions import ActionCodec
 from garboid_pocketrocks.training.bounds import EnvironmentBounds
 from garboid_pocketrocks.training.observations import ObservationEncoder
 from garboid_pocketrocks.training.rewards import RewardConfig, RewardTracker
 
+Seat = int
+
 
 class PocketRocksAECEnv(AECEnv[str, dict[str, Any], int]):  # type: ignore[misc]
-    """AEC adapter that preserves PocketRocks' sealed-bid decision batches."""
+    """AEC adapter that preserves the SDK engine's sealed-bid batches."""
 
     metadata = {"name": "pocketrocks_aec_v0", "render_modes": []}
 
     def __init__(
         self,
         *,
-        ruleset_sampler: RulesetSampler,
+        value_charts: tuple[str, ...],
         player_count: int,
         bounds: EnvironmentBounds,
+        objectives_enabled: tuple[bool, ...] = (True,),
         reward_config: RewardConfig = RewardConfig(),  # noqa: B008
     ) -> None:
         super().__init__()
         if not 3 <= player_count <= 5:
             raise ValueError("player_count must be between 3 and 5")
-        self.ruleset_sampler = ruleset_sampler
+        if not value_charts:
+            raise ValueError("value_charts must be nonempty")
+        if not objectives_enabled:
+            raise ValueError("objectives_enabled must be nonempty")
+        self.value_charts = tuple(chart.upper() for chart in value_charts)
+        self.objectives_enabled = objectives_enabled
         self.player_count = player_count
         self.bounds = bounds
         self.action_codec = ActionCodec(bounds)
         self.observation_encoder = ObservationEncoder(bounds)
         self.reward_tracker = RewardTracker(reward_config)
-        self._validate_sampler_support()
+        self._validate_variants()
 
         self.possible_agents = [self._agent_name(seat) for seat in range(player_count)]
         self.agents: list[str] = []
@@ -55,7 +63,8 @@ class PocketRocksAECEnv(AECEnv[str, dict[str, Any], int]):  # type: ignore[misc]
         self._contexts: dict[Seat, DecisionContext] = {}
         self._pending_decisions: dict[Seat, BotDecision] = {}
         self._knowledge: RulesetKnowledge | None = None
-        self.transition: EngineTransition | None = None
+        self.session: SdkGameSession | None = None
+        self.transition: SessionTransition | None = None
 
     def observation_space(self, agent: str) -> gym.spaces.Dict:
         return self.observation_spaces[agent]
@@ -66,10 +75,34 @@ class PocketRocksAECEnv(AECEnv[str, dict[str, Any], int]):  # type: ignore[misc]
     def reset(self, seed: int | None = None, options: dict[str, Any] | None = None) -> None:
         del options
         root_seed = 0 if seed is None else seed
-        ruleset = self.ruleset_sampler.sample(root_seed=root_seed, game_index=0)
-        self.transition = GameEngine.start(ruleset, player_count=self.player_count, seed=root_seed)
-        self._knowledge = ruleset.knowledge(self.player_count)
-        self.reward_tracker.reset(self.transition.state)
+        value_chart = random.Random(derive_seed(root_seed, "value_chart", 0)).choice(
+            self.value_charts
+        )
+        objectives_enabled = random.Random(derive_seed(root_seed, "objectives_enabled", 0)).choice(
+            self.objectives_enabled
+        )
+        self.session = SdkGameSession.start(
+            player_count=self.player_count,
+            seed=root_seed,
+            value_chart=value_chart,
+            objectives_enabled=objectives_enabled,
+        )
+        self._knowledge = canonical_knowledge(
+            self.player_count,
+            value_chart=value_chart,
+            objectives_enabled=objectives_enabled,
+        )
+        snapshot = self.session.snapshot
+        self.transition = SessionTransition(
+            before=snapshot,
+            snapshot=snapshot,
+            pending=self.session.pending,
+            result=None,
+            decisions=(),
+            events=self.session.events,
+            turn_records=(),
+        )
+        self.reward_tracker.reset(snapshot)
         self.agents = self.possible_agents[:]
         self.rewards = {agent: 0.0 for agent in self.agents}
         self._cumulative_rewards = {agent: 0.0 for agent in self.agents}
@@ -77,6 +110,7 @@ class PocketRocksAECEnv(AECEnv[str, dict[str, Any], int]):  # type: ignore[misc]
         self.truncations = {agent: False for agent in self.agents}
         self.infos: dict[str, dict[str, Any]] = {agent: {} for agent in self.agents}
         self._pending_decisions = {}
+        self._contexts = {}
         self._cache_pending_contexts()
         self.agent_selection = self._agent_selector.reset()
 
@@ -103,9 +137,8 @@ class PocketRocksAECEnv(AECEnv[str, dict[str, Any], int]):  # type: ignore[misc]
         self._clear_rewards()
         self._cumulative_rewards[current_agent] = 0.0
         self._pending_decisions[seat] = self.action_codec.decode(int(action))
-        assert self.transition is not None
-        assert self.transition.pending is not None
-        if len(self._pending_decisions) < len(self.transition.pending.acting_seats):
+        assert self.session is not None
+        if len(self._pending_decisions) < len(self.session.pending.acting_seats):
             self.agent_selection = self._agent_selector.next()
             return
 
@@ -118,8 +151,8 @@ class PocketRocksAECEnv(AECEnv[str, dict[str, Any], int]):  # type: ignore[misc]
         return None
 
     def _resolve_pending_decisions(self) -> None:
-        assert self.transition is not None
-        transition = GameEngine.step(self.transition.state, self._pending_decisions)
+        assert self.session is not None
+        transition = self.session.step(self._pending_decisions)
         self.transition = transition
         self._pending_decisions = {}
         self._publish_transition_rewards(transition)
@@ -129,14 +162,14 @@ class PocketRocksAECEnv(AECEnv[str, dict[str, Any], int]):  # type: ignore[misc]
             self.agent_selection = self._deads_step_first()
             return
         self._cache_pending_contexts()
-        assert transition.pending is not None
-        if len(transition.pending.acting_seats) == 1:
-            self._agent_selector.reinit([self._agent_name(transition.pending.acting_seats[0])])
+        acting_seats = self.session.pending.acting_seats
+        if len(acting_seats) == 1:
+            self._agent_selector.reinit([self._agent_name(acting_seats[0])])
         else:
             self._agent_selector.reinit(self.possible_agents)
         self.agent_selection = self._agent_selector.reset()
 
-    def _publish_transition_rewards(self, transition: EngineTransition) -> None:
+    def _publish_transition_rewards(self, transition: SessionTransition) -> None:
         reward_breakdowns = self.reward_tracker.update(transition)
         for seat, breakdown in reward_breakdowns.items():
             agent = self._agent_name(seat)
@@ -148,24 +181,25 @@ class PocketRocksAECEnv(AECEnv[str, dict[str, Any], int]):  # type: ignore[misc]
         self._accumulate_rewards()
 
     def _cache_pending_contexts(self) -> None:
-        assert self.transition is not None
-        assert self.transition.pending is not None
-        self._contexts.update(self.transition.pending.contexts)
+        assert self.session is not None
+        self._contexts.update(self.session.pending.contexts)
 
-    def _validate_sampler_support(self) -> None:
-        support = self.ruleset_sampler.support()
-        if not support:
-            raise ValueError("ruleset sampler support must not be empty")
-        for ruleset in support:
-            self._validate_ruleset(ruleset)
-
-    def _validate_ruleset(self, ruleset: Ruleset) -> None:
-        ruleset.setup_for(self.player_count)
-        transition = GameEngine.start(ruleset, player_count=self.player_count, seed=0)
-        knowledge = ruleset.knowledge(self.player_count)
-        assert transition.pending is not None
-        for _, context in transition.pending.contexts:
-            self.observation_encoder.encode(context, knowledge)
+    def _validate_variants(self) -> None:
+        for value_chart in self.value_charts:
+            for objectives_enabled in self.objectives_enabled:
+                session = SdkGameSession.start(
+                    player_count=self.player_count,
+                    seed=0,
+                    value_chart=value_chart,
+                    objectives_enabled=objectives_enabled,
+                )
+                knowledge = canonical_knowledge(
+                    self.player_count,
+                    value_chart=value_chart,
+                    objectives_enabled=objectives_enabled,
+                )
+                for _seat, context in session.pending.contexts:
+                    self.observation_encoder.encode(context, knowledge)
 
     @staticmethod
     def _agent_name(seat: Seat) -> str:
