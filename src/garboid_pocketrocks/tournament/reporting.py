@@ -42,8 +42,7 @@ def write_tournament_artifacts(
     analysis: TournamentAnalysis,
     bootstrap: BootstrapSummary,
 ) -> TournamentArtifacts:
-    if output_dir.exists() and any(output_dir.iterdir()) and not overwrite:
-        raise FileExistsError(f"output directory is not empty: {output_dir}")
+    validate_artifact_output_dir(output_dir, overwrite=overwrite)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     payload = _summary_payload(
@@ -65,6 +64,11 @@ def write_tournament_artifacts(
         summary_json=output_dir / "summary.json",
         report_html=output_dir / "report.html",
     )
+
+
+def validate_artifact_output_dir(output_dir: Path, *, overwrite: bool) -> None:
+    if output_dir.exists() and any(output_dir.iterdir()) and not overwrite:
+        raise FileExistsError(f"output directory is not empty: {output_dir}")
 
 
 def _summary_payload(

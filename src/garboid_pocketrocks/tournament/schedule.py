@@ -158,9 +158,7 @@ class TournamentPlanner:
 
 def _allocate_quotas(config: TournamentConfig) -> tuple[ConditionQuota, ...]:
     cells = tuple(
-        (chart, player_count)
-        for chart in config.charts
-        for player_count in config.player_counts
+        (chart, player_count) for chart in config.charts for player_count in config.player_counts
     )
     games_per_cell, remainder = divmod(config.games, len(cells))
     return tuple(
@@ -192,9 +190,7 @@ def _select_lineup(
                 pair_appearances[_pair(spec.bot_id, selected_spec.bot_id)]
                 for selected_spec in selected
             )
-            namespace = (
-                f"tournament-lineup:{chart}:{player_count}:{len(selected)}:{spec.bot_id}"
-            )
+            namespace = f"tournament-lineup:{chart}:{player_count}:{len(selected)}:{spec.bot_id}"
             return (
                 condition_appearances[chart, player_count, spec.bot_id],
                 pair_count,
@@ -257,9 +253,7 @@ def _record_lineup(
 def _rebalance_seats(jobs: tuple[GameJob, ...]) -> tuple[GameJob, ...]:
     balanced = list(jobs)
     for player_count in (3, 4, 5):
-        indexes = [
-            index for index, job in enumerate(balanced) if job.player_count == player_count
-        ]
+        indexes = [index for index, job in enumerate(balanced) if job.player_count == player_count]
         counts: Counter[tuple[str, int]] = Counter(
             (spec.bot_id, seat)
             for index in indexes

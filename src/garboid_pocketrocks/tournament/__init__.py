@@ -11,9 +11,9 @@ from garboid_pocketrocks.tournament.analysis import (
     bootstrap_rating_intervals,
 )
 from garboid_pocketrocks.tournament.rating import (
+    PlackettLuceFit,
     PLBotRating,
     PLFitDiagnostics,
-    PlackettLuceFit,
     RankingObservation,
     TiePrevalence,
     TournamentRatingError,
@@ -22,7 +22,12 @@ from garboid_pocketrocks.tournament.rating import (
 )
 from garboid_pocketrocks.tournament.reporting import (
     TournamentArtifacts,
+    validate_artifact_output_dir,
     write_tournament_artifacts,
+)
+from garboid_pocketrocks.tournament.runner import (
+    TournamentRun,
+    TournamentRunner,
 )
 from garboid_pocketrocks.tournament.schedule import (
     ConditionQuota,
@@ -51,9 +56,12 @@ __all__ = [
     "TournamentPlan",
     "TournamentPlanner",
     "TournamentRatingError",
+    "TournamentRun",
+    "TournamentRunner",
     "analyze_tournament",
     "bootstrap_rating_intervals",
     "fit_plackett_luce",
     "observations_from_games",
+    "validate_artifact_output_dir",
     "write_tournament_artifacts",
 ]

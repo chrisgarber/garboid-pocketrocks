@@ -10,6 +10,7 @@ from garboid_pocketrocks.tournament.schedule import (
     TournamentConfig,
     TournamentPlanner,
 )
+
 from .helpers import random_specs
 
 
@@ -32,9 +33,7 @@ def test_config_rejects_duplicate_names_and_ids() -> None:
     first, second, third, fourth, fifth = random_specs()
 
     with pytest.raises(ValueError, match="names"):
-        TournamentConfig(
-            bot_specs=(first, replace(second, name=first.name), third, fourth, fifth)
-        )
+        TournamentConfig(bot_specs=(first, replace(second, name=first.name), third, fourth, fifth))
     with pytest.raises(ValueError, match="IDs"):
         TournamentConfig(
             bot_specs=(first, replace(second, bot_id=first.bot_id), third, fourth, fifth)
@@ -67,9 +66,7 @@ def test_plan_is_seeded_unique_and_condition_balanced() -> None:
     assert first != different
     assert [job.game_index for job in first.jobs] == list(range(150))
     assert len({job.seed for job in first.jobs}) == 150
-    assert all(
-        len({spec.bot_id for spec in job.lineup}) == job.player_count for job in first.jobs
-    )
+    assert all(len({spec.bot_id for spec in job.lineup}) == job.player_count for job in first.jobs)
 
     condition_appearances: dict[tuple[str, int], Counter[str]] = defaultdict(Counter)
     for job in first.jobs:
@@ -109,9 +106,7 @@ def test_pair_exposures_reconcile_with_jobs() -> None:
     for job in plan.jobs:
         ids = sorted(spec.bot_id for spec in job.lineup)
         expected.update(
-            (left, right)
-            for index, left in enumerate(ids)
-            for right in ids[index + 1 :]
+            (left, right) for index, left in enumerate(ids) for right in ids[index + 1 :]
         )
 
     assert {
