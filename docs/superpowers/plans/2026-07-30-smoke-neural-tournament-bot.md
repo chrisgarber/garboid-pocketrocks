@@ -60,9 +60,7 @@ def test_smoke_checkpoint_is_frozen_at_named_training_age() -> None:
     }
     assert loaded.manifest.completed_episodes == 1_500
     assert loaded.manifest.completed_updates == 1
-    assert loaded.manifest.supported_ruleset_names == tuple(
-        f"live-{chart}" for chart in "ABCDE"
-    )
+    assert loaded.manifest.supported_ruleset_names == tuple(f"live-{chart}" for chart in "ABCDE")
     assert loaded.manifest.supported_player_counts == (3, 4, 5)
     assert len(loaded.manifest.parameter_digest) == 64
 ```
@@ -89,9 +87,7 @@ from __future__ import annotations
 from pathlib import Path
 
 SMOKE_BOT_NAME = "vector_ppo_small_v1_g1500"
-SMOKE_CHECKPOINT_PATH = (
-    Path(__file__).with_name("checkpoints") / SMOKE_BOT_NAME
-)
+SMOKE_CHECKPOINT_PATH = Path(__file__).with_name("checkpoints") / SMOKE_BOT_NAME
 ```
 
 - [ ] **Step 4: Permit only packaged neural checkpoints through `.gitignore`**
