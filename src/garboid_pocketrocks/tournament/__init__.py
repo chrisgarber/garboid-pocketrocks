@@ -20,6 +20,10 @@ from garboid_pocketrocks.tournament.rating import (
     fit_plackett_luce,
     observations_from_games,
 )
+from garboid_pocketrocks.tournament.reporting import (
+    TournamentArtifacts,
+    write_tournament_artifacts,
+)
 from garboid_pocketrocks.tournament.schedule import (
     ConditionQuota,
     PairExposure,
@@ -41,6 +45,7 @@ __all__ = [
     "RatingInterval",
     "TiePrevalence",
     "TournamentAnalysis",
+    "TournamentArtifacts",
     "TournamentBotRow",
     "TournamentConfig",
     "TournamentPlan",
@@ -50,4 +55,5 @@ __all__ = [
     "bootstrap_rating_intervals",
     "fit_plackett_luce",
     "observations_from_games",
+    "write_tournament_artifacts",
 ]
