@@ -61,12 +61,24 @@ class TournamentRunner:
         bot_ids = tuple(spec.bot_id for spec in config.bot_specs)
         fit = fit_plackett_luce(observations, bot_ids)
         analysis = analyze_tournament(monte_carlo_result, fit)
-        bootstrap = bootstrap_rating_intervals(
-            monte_carlo_result.game_summaries,
-            bot_ids,
-            samples=config.bootstrap_samples,
-            root_seed=config.root_seed,
-        )
+        try:
+            bootstrap = bootstrap_rating_intervals(
+                monte_carlo_result.game_summaries,
+                bot_ids,
+                samples=config.bootstrap_samples,
+                root_seed=config.root_seed,
+                workers=workers,
+            )
+        except Exception as error:
+            bootstrap = BootstrapSummary(
+                requested=config.bootstrap_samples,
+                converged=0,
+                intervals=(),
+                warnings=(
+                    f"bootstrap failed with {type(error).__name__}; "
+                    "confidence intervals are unavailable",
+                ),
+            )
         artifacts = write_tournament_artifacts(
             output_dir=output_dir,
             overwrite=overwrite,

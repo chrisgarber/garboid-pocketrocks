@@ -122,6 +122,24 @@ def test_csv_follows_rating_order_and_round_trips_values(tmp_path: Path) -> None
     assert float(rows[0]["rating_interval_lower"]) == pytest.approx(fit.ratings[0].rating - 10)
 
 
+def test_summary_includes_zero_pair_exposure(tmp_path: Path) -> None:
+    config, plan, fit, analysis, bootstrap = _report_inputs()
+    zero_exposure = replace(plan.pair_exposures[0], games=0)
+
+    artifacts = write_tournament_artifacts(
+        output_dir=tmp_path,
+        overwrite=False,
+        config=config,
+        plan=replace(plan, pair_exposures=(zero_exposure, *plan.pair_exposures[1:])),
+        fit=fit,
+        analysis=analysis,
+        bootstrap=bootstrap,
+    )
+
+    payload = json.loads(artifacts.summary_json.read_text())
+    assert payload["schedule"]["pair_exposure"]["minimum"] == 0
+
+
 def test_nonempty_directory_requires_overwrite(tmp_path: Path) -> None:
     config, plan, fit, analysis, bootstrap = _report_inputs()
     (tmp_path / "unrelated.txt").write_text("keep")

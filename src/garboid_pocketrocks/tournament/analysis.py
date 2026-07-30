@@ -4,6 +4,7 @@ import math
 import random
 import statistics
 from collections import defaultdict
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -113,6 +114,11 @@ class _Accumulator:
         if rank == 1:
             self.winning_money.append(final_money)
         self.faults += faults
+
+
+_BOOTSTRAP_GAMES: tuple[GameSummary, ...] = ()
+_BOOTSTRAP_BOT_IDS: tuple[str, ...] = ()
+_BOOTSTRAP_ROOT_SEED = 0
 
 
 def analyze_tournament(
@@ -235,9 +241,14 @@ def bootstrap_rating_intervals(
     *,
     samples: int,
     root_seed: int,
+    workers: int = 1,
 ) -> BootstrapSummary:
     if samples < 0:
         raise ValueError("bootstrap samples must be nonnegative")
+    if workers <= 0:
+        raise ValueError("bootstrap workers must be positive")
+    if not bot_ids or len(set(bot_ids)) != len(bot_ids):
+        raise ValueError("bootstrap bot IDs must be nonempty and unique")
     if samples == 0:
         return BootstrapSummary(0, 0, (), ())
     if not games:
@@ -245,15 +256,33 @@ def bootstrap_rating_intervals(
 
     ratings_by_bot: dict[str, list[float]] = {bot_id: [] for bot_id in bot_ids}
     converged = 0
-    for replicate in range(samples):
-        rng = random.Random(derive_seed(root_seed, "bootstrap", replicate))
-        resampled = tuple(games[rng.randrange(len(games))] for _ in games)
+    execution_warnings: tuple[str, ...] = ()
+    if workers == 1:
+        replicate_results = tuple(
+            _fit_bootstrap_replicate(games, bot_ids, root_seed, replicate)
+            for replicate in range(samples)
+        )
+    else:
         try:
-            fit = fit_plackett_luce(observations_from_games(resampled), bot_ids)
-        except TournamentRatingError:
+            with ProcessPoolExecutor(
+                max_workers=min(workers, samples),
+                initializer=_initialize_bootstrap_worker,
+                initargs=(games, bot_ids, root_seed),
+            ) as executor:
+                replicate_results = tuple(executor.map(_fit_bootstrap_worker, range(samples)))
+        except Exception as error:
+            execution_warnings = (
+                f"parallel bootstrap failed with {type(error).__name__}; retried serially",
+            )
+            replicate_results = tuple(
+                _fit_bootstrap_replicate(games, bot_ids, root_seed, replicate)
+                for replicate in range(samples)
+            )
+    for ratings in replicate_results:
+        if ratings is None:
             continue
-        for rating in fit.ratings:
-            ratings_by_bot[rating.bot_id].append(rating.rating)
+        for bot_id, rating in ratings:
+            ratings_by_bot[bot_id].append(rating)
         converged += 1
 
     required = math.ceil(samples * 0.9)
@@ -262,7 +291,8 @@ def bootstrap_rating_intervals(
             requested=samples,
             converged=converged,
             intervals=(),
-            warnings=(
+            warnings=execution_warnings
+            + (
                 f"only {converged} of {samples} bootstrap fits converged; "
                 "confidence intervals are unavailable",
             ),
@@ -275,7 +305,7 @@ def bootstrap_rating_intervals(
         )
         for bot_id in bot_ids
     )
-    warnings = (
+    convergence_warnings = (
         (f"{samples - converged} of {samples} bootstrap fits failed and were excluded",)
         if converged < samples
         else ()
@@ -284,5 +314,42 @@ def bootstrap_rating_intervals(
         requested=samples,
         converged=converged,
         intervals=intervals,
-        warnings=warnings,
+        warnings=execution_warnings + convergence_warnings,
     )
+
+
+def _initialize_bootstrap_worker(
+    games: tuple[GameSummary, ...],
+    bot_ids: tuple[str, ...],
+    root_seed: int,
+) -> None:
+    global _BOOTSTRAP_GAMES, _BOOTSTRAP_BOT_IDS, _BOOTSTRAP_ROOT_SEED
+    _BOOTSTRAP_GAMES = games
+    _BOOTSTRAP_BOT_IDS = bot_ids
+    _BOOTSTRAP_ROOT_SEED = root_seed
+
+
+def _fit_bootstrap_worker(replicate: int) -> tuple[tuple[str, float], ...] | None:
+    if not _BOOTSTRAP_GAMES or not _BOOTSTRAP_BOT_IDS:
+        raise RuntimeError("bootstrap worker was not initialized")
+    return _fit_bootstrap_replicate(
+        _BOOTSTRAP_GAMES,
+        _BOOTSTRAP_BOT_IDS,
+        _BOOTSTRAP_ROOT_SEED,
+        replicate,
+    )
+
+
+def _fit_bootstrap_replicate(
+    games: tuple[GameSummary, ...],
+    bot_ids: tuple[str, ...],
+    root_seed: int,
+    replicate: int,
+) -> tuple[tuple[str, float], ...] | None:
+    rng = random.Random(derive_seed(root_seed, "bootstrap", replicate))
+    resampled = tuple(games[rng.randrange(len(games))] for _ in games)
+    try:
+        fit = fit_plackett_luce(observations_from_games(resampled), bot_ids)
+    except TournamentRatingError:
+        return None
+    return tuple((rating.bot_id, rating.rating) for rating in fit.ratings)

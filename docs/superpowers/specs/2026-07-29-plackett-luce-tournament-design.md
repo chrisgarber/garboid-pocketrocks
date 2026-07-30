@@ -258,12 +258,15 @@ added fresh to each replicate and are not themselves resampled.
 
 The 2.5th and 97.5th empirical percentiles form the displayed 95% interval.
 Bootstrap seeds derive from the tournament root seed. Replicates run after the
-Monte Carlo tournament so the main strength estimate and artifacts remain
-available even when bootstrap sampling is disabled. A failed replicate is
-reported and excluded. Intervals are emitted when at least 90% of requested
-replicates converge; otherwise the leaderboard is still written without
-intervals and every artifact carries a bootstrap warning. Secondary
-uncertainty estimation never suppresses the primary fitted rankings.
+Monte Carlo tournament, reuse the requested worker count, and remain identical
+across worker counts. Duplicate whole-ranking observations are combined as
+weighted sufficient statistics before fitting; bootstrap sampling still draws
+complete games before that lossless compression. The main strength estimate
+and artifacts remain available even when bootstrap sampling is disabled. A
+failed replicate is reported and excluded. Intervals are emitted when at least
+90% of requested replicates converge; otherwise the leaderboard is still
+written without intervals and every artifact carries a bootstrap warning.
+Secondary uncertainty estimation never suppresses the primary fitted rankings.
 
 ## Metrics and artifacts
 

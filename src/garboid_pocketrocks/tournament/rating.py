@@ -102,6 +102,19 @@ def observations_from_games(
     return tuple(observations)
 
 
+def _aggregate_observations(
+    observations: tuple[RankingObservation, ...],
+) -> tuple[RankingObservation, ...]:
+    weights: dict[tuple[tuple[str, ...], ...], float] = {}
+    for observation in observations:
+        weights[observation.rank_groups] = (
+            weights.get(observation.rank_groups, 0.0) + observation.weight
+        )
+    return tuple(
+        RankingObservation(rank_groups, weight=weight) for rank_groups, weight in weights.items()
+    )
+
+
 def fit_plackett_luce(
     observations: tuple[RankingObservation, ...],
     bot_ids: tuple[str, ...],
@@ -110,6 +123,7 @@ def fit_plackett_luce(
 ) -> PlackettLuceFit:
     if not observations:
         raise TournamentRatingError("at least one ranking observation is required")
+    observations = _aggregate_observations(observations)
     if not bot_ids or len(set(bot_ids)) != len(bot_ids):
         raise TournamentRatingError("fitted bot IDs must be nonempty and unique")
     if _GHOST_ID in bot_ids:

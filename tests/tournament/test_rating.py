@@ -5,6 +5,7 @@ import statistics
 
 import pytest
 
+import garboid_pocketrocks.tournament.rating as rating_module
 from garboid_pocketrocks.tournament.rating import (
     RankingObservation,
     TournamentRatingError,
@@ -71,6 +72,38 @@ def test_later_tie_group_can_differ_from_fitted_bot_order() -> None:
     )
 
     assert {item.bot_id for item in fit.ratings} == {"z", "b", "a", "d"}
+
+
+def test_duplicate_observations_are_combined_as_weights() -> None:
+    ranking = (("a",), ("b",), ("c",))
+
+    combined = rating_module._aggregate_observations(
+        (
+            RankingObservation(ranking),
+            RankingObservation((("c",), ("b",), ("a",))),
+            RankingObservation(ranking, weight=2.5),
+        )
+    )
+
+    assert combined == (
+        RankingObservation(ranking, weight=3.5),
+        RankingObservation((("c",), ("b",), ("a",))),
+    )
+
+
+def test_weighted_observation_matches_repeated_observations() -> None:
+    ranking = RankingObservation((("a",), ("b",), ("c",)))
+    reverse = RankingObservation((("c",), ("b",), ("a",)))
+
+    repeated = fit_plackett_luce((ranking, ranking, ranking, reverse), ("a", "b", "c"))
+    weighted = fit_plackett_luce(
+        (RankingObservation(ranking.rank_groups, weight=3.0), reverse),
+        ("a", "b", "c"),
+    )
+
+    assert {item.bot_id: item.rating for item in repeated.ratings} == pytest.approx(
+        {item.bot_id: item.rating for item in weighted.ratings}
+    )
 
 
 def test_higher_order_tie_is_fitted() -> None:

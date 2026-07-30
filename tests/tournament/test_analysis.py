@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+import garboid_pocketrocks.tournament.analysis as analysis_module
 from garboid_pocketrocks.simulator.monte_carlo import GameSummary, MonteCarloResult
 from garboid_pocketrocks.tournament.analysis import (
     analyze_tournament,
@@ -104,12 +105,14 @@ def test_bootstrap_is_deterministic_and_resamples_whole_games() -> None:
         ("a", "b", "c"),
         samples=20,
         root_seed=42,
+        workers=1,
     )
     second = bootstrap_rating_intervals(
         _games(),
         ("a", "b", "c"),
         samples=20,
         root_seed=42,
+        workers=2,
     )
 
     assert first == second
@@ -131,3 +134,35 @@ def test_bootstrap_zero_samples_returns_no_intervals() -> None:
     assert summary.converged == 0
     assert summary.intervals == ()
     assert summary.warnings == ()
+
+
+def test_parallel_bootstrap_retries_serially_when_processes_are_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class UnavailableProcessPool:
+        def __init__(self, **_: object) -> None:
+            raise PermissionError("processes unavailable")
+
+    monkeypatch.setattr(analysis_module, "ProcessPoolExecutor", UnavailableProcessPool)
+
+    summary = bootstrap_rating_intervals(
+        _games(),
+        ("a", "b", "c"),
+        samples=5,
+        root_seed=42,
+        workers=2,
+    )
+
+    assert summary.converged == 5
+    assert len(summary.intervals) == 3
+    assert summary.warnings == ("parallel bootstrap failed with PermissionError; retried serially",)
+
+
+def test_bootstrap_rejects_invalid_bot_ids() -> None:
+    with pytest.raises(ValueError, match="nonempty and unique"):
+        bootstrap_rating_intervals(
+            _games(),
+            (),
+            samples=1,
+            root_seed=42,
+        )

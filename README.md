@@ -121,7 +121,8 @@ uv run garboid-tournament \
 Those game, player, chart, seed, and bootstrap settings are the defaults.
 Lineups contain distinct bot identities, condition exposure is balanced across
 the 15 chart/player-count cells, and seats are rotated fairly. A fixed seed
-produces identical game summaries and rankings regardless of worker count.
+produces identical game summaries, rankings, and bootstrap intervals regardless
+of worker count. Workers accelerate both match simulation and interval fitting.
 
 The current registry has four distinct bots, so the full default correctly
 fails its five-player preflight until the in-progress v2 heuristic bots land.

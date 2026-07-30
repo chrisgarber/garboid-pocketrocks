@@ -131,3 +131,16 @@ def test_pair_exposures_reconcile_with_jobs() -> None:
         (exposure.first_bot_id, exposure.second_bot_id): exposure.games
         for exposure in plan.pair_exposures
     } == expected
+
+
+def test_pair_exposures_include_pairs_that_never_met() -> None:
+    config = TournamentConfig(
+        bot_specs=random_specs(20),
+        games=15,
+        bootstrap_samples=0,
+    )
+
+    plan = TournamentPlanner.plan(config)
+
+    assert len(plan.pair_exposures) == 190
+    assert min(exposure.games for exposure in plan.pair_exposures) == 0

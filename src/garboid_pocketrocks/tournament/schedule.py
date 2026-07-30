@@ -145,8 +145,11 @@ class TournamentPlanner:
             fault_mode=config.fault_mode,
         )
         pair_exposures = tuple(
-            PairExposure(first, second, games)
-            for (first, second), games in sorted(pair_appearances.items())
+            PairExposure(first, second, pair_appearances[first, second])
+            for first, second in itertools.combinations(
+                sorted(spec.bot_id for spec in config.bot_specs),
+                2,
+            )
         )
         return TournamentPlan(
             monte_carlo_config=monte_carlo_config,
