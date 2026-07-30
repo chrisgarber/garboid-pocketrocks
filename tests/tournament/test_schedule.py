@@ -95,6 +95,24 @@ def test_seats_are_balanced_within_each_player_count() -> None:
         assert max(values) - min(values) <= 1
 
 
+def test_seat_repair_can_use_a_donor_with_one_extra_appearance() -> None:
+    config = TournamentConfig(
+        bot_specs=random_specs(5),
+        games=31,
+        root_seed=4,
+        bootstrap_samples=0,
+    )
+    plan = TournamentPlanner.plan(config)
+    seats: dict[tuple[int, str], Counter[int]] = defaultdict(Counter)
+    for job in plan.jobs:
+        for seat, spec in enumerate(job.lineup):
+            seats[job.player_count, spec.bot_id][seat] += 1
+
+    for (player_count, _), counts in seats.items():
+        values = tuple(counts[seat] for seat in range(player_count))
+        assert max(values) - min(values) <= 1
+
+
 def test_pair_exposures_reconcile_with_jobs() -> None:
     config = TournamentConfig(
         bot_specs=random_specs(6),

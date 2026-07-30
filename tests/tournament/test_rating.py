@@ -64,6 +64,15 @@ def test_tie_group_order_does_not_change_fit() -> None:
     assert by_id["a"].rating == pytest.approx(by_id["b"].rating)
 
 
+def test_later_tie_group_can_differ_from_fitted_bot_order() -> None:
+    fit = fit_plackett_luce(
+        (RankingObservation((("d",), ("b",), ("a", "z"))),),
+        ("z", "b", "a", "d"),
+    )
+
+    assert {item.bot_id for item in fit.ratings} == {"z", "b", "a", "d"}
+
+
 def test_higher_order_tie_is_fitted() -> None:
     fit = fit_plackett_luce(
         (

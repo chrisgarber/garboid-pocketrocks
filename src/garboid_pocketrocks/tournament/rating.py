@@ -238,7 +238,7 @@ def _negative_log_likelihood(
         return float(parameters[index])
 
     for observation in problem.observations:
-        remaining = tuple(index for group in observation.rank_groups for index in group)
+        remaining = tuple(sorted(index for group in observation.rank_groups for index in group))
         for chosen in observation.rank_groups:
             if len(remaining) == 1:
                 break

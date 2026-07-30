@@ -327,7 +327,7 @@ def _repair_seat_spreads(
         targets = {
             bot_id
             for bot_id in bot_ids
-            if counts[bot_id, deficit_seat] - counts[bot_id, surplus_seat] > 1
+            if counts[bot_id, deficit_seat] > counts[bot_id, surplus_seat]
         }
         previous: dict[str, tuple[str, int] | None] = {start: None}
         queue = deque((start,))
