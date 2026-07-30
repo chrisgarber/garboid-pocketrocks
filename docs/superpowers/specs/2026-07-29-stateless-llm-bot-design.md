@@ -196,4 +196,3 @@ Use red-green TDD with no live model calls in the automated suite.
 One opt-in/manual smoke command may invoke the installed Codex CLI with a tiny
 integer prompt. It is not part of the default test suite because it requires
 authentication, network access, time, and model usage.
-

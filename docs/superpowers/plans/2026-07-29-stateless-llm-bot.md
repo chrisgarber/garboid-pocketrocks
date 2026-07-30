@@ -77,8 +77,7 @@ class PocketRocksPromptSkill:
         ruleset: RulesetKnowledge,
         *,
         correction: str | None = None,
-    ) -> str:
-        ...
+    ) -> str: ...
 ```
 
 Use `importlib.resources.files` to load `skills/pocketrocks/SKILL.md`.
@@ -113,7 +112,9 @@ Use a scripted in-memory backend and recording prompt skill. Cover:
 ```python
 assert brain_with(" 7\n").choose_decision(bid_context, knowledge) == BotDecision.submit_bid(7)
 assert brain_with("0").choose_decision(bid_context, knowledge) == BotDecision.pass_turn()
-assert brain_with("1").choose_decision(reveal_context, knowledge) == BotDecision.select_info_to_reveal(1)
+assert brain_with("1").choose_decision(
+    reveal_context, knowledge
+) == BotDecision.select_info_to_reveal(1)
 ```
 
 Add separate tests proving:
@@ -344,4 +345,3 @@ failures.
 Invoke `CodexCLIBackend().complete` with a prompt that requires the answer `0`
 and a bounded timeout. If the environment blocks network or lacks auth, report
 that limitation separately; do not weaken the automated verification.
-

@@ -69,6 +69,65 @@ The SDK reads its server, capacity, logging, and API-key settings from the
 environment. The tests use its in-memory `FakeTransport` and never connect to
 the live service.
 
+## Stateless local Codex bot
+
+`CodexBot` sends every decision to a fresh, ephemeral local `codex exec`
+process. A provider-neutral `StatelessLLMBrain` handles strict integer parsing,
+one correction retry, and deterministic fallback, while the PocketRocks rules
+and prompt instructions live separately in a packaged `SKILL.md`.
+
+Authenticate the local Codex CLI, configure the PocketRocks SDK through
+`.env`, and run:
+
+```bash
+uv run garboid-codex-bot \
+  --model MODEL \
+  --timeout-seconds 30
+```
+
+The model receives the complete snapshot exposed by the SDK, including named
+actions, resources, objectives, public holdings, and its own private hand. Bid
+prompts require one integer from zero through the legal maximum; reveal
+prompts provide an exact zero-based card-index map. Responses containing
+prose, Markdown, JSON, signs, decimals, or out-of-range values are rejected.
+
+`CodexBot.BOT_ID` is a development-only placeholder. Replace it with a
+registered bot ID before connecting the wrapper to the live service. The bot
+is intentionally stateless because the current SDK context has no game ID and
+cannot safely associate concurrent live requests with persistent sessions. It
+also cannot see prior bids or current loan/investment positions, which the SDK
+snapshot omits.
+
+The same bot is registered in the simulator:
+
+```bash
+uv run garboid-simulate \
+  --bots codex,random,random \
+  --games 1 \
+  --players 3 \
+  --ruleset live-A \
+  --seed 42
+```
+
+Each decision invokes a model, so LLM simulations are slow, nondeterministic,
+and may consume paid model usage. For another provider, implement the small
+backend interface and inject it without changing the PocketRocks prompt:
+
+```python
+from garboid_pocketrocks.bots import PocketRocksPromptSkill, StatelessLLMBrain
+
+
+class MyBackend:
+    def complete(self, prompt: str, *, timeout_seconds: float) -> str:
+        return call_my_llm(prompt, timeout_seconds=timeout_seconds)
+
+
+brain = StatelessLLMBrain(
+    MyBackend(),
+    prompt_skill=PocketRocksPromptSkill(),
+)
+```
+
 ## Local simulation and Monte Carlo
 
 Run 1,000 deterministic random-bot matches:
