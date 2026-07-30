@@ -7,6 +7,7 @@ import time
 import traceback
 from collections import Counter
 from collections.abc import Mapping, Sequence
+from contextlib import suppress
 from dataclasses import dataclass
 from multiprocessing.connection import Connection, wait
 from multiprocessing.process import BaseProcess
@@ -153,22 +154,35 @@ def _spawn_vector_workers(
     parents: list[Connection] = []
     processes: list[BaseProcess] = []
     for worker_id, shard in enumerate(shards):
-        parent, child = context.Pipe()
-        process: BaseProcess = context.Process(
-            target=_run_vector_shard,
-            args=(
-                child,
-                worker_id,
-                shard,
-                snapshots,
-                encoder_config,
-                reward_config,
-                engine_batch_size,
-                max_inference_batch,
-            ),
-            name=f"vector-self-play-{worker_id}",
-        )
-        process.start()
+        parent: Connection | None = None
+        child: Connection | None = None
+        try:
+            parent, child = context.Pipe()
+            process: BaseProcess = context.Process(
+                target=_run_vector_shard,
+                args=(
+                    child,
+                    worker_id,
+                    shard,
+                    snapshots,
+                    encoder_config,
+                    reward_config,
+                    engine_batch_size,
+                    max_inference_batch,
+                ),
+                name=f"vector-self-play-{worker_id}",
+            )
+            process.start()
+        except BaseException:
+            if child is not None:
+                with suppress(BaseException):
+                    child.close()
+            if parent is not None:
+                with suppress(BaseException):
+                    parent.close()
+            with suppress(BaseException):
+                _shutdown_vector_workers(parents, processes, terminate=True)
+            raise
         child.close()
         parents.append(parent)
         processes.append(process)

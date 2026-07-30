@@ -6,6 +6,7 @@ import multiprocessing
 import time
 from collections import Counter, defaultdict
 from collections.abc import Mapping, Sequence
+from contextlib import suppress
 from multiprocessing.connection import Connection, wait
 from multiprocessing.process import BaseProcess
 from typing import cast
@@ -168,20 +169,33 @@ def _spawn_plan_workers(
     parents: list[Connection] = []
     processes: list[BaseProcess] = []
     for worker_id, shard in enumerate(shards):
-        parent, child = context.Pipe()
-        created_process = context.Process(
-            target=run_plan_shard,
-            args=(
-                child,
-                worker_id,
-                shard,
-                encoder_config,
-                reward_config,
-                active_games_per_worker,
-            ),
-            name=f"self-play-{worker_id}",
-        )
-        created_process.start()
+        parent: Connection | None = None
+        child: Connection | None = None
+        try:
+            parent, child = context.Pipe()
+            created_process = context.Process(
+                target=run_plan_shard,
+                args=(
+                    child,
+                    worker_id,
+                    shard,
+                    encoder_config,
+                    reward_config,
+                    active_games_per_worker,
+                ),
+                name=f"self-play-{worker_id}",
+            )
+            created_process.start()
+        except BaseException:
+            if child is not None:
+                with suppress(BaseException):
+                    child.close()
+            if parent is not None:
+                with suppress(BaseException):
+                    parent.close()
+            with suppress(BaseException):
+                _shutdown_plan_workers(parents, processes, terminate=True)
+            raise
         child.close()
         parents.append(parent)
         processes.append(created_process)
