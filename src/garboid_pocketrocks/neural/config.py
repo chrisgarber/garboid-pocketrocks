@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from garboid_pocketrocks.rules import LIVE_RULESET
+from garboid_pocketrocks.rules import LIVE_RULESET, live_ruleset
 
 
 @dataclass(frozen=True, slots=True)
@@ -121,4 +121,35 @@ def stage1_model_config() -> NeuralModelConfig:
         gru_hidden_size=64,
         snapshot_hidden_size=128,
         trunk_hidden_size=128,
+    )
+
+
+def training_encoder_config() -> NeuralEncoderConfig:
+    """Return the finite live-chart, three-to-five-player training contract."""
+
+    rulesets = tuple(live_ruleset(chart) for chart in "ABCDE")
+    player_counts = (3, 4, 5)
+    max_history_events = max(
+        1
+        + (2 * sum(ruleset.action_counts))
+        + (
+            player_count
+            * ruleset.setup_for(player_count).private_cards_per_player
+        )
+        for ruleset in rulesets
+        for player_count in player_counts
+    )
+    return NeuralEncoderConfig(
+        schema_version=1,
+        supported_ruleset_names=tuple(ruleset.name for ruleset in rulesets),
+        supported_player_counts=player_counts,
+        max_bid=100,
+        max_hand_size=5,
+        max_history_events=max_history_events,
+        max_cash=100,
+        max_abs_chart=20,
+        max_resource_cards=max(
+            sum(ruleset.resource_counts) for ruleset in rulesets
+        ),
+        max_action_cards=max(sum(ruleset.action_counts) for ruleset in rulesets),
     )
