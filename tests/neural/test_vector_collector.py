@@ -6,8 +6,8 @@ torch = pytest.importorskip("torch")
 
 from garboid_pocketrocks.neural.collector import collect_self_play  # noqa: E402
 from garboid_pocketrocks.neural.config import (  # noqa: E402
-    stage1_model_config,
     training_encoder_config,
+    training_model_config,
 )
 from garboid_pocketrocks.neural.encoding import (  # noqa: E402
     NeuralObservationEncoder,
@@ -44,7 +44,7 @@ def _scores(
             episode.plan.episode_index,
             tuple((score.seat, score.final_money, score.rank) for score in episode.result.scores),
         )
-        for episode in rollout.multi_seat_episodes
+        for episode in rollout.episodes
     )
 
 
@@ -68,7 +68,7 @@ def test_vector_plan_batches_use_homogeneous_groups_of_sixty_four() -> None:
 def test_vector_collector_matches_scalar_sdk_self_play() -> None:
     torch.manual_seed(93)
     config = training_encoder_config()
-    model = NeuralPolicy(config, stage1_model_config())
+    model = NeuralPolicy(config, training_model_config("small"))
     plans = plan_mirror_episodes(
         root_seed=93,
         update_index=0,
@@ -135,7 +135,7 @@ def test_vector_collector_skips_redundant_external_input_validation(
         unexpected_validation,
     )
     config = training_encoder_config()
-    model = NeuralPolicy(config, stage1_model_config())
+    model = NeuralPolicy(config, training_model_config("small"))
     plans = plan_mirror_episodes(
         root_seed=7,
         update_index=0,

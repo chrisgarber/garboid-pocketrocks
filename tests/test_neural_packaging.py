@@ -74,6 +74,8 @@ def test_ci_keeps_core_install_and_splits_neural_unit_and_smoke_steps() -> None:
     assert "run: uv run --extra neural mypy --config-file mypy.neural.ini src tests" in workflow
     assert 'run: uv run --extra neural pytest tests/neural -m "not neural_smoke" -q' in workflow
     assert (
-        "run: uv run --extra neural pytest -n 0 "
-        "tests/neural/test_smoke.py::test_two_by_sixteen_smoke_is_deterministic -q"
+        "uv run --extra neural pytest -n 0\n"
+        "          tests/neural/test_smoke.py::"
+        "test_full_curriculum_smoke_contract_at_one_game_per_cell\n"
+        "          -q"
     ) in workflow

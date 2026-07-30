@@ -8,8 +8,8 @@ torch = pytest.importorskip("torch")
 
 from garboid_pocketrocks.neural.collector import CollectorMetrics  # noqa: E402
 from garboid_pocketrocks.neural.config import (  # noqa: E402
-    stage1_model_config,
     training_encoder_config,
+    training_model_config,
 )
 from garboid_pocketrocks.neural.model import NeuralPolicy  # noqa: E402
 from garboid_pocketrocks.neural.planning import plan_mirror_episodes  # noqa: E402
@@ -71,7 +71,7 @@ def _stable_metrics(
 def test_pool_reuses_actors_across_exact_policy_updates() -> None:
     torch.manual_seed(811)
     config = training_encoder_config()
-    model = NeuralPolicy(config, stage1_model_config())
+    model = NeuralPolicy(config, training_model_config("small"))
     reward = RewardConfig()
     update_zero = plan_mirror_episodes(
         root_seed=811,
@@ -132,7 +132,7 @@ def test_pool_reuses_actors_across_exact_policy_updates() -> None:
 
 def test_pool_rejects_collection_after_close() -> None:
     config = training_encoder_config()
-    model = NeuralPolicy(config, stage1_model_config())
+    model = NeuralPolicy(config, training_model_config("small"))
     plans = plan_mirror_episodes(
         root_seed=17,
         update_index=0,
@@ -156,7 +156,7 @@ def test_pool_propagates_worker_snapshot_failures(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     config = training_encoder_config()
-    model = NeuralPolicy(config, stage1_model_config())
+    model = NeuralPolicy(config, training_model_config("small"))
     plans = plan_mirror_episodes(
         root_seed=19,
         update_index=0,

@@ -5,8 +5,8 @@ import pytest
 torch = pytest.importorskip("torch")
 
 from garboid_pocketrocks.neural.config import (  # noqa: E402
-    stage1_model_config,
     training_encoder_config,
+    training_model_config,
 )
 from garboid_pocketrocks.neural.model import NeuralPolicy  # noqa: E402
 from garboid_pocketrocks.neural.planning import plan_mirror_episodes  # noqa: E402
@@ -37,7 +37,7 @@ def _records(
 def test_parallel_vector_actors_match_single_process_vector_rollout() -> None:
     torch.manual_seed(81)
     config = training_encoder_config()
-    model = NeuralPolicy(config, stage1_model_config())
+    model = NeuralPolicy(config, training_model_config("small"))
     plans = plan_mirror_episodes(
         root_seed=81,
         update_index=0,

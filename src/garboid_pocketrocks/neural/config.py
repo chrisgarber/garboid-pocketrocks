@@ -67,7 +67,7 @@ class NeuralEncoderConfig:
 
 @dataclass(frozen=True, slots=True)
 class NeuralModelConfig:
-    """Checkpointed widths for the Stage 1 policy/value network."""
+    """Checkpointed widths for the policy/value network."""
 
     categorical_embedding_size: int
     suit_embedding_size: int
@@ -91,47 +91,19 @@ class NeuralModelConfig:
                 raise ValueError(f"{name} must be positive")
 
 
-def stage1_encoder_config() -> NeuralEncoderConfig:
-    """Return the exact live-A, three-player Stage 1 encoder contract."""
-
-    player_count = 3
-    knowledge = canonical_knowledge(player_count)
-    history_bound = (
-        1 + (2 * sum(knowledge.action_counts)) + (player_count * knowledge.private_cards_per_player)
-    )
-    return NeuralEncoderConfig(
-        schema_version=1,
-        supported_ruleset_names=(knowledge.name,),
-        supported_player_counts=(player_count,),
-        max_bid=100,
-        max_hand_size=5,
-        max_history_events=history_bound,
-        max_cash=100,
-        max_abs_chart=20,
-        max_resource_cards=30,
-        max_action_cards=30,
-    )
-
-
-def stage1_model_config() -> NeuralModelConfig:
-    """Return the exact Stage 1 neural-network widths."""
-
-    return NeuralModelConfig(
-        categorical_embedding_size=8,
-        suit_embedding_size=4,
-        seat_hidden_size=32,
-        event_embedding_size=64,
-        gru_hidden_size=64,
-        snapshot_hidden_size=128,
-        trunk_hidden_size=128,
-    )
-
-
 def training_model_config(profile: ModelProfile) -> NeuralModelConfig:
     """Return a checkpoint-stable capacity profile for self-play training."""
 
     if profile == "small":
-        return stage1_model_config()
+        return NeuralModelConfig(
+            categorical_embedding_size=8,
+            suit_embedding_size=4,
+            seat_hidden_size=32,
+            event_embedding_size=64,
+            gru_hidden_size=64,
+            snapshot_hidden_size=128,
+            trunk_hidden_size=128,
+        )
     if profile == "medium":
         return NeuralModelConfig(
             categorical_embedding_size=16,

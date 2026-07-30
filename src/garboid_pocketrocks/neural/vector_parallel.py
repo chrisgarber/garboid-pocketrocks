@@ -241,7 +241,7 @@ def _run_vector_shard(
         connection.send(
             _VectorWorkerResult(
                 worker_id=worker_id,
-                episodes=rollout.multi_seat_episodes,
+                episodes=rollout.episodes,
                 metrics=metrics,
             )
         )

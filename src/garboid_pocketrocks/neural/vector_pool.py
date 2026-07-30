@@ -393,7 +393,7 @@ def _run_vector_actor(
                     _WorkerResult(
                         request_id=command.request_id,
                         worker_id=worker_id,
-                        episodes=rollout.multi_seat_episodes,
+                        episodes=rollout.episodes,
                         metrics=metrics,
                     )
                 )

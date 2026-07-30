@@ -361,7 +361,7 @@ Terminal resource value supplies the remaining normalized final-money change.
 A configurable win bonus is divided among tied winners. Reward components are
 returned separately for auditing.
 
-## Stage 1 neural PPO smoke
+## Neural PPO smoke
 
 Torch remains an optional dependency. Install the locked neural environment
 and run the deterministic mechanics smoke with:
@@ -372,24 +372,23 @@ uv run --extra neural garboid-train smoke \
   --output-dir artifacts/neural-smoke
 ```
 
-The default runs exactly two PPO updates with 16 complete live-A, three-player
-games per update on CPU. The learner seat rotates while the other seats use
-the frozen balanced and passive heuristic bots. It verifies deterministic
-planning, public-history encoding, legal-action masking, gamma-one GAE, one
-epoch of clipped PPO, gradient clipping, and checkpoint replay. It is a
-mechanics test, not evidence of playing strength.
+The committed smoke runs the trainer-backed A-E, three-to-five-player
+self-play curriculum and verifies legal-action masking, PPO, checkpoint
+reload, and resume. Use `--games-per-cell 1 --workers 1 --device cpu` for the
+smallest local acceptance run. It is a mechanics test, not evidence of playing
+strength.
 
-The output contains `smoke-result.json` and an inference-only checkpoint:
+The output contains `self-play-smoke-result.json`, run metrics, and a durable
+training checkpoint:
 
 ```text
-checkpoint/
+checkpoints/latest/
   manifest.json
+  metrics.json
   model.pt
+  optimizer.pt
+  rng.pt
 ```
-
-Stage 1 checkpoints intentionally omit optimizer and random-number-generator
-state, so runs cannot be resumed. Stage 1 also has no opponent league, varied
-ruleset curriculum, or registered live neural bot wrapper.
 
 ## Quality checks
 

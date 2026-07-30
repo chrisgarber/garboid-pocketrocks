@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter
+from dataclasses import replace
 
 import pytest
 
@@ -12,15 +13,15 @@ from garboid_pocketrocks.neural.collector import (  # noqa: E402
     collect_self_play,
 )
 from garboid_pocketrocks.neural.config import (  # noqa: E402
-    stage1_encoder_config,
-    stage1_model_config,
     training_encoder_config,
+    training_model_config,
 )
 from garboid_pocketrocks.neural.model import NeuralPolicy  # noqa: E402
 from garboid_pocketrocks.neural.planning import (  # noqa: E402
     SelfPlayEpisodePlan,
     plan_mirror_episodes,
 )
+from garboid_pocketrocks.neural.rollout import MultiSeatEpisode  # noqa: E402
 from garboid_pocketrocks.training.rewards import RewardConfig  # noqa: E402
 
 
@@ -36,7 +37,7 @@ def _plans() -> tuple[SelfPlayEpisodePlan, ...]:
 def test_collector_batches_all_live_chart_and_player_count_cells() -> None:
     torch.manual_seed(9)
     encoder_config = training_encoder_config()
-    model = NeuralPolicy(encoder_config, stage1_model_config())
+    model = NeuralPolicy(encoder_config, training_model_config("small"))
     model.train()
     parameters_before = tuple(parameter.detach().clone() for parameter in model.parameters())
 
@@ -56,16 +57,24 @@ def test_collector_batches_all_live_chart_and_player_count_cells() -> None:
     assert 0.0 <= metrics.inference_seconds <= metrics.elapsed_seconds
     assert metrics.inference_batches == len(metrics.inference_batch_sizes)
     assert max(metrics.inference_batch_sizes) > 1
+    assert rollout.episodes
+    assert all(isinstance(episode, MultiSeatEpisode) for episode in rollout.episodes)
+    assert not hasattr(rollout, "multi_seat_episodes")
     assert Counter(
-        (episode.plan.ruleset_name, episode.plan.player_count)
-        for episode in rollout.multi_seat_episodes
+        (episode.plan.ruleset_name, episode.plan.player_count) for episode in rollout.episodes
     ) == {(f"live-{chart}", player_count): 1 for chart in "ABCDE" for player_count in (3, 4, 5)}
     assert metrics.cell_games == tuple(
         (f"live-{chart}", player_count, 1) for chart in "ABCDE" for player_count in (3, 4, 5)
     )
     assert all(
-        len(episode.trajectories) == episode.plan.player_count
-        for episode in rollout.multi_seat_episodes
+        len(episode.trajectories) == episode.plan.player_count for episode in rollout.episodes
+    )
+    assert rollout.transitions == tuple(
+        transition
+        for episode in rollout.episodes
+        for trajectory in episode.trajectories
+        if trajectory.trainable
+        for transition in trajectory.transitions
     )
     assert all(
         transition.observation.action_mask[transition.action] for transition in rollout.transitions
@@ -78,7 +87,7 @@ def test_collector_batches_all_live_chart_and_player_count_cells() -> None:
 def test_collector_is_schedule_independent() -> None:
     torch.manual_seed(18)
     encoder_config = training_encoder_config()
-    model = NeuralPolicy(encoder_config, stage1_model_config())
+    model = NeuralPolicy(encoder_config, training_model_config("small"))
     plans = _plans()
 
     first, _ = collect_self_play(
@@ -106,7 +115,7 @@ def test_collector_is_schedule_independent() -> None:
             transition.metadata.learner_seat,
             index,
         ): transition.action
-        for episode in first.multi_seat_episodes
+        for episode in first.episodes
         for trajectory in episode.trajectories
         for index, transition in enumerate(trajectory.transitions)
     }
@@ -116,7 +125,7 @@ def test_collector_is_schedule_independent() -> None:
             transition.metadata.learner_seat,
             index,
         ): transition.action
-        for episode in second.multi_seat_episodes
+        for episode in second.episodes
         for trajectory in episode.trajectories
         for index, transition in enumerate(trajectory.transitions)
     }
@@ -136,7 +145,7 @@ def test_collector_rejects_nonpositive_batching_limits(
     message: str,
 ) -> None:
     encoder_config = training_encoder_config()
-    model = NeuralPolicy(encoder_config, stage1_model_config())
+    model = NeuralPolicy(encoder_config, training_model_config("small"))
 
     with pytest.raises(CollectorError, match=message):
         collect_self_play(
@@ -164,7 +173,10 @@ def test_collector_rejects_missing_and_incompatible_policies() -> None:
             max_inference_batch=8,
         )
 
-    incompatible = NeuralPolicy(stage1_encoder_config(), stage1_model_config())
+    incompatible = NeuralPolicy(
+        replace(encoder_config, supported_ruleset_names=("live-A",)),
+        training_model_config("small"),
+    )
     with pytest.raises(CollectorError, match="encoder"):
         collect_self_play(
             {"current": incompatible},

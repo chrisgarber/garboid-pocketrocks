@@ -1,4 +1,4 @@
-"""One-epoch legal-action-masked PPO for the Stage 1 training proof."""
+"""Legal-action-masked PPO training."""
 
 from __future__ import annotations
 
@@ -24,12 +24,12 @@ _ADVANTAGE_EPSILON = 1e-8
 
 
 class PPOError(ValueError):
-    """Raised when inputs cannot produce a finite Stage 1 PPO update."""
+    """Raised when inputs cannot produce a finite PPO update."""
 
 
 @dataclass(frozen=True, slots=True)
 class PPOConfig:
-    """Exact Stage 1 PPO defaults."""
+    """PPO optimizer and objective defaults."""
 
     gamma: float = 1.0
     gae_lambda: float = 0.95
@@ -54,7 +54,7 @@ class PPOConfig:
         if not all(math.isfinite(value) for value in coefficients):
             raise PPOError("PPO coefficients must be finite")
         if self.gamma != 1.0:
-            raise PPOError("Stage 1 requires gamma=1.0")
+            raise PPOError("PPO training requires gamma=1.0")
         if not 0.0 <= self.gae_lambda <= 1.0:
             raise PPOError("GAE lambda must be between zero and one")
         if self.clip_ratio <= 0.0:
@@ -126,7 +126,7 @@ def ppo_loss(
     *,
     config: PPOConfig,
 ) -> PPOLoss:
-    """Compute the exact clipped Stage 1 objective for one minibatch."""
+    """Compute the clipped PPO objective for one minibatch."""
 
     tensors = (
         new_log_probability,

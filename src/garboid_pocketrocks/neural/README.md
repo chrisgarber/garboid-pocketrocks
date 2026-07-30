@@ -99,8 +99,9 @@ row-specific seed; greedy evaluation chooses the lowest-index maximum through
 `argmax`.
 
 The training encoder supports a maximum five-card hand and 77 public events,
-which covers the finite A-E, three-to-five-player live envelope. The older
-Stage 1 helpers remain available for the legacy live-A/three-player smoke.
+which covers the finite A-E, three-to-five-player live envelope. The
+trainer-backed smoke uses the same self-play collector and checkpoint format
+as production.
 
 ## What one training update does
 
@@ -179,8 +180,10 @@ uv run --extra neural garboid-train smoke \
 
 The default smoke pins the measured eight-actor CPU path and runs one PPO
 update with 100 games in each cell: 1,500 games total. It verifies full cell
-coverage, legal/fault-free collection, finite value metrics, checkpoint digest
-replay, and reloadable optimizer/progress state. It writes
+coverage, finite value metrics, checkpoint digest integrity, and a real
+additional update resumed from the saved optimizer/progress state. Collection
+rejects illegal policy responses instead of reporting a synthetic fault
+counter. The smoke writes
 `self-play-smoke-result.json` in addition to the normal run artifacts. Use
 `--games-per-cell 1 --workers 1` for a 15-game developer probe.
 
@@ -236,7 +239,7 @@ small model and former 8,192-decision target. It is not a run of the current
 The current medium ten-minute plan and current large eight-hour plan have not
 been started in the checked-in artifacts. No long-run strength claim is made.
 
-## Checkpoint, resume, inspect, and evaluate commands
+## Checkpoint, resume, and inspect commands
 
 Every completed update atomically replaces:
 
@@ -275,19 +278,6 @@ uv run --extra neural garboid-train resume \
 Omit `--max-additional-updates` to use the checkpointed run budget. A
 `--config` override may change compatible run controls, but it may not change
 the root seed or model profile.
-
-The CLI exposes an `evaluate` command:
-
-```bash
-uv run --extra neural garboid-train evaluate \
-  --checkpoint artifacts/neural-10m/checkpoints/latest \
-  --config configs/neural/initial-10m.json \
-  --output artifacts/neural-10m/evaluation.json
-```
-
-At present this command only validates/inspects the checkpoint and writes that
-metadata plus the evaluation-config path. It does **not** play evaluation
-games or produce a strength report.
 
 ## Metrics and run files
 
@@ -333,18 +323,17 @@ Implemented in the trainer:
 - packed PPO, value diagnostics, atomic latest checkpoints, resume, and
   inspection.
 
-Present as configuration fields or helper modules, but not yet connected to
-the training loop:
+Implemented as helpers, but not yet connected to the training loop:
 
 - paired strength evaluation, confidence intervals, and promotion;
-- heuristic/champion evaluation at start, interval, or end;
-- checkpoint-league mixing (`league_fraction` is currently ignored);
-- interval checkpoints and retention (`checkpoint_interval_seconds` and
-  `keep_periodic_checkpoints` are currently ignored);
-- periodic evaluation (`evaluation_interval_seconds`, `evaluate_at_start`, and
-  `evaluate_at_end` are currently ignored);
-- a CLI strength evaluator (the current `evaluate` command is metadata-only);
+- a CLI strength evaluator;
 - a registered deployable SDK `NeuralBot`.
+
+Configuration fields for heuristic/champion evaluation, checkpoint-league
+mixing, interval checkpoints, retention, and periodic evaluation remain
+deserializable for historical checkpoints. Non-default values are rejected by
+`train` and `resume` before an output directory is created because the runtime
+does not yet implement those controls.
 
 The orchestration currently writes `checkpoints/latest` after every update and
 always calls `plan_mirror_episodes`; checkpoint league fields remain empty.

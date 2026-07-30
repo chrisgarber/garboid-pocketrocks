@@ -9,13 +9,15 @@ torch = pytest.importorskip("torch")
 from garboid_pocketrocks.neural.advantages import compute_gae  # noqa: E402
 from garboid_pocketrocks.neural.collector import collect_self_play  # noqa: E402
 from garboid_pocketrocks.neural.config import (  # noqa: E402
-    stage1_encoder_config,
-    stage1_model_config,
     training_encoder_config,
+    training_model_config,
 )
 from garboid_pocketrocks.neural.metrics import gameplay_metrics  # noqa: E402
 from garboid_pocketrocks.neural.model import NeuralPolicy  # noqa: E402
-from garboid_pocketrocks.neural.planning import plan_mirror_episodes  # noqa: E402
+from garboid_pocketrocks.neural.planning import (  # noqa: E402
+    SelfPlayEpisodePlan,
+    plan_mirror_episodes,
+)
 from garboid_pocketrocks.neural.ppo import (  # noqa: E402
     PPOConfig,
     PPOTrainer,
@@ -23,22 +25,43 @@ from garboid_pocketrocks.neural.ppo import (  # noqa: E402
 )
 from garboid_pocketrocks.neural.rollout import (  # noqa: E402
     PackedRollout,
-    collect_rollout,
+    RolloutBatch,
 )
 from garboid_pocketrocks.neural.seeding import (  # noqa: E402
-    configure_deterministic_torch,
+    configure_torch_runtime,
     derive_seed,
-    plan_stage1_episodes,
 )
 from garboid_pocketrocks.training.rewards import RewardConfig  # noqa: E402
 
 
 def _model(root_seed: int) -> NeuralPolicy:
     torch.manual_seed(derive_seed(root_seed, "model"))
-    return NeuralPolicy(stage1_encoder_config(), stage1_model_config())
+    return NeuralPolicy(training_encoder_config(), training_model_config("small"))
 
 
-def test_ppo_loss_matches_the_clipped_stage1_formula() -> None:
+def _one_game_rollout(
+    model: NeuralPolicy,
+    root_seed: int,
+) -> tuple[tuple[SelfPlayEpisodePlan, ...], RolloutBatch]:
+    plans = plan_mirror_episodes(
+        root_seed=root_seed,
+        update_index=0,
+        games_per_cell=1,
+        policy_identity="current",
+    )[:1]
+    rollout, _ = collect_self_play(
+        {"current": model},
+        plans,
+        encoder_config=training_encoder_config(),
+        reward_config=RewardConfig(),
+        device=torch.device("cpu"),
+        active_games=1,
+        max_inference_batch=32,
+    )
+    return plans, rollout
+
+
+def test_ppo_loss_matches_the_clipped_formula() -> None:
     config = PPOConfig()
     old_log_probability = torch.log(torch.tensor((0.50, 0.50, 0.25)))
     new_log_probability = torch.log(torch.tensor((0.75, 0.40, 0.50)))
@@ -85,13 +108,12 @@ def test_ppo_loss_matches_the_clipped_stage1_formula() -> None:
 
 
 def test_update_flattens_valid_transitions_and_is_deterministic() -> None:
-    configure_deterministic_torch(211)
+    configure_torch_runtime(211, deterministic_algorithms=True)
     first_model = _model(211)
     initial_state = {
         name: tensor.detach().clone() for name, tensor in first_model.state_dict().items()
     }
-    plans = plan_stage1_episodes(root_seed=211, updates=1, games_per_update=2)
-    first_rollout = collect_rollout(first_model, plans)
+    plans, first_rollout = _one_game_rollout(first_model, 211)
     old_policy_quantities = tuple(
         (transition.old_log_probability, transition.old_value)
         for transition in first_rollout.transitions
@@ -107,9 +129,7 @@ def test_update_flattens_valid_transitions_and_is_deterministic() -> None:
     assert first_trainer.optimizer is optimizer
     assert first_metrics.epochs == 1
     assert first_metrics.optimizer_steps == 1
-    assert first_metrics.transition_count == sum(
-        len(episode.transitions) for episode in first_rollout.episodes
-    )
+    assert first_metrics.transition_count == len(first_rollout.transitions)
     assert len(first_metrics.advantages) == first_metrics.transition_count
     assert len(first_metrics.ratios) == first_metrics.transition_count
     assert len(first_metrics.values) == first_metrics.transition_count
@@ -151,17 +171,19 @@ def test_update_flattens_valid_transitions_and_is_deterministic() -> None:
 
     episode_advantages = []
     for episode in first_rollout.episodes:
-        transitions = episode.transitions
-        estimated = compute_gae(
-            torch.tensor([transition.reward for transition in transitions]),
-            torch.tensor([transition.old_value for transition in transitions]),
-            torch.tensor([transition.terminated for transition in transitions]),
-            torch.tensor([transition.truncated for transition in transitions]),
-            bootstrap_value=torch.tensor(0.0),
-            gamma=1.0,
-            gae_lambda=0.95,
-        )
-        episode_advantages.append(estimated.advantages)
+        for trajectory in episode.trajectories:
+            if trajectory.trainable:
+                transitions = trajectory.transitions
+                estimated = compute_gae(
+                    torch.tensor([transition.reward for transition in transitions]),
+                    torch.tensor([transition.old_value for transition in transitions]),
+                    torch.tensor([transition.terminated for transition in transitions]),
+                    torch.tensor([transition.truncated for transition in transitions]),
+                    bootstrap_value=torch.tensor(0.0),
+                    gamma=1.0,
+                    gae_lambda=0.95,
+                )
+                episode_advantages.append(estimated.advantages)
     expected_advantages = torch.cat(episode_advantages)
     expected_advantages = (expected_advantages - expected_advantages.mean()) / (
         expected_advantages.std(unbiased=False) + 1e-8
@@ -173,7 +195,15 @@ def test_update_flattens_valid_transitions_and_is_deterministic() -> None:
 
     second_model = _model(999)
     second_model.load_state_dict(initial_state)
-    second_rollout = collect_rollout(second_model, plans)
+    second_rollout, _ = collect_self_play(
+        {"current": second_model},
+        plans,
+        encoder_config=training_encoder_config(),
+        reward_config=RewardConfig(),
+        device=torch.device("cpu"),
+        active_games=1,
+        max_inference_batch=32,
+    )
     second_trainer = PPOTrainer(second_model, PPOConfig())
     second_metrics = second_trainer.update(
         second_rollout,
@@ -186,13 +216,12 @@ def test_update_flattens_valid_transitions_and_is_deterministic() -> None:
 
 
 def test_update_uses_stored_masks_when_recomputing_policy_loss() -> None:
-    configure_deterministic_torch(307)
-    plans = plan_stage1_episodes(root_seed=307, updates=1, games_per_update=2)
+    configure_torch_runtime(307, deterministic_algorithms=True)
     baseline_model = _model(307)
     initial_state = {
         name: tensor.detach().clone() for name, tensor in baseline_model.state_dict().items()
     }
-    rollout = collect_rollout(baseline_model, plans)
+    _, rollout = _one_game_rollout(baseline_model, 307)
     assert all(not transition.observation.action_mask[100] for transition in rollout.transitions)
 
     changed_illegal_model = _model(999)
@@ -218,9 +247,9 @@ def test_update_uses_stored_masks_when_recomputing_policy_loss() -> None:
 
 
 def test_packed_rollout_and_multi_epoch_ppo_support_all_seats() -> None:
-    configure_deterministic_torch(401)
+    configure_torch_runtime(401, deterministic_algorithms=True)
     encoder_config = training_encoder_config()
-    model = NeuralPolicy(encoder_config, stage1_model_config())
+    model = NeuralPolicy(encoder_config, training_model_config("small"))
     plans = plan_mirror_episodes(
         root_seed=401,
         update_index=0,
