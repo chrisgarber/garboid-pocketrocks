@@ -7,15 +7,6 @@ from garboid_pocketrocks.bots.base import (
     PocketRocksFastBot,
 )
 from garboid_pocketrocks.bots.heuristic import (
-    AGGRESSIVE_HEURISTIC_BOT_SPEC,
-    AGGRESSIVE_HEURISTIC_V1_BOT_SPEC,
-    AGGRESSIVE_HEURISTIC_V2_BOT_SPEC,
-    BALANCED_HEURISTIC_BOT_SPEC,
-    BALANCED_HEURISTIC_V1_BOT_SPEC,
-    BALANCED_HEURISTIC_V2_BOT_SPEC,
-    PASSIVE_HEURISTIC_BOT_SPEC,
-    PASSIVE_HEURISTIC_V1_BOT_SPEC,
-    PASSIVE_HEURISTIC_V2_BOT_SPEC,
     AggressiveHeuristicBot,
     AggressiveHeuristicBrain,
     AggressiveHeuristicV1Brain,
@@ -33,18 +24,9 @@ from garboid_pocketrocks.bots.heuristic import (
 from garboid_pocketrocks.bots.random_bot import RandomBot, RandomBotBrain
 
 __all__ = [
-    "AGGRESSIVE_HEURISTIC_BOT_SPEC",
-    "AGGRESSIVE_HEURISTIC_V1_BOT_SPEC",
-    "AGGRESSIVE_HEURISTIC_V2_BOT_SPEC",
-    "BALANCED_HEURISTIC_BOT_SPEC",
-    "BALANCED_HEURISTIC_V1_BOT_SPEC",
-    "BALANCED_HEURISTIC_V2_BOT_SPEC",
     "BotBrain",
     "BotSpec",
     "BrainFactory",
-    "PASSIVE_HEURISTIC_BOT_SPEC",
-    "PASSIVE_HEURISTIC_V1_BOT_SPEC",
-    "PASSIVE_HEURISTIC_V2_BOT_SPEC",
     "AggressiveHeuristicBot",
     "AggressiveHeuristicBrain",
     "AggressiveHeuristicV1Brain",

@@ -69,10 +69,11 @@ version and personality. Each local spec uses its versioned name as both its
 display name and internal simulation identity. Versioned brains remain
 top-level and pickleable so multiprocessing simulation continues to work.
 
-The existing unversioned brain, remote-capable bot wrapper, and `BotSpec`
-exports remain available. They use the latest profiles and retain their
-current live bot IDs and names. Historical generations do not define
-remote-style `BOT_ID` values.
+The existing unversioned brain and remote-capable bot wrapper exports remain
+available. They use the latest profiles and retain their current live bot IDs
+and names. `BotSpec` remains a public type, while configured `*_BOT_SPEC`
+instances stay owned by `bots.heuristic` instead of being re-exported from the
+package. Historical generations do not define remote-style `BOT_ID` values.
 
 Python callers can select either explicit versioned specs or latest aliases.
 The simulation CLI constructs local specs from the versioned brain classes

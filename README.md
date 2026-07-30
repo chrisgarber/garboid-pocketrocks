@@ -203,8 +203,10 @@ Historical `*-v1` and `*-v2` generations are local brain/spec pairs, not
 remote bot wrappers. Their versioned name is also their internal simulation
 identity (`BotSpec.bot_id`), so they do not pretend to have a server-issued
 bot ID. The CLI constructs those local specs from the versioned brain
-classes; Python callers can use the exported `*_HEURISTIC_VN_BOT_SPEC`
-constants. `aggressive`, `balanced`, and `passive` remain aliases to v2.
+classes. Python callers that need the prebuilt specs import them from
+`garboid_pocketrocks.bots.heuristic`; configured spec instances are not
+re-exported from the `bots` package. `aggressive`, `balanced`, and `passive`
+remain aliases to v2.
 
 Fast bot wrappers reconcile the chart, starting cash, private-card count, and
 objective state exposed by each SDK context with their configured ruleset

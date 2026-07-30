@@ -6,11 +6,13 @@ import numpy as np
 import pytest
 
 from garboid_pocketrocks.bots import (
+    BotSpec,
+    RandomBot,
+)
+from garboid_pocketrocks.bots.heuristic import (
     AGGRESSIVE_HEURISTIC_BOT_SPEC,
     BALANCED_HEURISTIC_BOT_SPEC,
     PASSIVE_HEURISTIC_BOT_SPEC,
-    BotSpec,
-    RandomBot,
 )
 from garboid_pocketrocks.rules import live_ruleset
 from garboid_pocketrocks.simulator.monte_carlo import (

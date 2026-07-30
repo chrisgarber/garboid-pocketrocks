@@ -133,7 +133,8 @@ git commit -m "feat: freeze heuristic profile generations"
 - Consumes: `HEURISTIC_V1`, `HEURISTIC_V2`
 - Produces: `AggressiveHeuristicV1Brain` through `PassiveHeuristicV2Brain`
 - Produces: six `*_HEURISTIC_VN_BOT_SPEC` constants
-- Preserves: all existing unversioned brain, bot, and spec exports
+- Preserves: existing unversioned brain and bot package exports; configured
+  spec constants remain importable from `bots.heuristic`
 
 - [ ] **Step 1: Write failing versioned-bot tests**
 

@@ -8,15 +8,6 @@ import pytest
 from pocketrocks import OBJECTIVES, ActionId, BotDecision, DecisionContext, Suit
 
 from garboid_pocketrocks.bots import (
-    AGGRESSIVE_HEURISTIC_BOT_SPEC,
-    AGGRESSIVE_HEURISTIC_V1_BOT_SPEC,
-    AGGRESSIVE_HEURISTIC_V2_BOT_SPEC,
-    BALANCED_HEURISTIC_BOT_SPEC,
-    BALANCED_HEURISTIC_V1_BOT_SPEC,
-    BALANCED_HEURISTIC_V2_BOT_SPEC,
-    PASSIVE_HEURISTIC_BOT_SPEC,
-    PASSIVE_HEURISTIC_V1_BOT_SPEC,
-    PASSIVE_HEURISTIC_V2_BOT_SPEC,
     AggressiveHeuristicBot,
     AggressiveHeuristicBrain,
     AggressiveHeuristicV1Brain,
@@ -32,7 +23,18 @@ from garboid_pocketrocks.bots import (
     PassiveHeuristicV2Brain,
     PocketRocksFastBot,
 )
-from garboid_pocketrocks.bots.heuristic import HeuristicBotBrain
+from garboid_pocketrocks.bots.heuristic import (
+    AGGRESSIVE_HEURISTIC_BOT_SPEC,
+    AGGRESSIVE_HEURISTIC_V1_BOT_SPEC,
+    AGGRESSIVE_HEURISTIC_V2_BOT_SPEC,
+    BALANCED_HEURISTIC_BOT_SPEC,
+    BALANCED_HEURISTIC_V1_BOT_SPEC,
+    BALANCED_HEURISTIC_V2_BOT_SPEC,
+    PASSIVE_HEURISTIC_BOT_SPEC,
+    PASSIVE_HEURISTIC_V1_BOT_SPEC,
+    PASSIVE_HEURISTIC_V2_BOT_SPEC,
+    HeuristicBotBrain,
+)
 from garboid_pocketrocks.heuristics.errors import HeuristicInputError
 from garboid_pocketrocks.heuristics.profiles import (
     BALANCED_PROFILE,
