@@ -66,6 +66,14 @@ def test_core_and_neural_mypy_configs_have_separate_boundaries() -> None:
     assert "exclude" not in neural_config
 
 
+def test_promotion_command_uses_the_public_cli_entry_point() -> None:
+    project = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
+
+    assert (
+        project["project"]["scripts"]["garboid-promote"] == "garboid_pocketrocks.promotion.cli:main"
+    )
+
+
 def test_ci_keeps_core_install_and_splits_neural_unit_and_smoke_steps() -> None:
     workflow = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
 
