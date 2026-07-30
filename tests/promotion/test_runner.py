@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import subprocess
 from dataclasses import replace
 from pathlib import Path
 
@@ -15,6 +16,7 @@ from garboid_pocketrocks.promotion.runner import (
     PromotionRun,
     PromotionRunConfig,
     PromotionRunner,
+    _repository_commit,
 )
 from garboid_pocketrocks.simulator.errors import SimulationError
 from garboid_pocketrocks.simulator.monte_carlo import MonteCarloResult
@@ -392,3 +394,52 @@ def test_filesystem_errors_are_not_converted_to_domain_failures(
             output_dir=tmp_path,
             repository_commit="test-commit",
         )
+
+
+@pytest.mark.parametrize(
+    "git_error",
+    (
+        subprocess.CalledProcessError(128, ("git", "rev-parse", "HEAD")),
+        FileNotFoundError("git executable is unavailable"),
+    ),
+)
+def test_repository_commit_wraps_git_failures_in_a_concise_operational_error(
+    monkeypatch: pytest.MonkeyPatch,
+    git_error: BaseException,
+) -> None:
+    def fail_git(*args: object, **kwargs: object) -> None:
+        del args, kwargs
+        raise git_error
+
+    monkeypatch.setattr(
+        "garboid_pocketrocks.promotion.runner.subprocess.run",
+        fail_git,
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="Could not determine the repository commit",
+    ) as captured:
+        _repository_commit()
+
+    assert captured.value.__cause__ is git_error
+
+
+@pytest.mark.parametrize("control_flow_error", (KeyboardInterrupt(), SystemExit(2)))
+def test_repository_commit_preserves_process_control_exceptions(
+    monkeypatch: pytest.MonkeyPatch,
+    control_flow_error: BaseException,
+) -> None:
+    def interrupt_git(*args: object, **kwargs: object) -> None:
+        del args, kwargs
+        raise control_flow_error
+
+    monkeypatch.setattr(
+        "garboid_pocketrocks.promotion.runner.subprocess.run",
+        interrupt_git,
+    )
+
+    with pytest.raises(type(control_flow_error)) as captured:
+        _repository_commit()
+
+    assert captured.value is control_flow_error

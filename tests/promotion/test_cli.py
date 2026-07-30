@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import subprocess
 from dataclasses import replace
 from pathlib import Path
 
@@ -236,6 +237,80 @@ def test_operational_failure_prints_direct_error_and_exits_two(
     assert exit_code == 2
     assert "disk is unavailable" in captured.err
     assert str(tmp_path / "promotion-report.json") in captured.err
+
+
+def test_git_commit_failure_prints_direct_error_without_a_traceback(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    git_error = subprocess.CalledProcessError(
+        128,
+        ("git", "rev-parse", "HEAD"),
+    )
+
+    def fail_git(*args: object, **kwargs: object) -> None:
+        del args, kwargs
+        raise git_error
+
+    monkeypatch.setattr(
+        "garboid_pocketrocks.promotion.runner.subprocess.run",
+        fail_git,
+    )
+
+    exit_code = cli.main(_required_args(tmp_path))
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert "Could not determine the repository commit" in captured.err
+    assert "Traceback" not in captured.err
+    assert str(tmp_path / "promotion-report.json") in captured.err
+
+
+@pytest.mark.parametrize(
+    ("arguments", "expected"),
+    (
+        (("--output-dir=equals-form",), Path("equals-form")),
+        (
+            ("--output-dir", "first", "--output-dir", "last"),
+            Path("last"),
+        ),
+        (
+            ("--output-dir=first", "--output-dir", "last"),
+            Path("last"),
+        ),
+        (
+            ("--output-dir", "first", "--output-dir=last"),
+            Path("last"),
+        ),
+    ),
+)
+def test_report_path_scan_matches_argparse_output_directory_rules(
+    arguments: tuple[str, ...],
+    expected: Path,
+) -> None:
+    assert cli._requested_output_dir(arguments) == expected
+
+
+def test_parser_error_reports_last_equals_form_output_directory(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    first = tmp_path / "first"
+    last = tmp_path / "last"
+    args = [
+        *_required_args(first),
+        f"--output-dir={last}",
+        "--workers",
+        "0",
+    ]
+
+    exit_code = cli.main(args)
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert str(last / "promotion-report.json") in captured.err
+    assert str(first / "promotion-report.json") not in captured.err
 
 
 def test_help_explains_the_promotion_gate_in_plain_english() -> None:
