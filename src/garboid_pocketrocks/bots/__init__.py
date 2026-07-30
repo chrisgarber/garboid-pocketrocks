@@ -21,12 +21,27 @@ from garboid_pocketrocks.bots.heuristic import (
     PassiveHeuristicV1Brain,
     PassiveHeuristicV2Brain,
 )
+from garboid_pocketrocks.bots.llm import (
+    CodexBot,
+    CodexCLIBackend,
+    CodexCLIError,
+    LLMBackend,
+    LLMResponseError,
+    PocketRocksPromptSkill,
+    PromptSkill,
+    StatelessLLMBrain,
+)
 from garboid_pocketrocks.bots.random_bot import RandomBot, RandomBotBrain
 
 __all__ = [
     "BotBrain",
     "BotSpec",
     "BrainFactory",
+    "CodexBot",
+    "CodexCLIBackend",
+    "CodexCLIError",
+    "LLMBackend",
+    "LLMResponseError",
     "AggressiveHeuristicBot",
     "AggressiveHeuristicBrain",
     "AggressiveHeuristicV1Brain",
@@ -40,7 +55,10 @@ __all__ = [
     "PassiveHeuristicBrain",
     "PassiveHeuristicV1Brain",
     "PassiveHeuristicV2Brain",
+    "PocketRocksPromptSkill",
     "PocketRocksFastBot",
+    "PromptSkill",
     "RandomBot",
     "RandomBotBrain",
+    "StatelessLLMBrain",
 ]

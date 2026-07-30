@@ -14,6 +14,7 @@ from garboid_pocketrocks.bots import (
     BalancedHeuristicV1Brain,
     BalancedHeuristicV2Brain,
     BotSpec,
+    CodexBot,
     PassiveHeuristicBot,
     PassiveHeuristicV1Brain,
     PassiveHeuristicV2Brain,
@@ -39,6 +40,7 @@ _BOT_REGISTRY = {
     "aggressive-v2": BotSpec.for_simulation("aggressive-v2", AggressiveHeuristicV2Brain),
     "balanced-v2": BotSpec.for_simulation("balanced-v2", BalancedHeuristicV2Brain),
     "passive-v2": BotSpec.for_simulation("passive-v2", PassiveHeuristicV2Brain),
+    CodexBot.BOT_NAME: BotSpec.from_bot_class(CodexBot),
 }
 
 
@@ -69,7 +71,7 @@ def _parser() -> argparse.ArgumentParser:
         type=_bot_names,
         help=(
             f"comma-separated registered bot names ({', '.join(_BOT_REGISTRY)}); "
-            "heuristic live bot IDs are development-only"
+            "heuristic and Codex live bot IDs are development-only"
         ),
     )
     parser.add_argument("--games", required=True, type=_positive_int)
