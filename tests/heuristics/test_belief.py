@@ -14,8 +14,7 @@ from pocketrocks.sim.constants import VALUE_CHARTS
 from garboid_pocketrocks.heuristics.belief import build_belief
 from garboid_pocketrocks.heuristics.errors import HeuristicInputError
 from garboid_pocketrocks.knowledge import RulesetKnowledge, canonical_knowledge
-from garboid_pocketrocks.rules import live_ruleset
-from garboid_pocketrocks.simulator.engine import GameEngine
+from garboid_pocketrocks.simulator.session import SdkGameSession
 
 from .helpers import make_context, make_knowledge
 
@@ -162,13 +161,28 @@ def test_reveal_context_ignores_the_preserved_offer_identity() -> None:
     assert with_preserved_offer == without_preserved_offer
 
 
-def test_financial_bid_has_no_offered_resources() -> None:
+def test_financial_bid_ignores_visible_board_resources() -> None:
     context = make_context(
-        action_id=ActionId.LOAN10,
-        current_resources=(0, 0),
+        action_id=ActionId.INVEST10,
+        current_resources=(int(Suit.WOOD), int(Suit.ORE)),
     )
     belief = build_belief(context, make_knowledge())
+
+    assert tuple(suit.unseen_suit_count for suit in belief.suits) == (2, 1, 1, 2, 2)
+    assert belief.expected_future_biddable_counts == (2.0, 2.0, 2.0, 2.0, 2.0)
     assert belief.normalized_horizon == 1.0
+
+
+def test_one_card_auction_ignores_second_visible_resource() -> None:
+    context = make_context(
+        action_id=ActionId.AUCTION1,
+        current_resources=(int(Suit.ORE), int(Suit.WOOD)),
+    )
+    belief = build_belief(context, make_knowledge())
+
+    assert tuple(suit.unseen_suit_count for suit in belief.suits) == (2, 1, 1, 2, 2)
+    assert belief.expected_future_biddable_counts == (2.0, 2.0, 1.0, 2.0, 2.0)
+    assert belief.normalized_horizon == 0.9
 
 
 def test_moving_own_hand_card_to_revealed_information_preserves_belief() -> None:
@@ -258,22 +272,6 @@ def test_inconsistent_known_cards_are_rejected() -> None:
             make_knowledge(private_cards=1),
             "private card",
         ),
-        (
-            make_context(
-                action_id=ActionId.LOAN10,
-                current_resources=(int(Suit.BRICK), 0),
-            ),
-            make_knowledge(),
-            "offered resource",
-        ),
-        (
-            make_context(
-                action_id=ActionId.AUCTION1,
-                current_resources=(int(Suit.BRICK), int(Suit.WOOD)),
-            ),
-            make_knowledge(),
-            "offered resource",
-        ),
     ),
 )
 def test_invalid_context_or_ruleset_shape_is_rejected(
@@ -347,24 +345,39 @@ def test_engine_generated_contexts_preserve_exact_belief_properties(
     game_seed: int,
     decision_seed: int,
 ) -> None:
-    ruleset = live_ruleset(chart_name)
     knowledge = canonical_knowledge(player_count, value_chart=chart_name)
-    transition = GameEngine.start(ruleset, player_count=player_count, seed=game_seed)
+    session = SdkGameSession.start(
+        player_count=player_count,
+        seed=game_seed,
+        value_chart=chart_name,
+    )
     decision_rng = random.Random(decision_seed)
     total_biddable = sum(knowledge.resource_counts) - (
         player_count * knowledge.private_cards_per_player
     )
 
-    while transition.pending is not None:
-        for _seat, context in transition.pending.contexts:
+    while not session.terminated:
+        for _seat, context in session.pending.contexts:
             belief = build_belief(context, knowledge)
             won_count = sum(count for row in context.won_resource_counts_by_seat for count in row)
-            offered_count = (
+            if context.decision_kind == "submitBid" and context.current_action_id == int(
+                ActionId.AUCTION1
+            ):
+                offered_count = int(context.current_resource_ids[0] != 0)
+            elif context.decision_kind == "submitBid" and context.current_action_id == int(
+                ActionId.AUCTION2
+            ):
+                offered_count = sum(
+                    resource_id != 0 for resource_id in context.current_resource_ids
+                )
+            else:
+                offered_count = 0
+            visible_count = (
                 sum(resource_id != 0 for resource_id in context.current_resource_ids)
                 if context.decision_kind == "submitBid"
-                and context.current_action_id in (int(ActionId.AUCTION1), int(ActionId.AUCTION2))
                 else 0
             )
+            known_future_count = visible_count - offered_count
             future_biddable = total_biddable - won_count - offered_count
             hidden_slots = sum(
                 knowledge.private_cards_per_player - sum(context.revealed_info_counts_by_seat[seat])
@@ -376,7 +389,9 @@ def test_engine_generated_contexts_preserve_exact_belief_properties(
             assert len(belief.suits) == len(Suit)
             assert all(suit.opponent_hidden_slots == hidden_slots for suit in belief.suits)
             assert (
-                sum(suit.unseen_suit_count for suit in belief.suits) - hidden_slots
+                sum(suit.unseen_suit_count for suit in belief.suits)
+                - hidden_slots
+                + known_future_count
                 == future_biddable
             )
             assert sum(belief.expected_future_biddable_counts) == pytest.approx(future_biddable)
@@ -415,7 +430,7 @@ def test_engine_generated_contexts_preserve_exact_belief_properties(
                 assert build_belief(after_reveal, knowledge) == belief
 
         decisions: dict[int, BotDecision] = {}
-        for seat, context in transition.pending.contexts:
+        for seat, context in session.pending.contexts:
             if context.decision_kind == "submitBid":
                 assert context.legal_max_amount is not None
                 decisions[seat] = BotDecision.submit_bid(
@@ -427,4 +442,4 @@ def test_engine_generated_contexts_preserve_exact_belief_properties(
                 )
             else:
                 decisions[seat] = BotDecision.pass_turn()
-        transition = GameEngine.step(transition.state, decisions)
+        session.step(decisions)
