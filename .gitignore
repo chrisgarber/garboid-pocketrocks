@@ -31,3 +31,6 @@ htmlcov/
 *.onnx
 *.pt
 *.pth
+!src/garboid_pocketrocks/neural/checkpoints/
+!src/garboid_pocketrocks/neural/checkpoints/**/
+!src/garboid_pocketrocks/neural/checkpoints/**/model.pt

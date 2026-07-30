@@ -1,0 +1,59 @@
+{
+  "action_space_hash": "16e53c5ab538520242f5f6d76b4894b241d4177a4172053ee530d0f130c82ea4",
+  "action_space_size": 106,
+  "completed_episodes": 1500,
+  "completed_updates": 1,
+  "encoder_config": {
+    "max_abs_chart": 20,
+    "max_action_cards": 30,
+    "max_bid": 100,
+    "max_cash": 100,
+    "max_hand_size": 5,
+    "max_history_events": 77,
+    "max_resource_cards": 30,
+    "schema_version": 1,
+    "supported_player_counts": [
+      3,
+      4,
+      5
+    ],
+    "supported_ruleset_names": [
+      "live-A",
+      "live-B",
+      "live-C",
+      "live-D",
+      "live-E"
+    ]
+  },
+  "encoder_schema_version": 1,
+  "model_config": {
+    "categorical_embedding_size": 8,
+    "event_embedding_size": 64,
+    "gru_hidden_size": 64,
+    "seat_hidden_size": 32,
+    "snapshot_hidden_size": 128,
+    "suit_embedding_size": 4,
+    "trunk_hidden_size": 128
+  },
+  "model_sha256": "cd584e1647363ef51b3bb51f95276acb6334a2a17fe8a4eb9c8d6cc628923862",
+  "numpy_version": "2.5.1",
+  "parameter_digest": "4c75fa7aa08432a7f503d83d23332b0ee5d4f63f8d1e4abb3d26e02d5c0ee16a",
+  "python_version": "3.14.6",
+  "repository_commit": "2cb541c9922f6369fb0e2dbdc8b2372a52541abb",
+  "root_seed": 42,
+  "schema_version": 1,
+  "sdk_version": "0.2.0",
+  "supported_player_counts": [
+    3,
+    4,
+    5
+  ],
+  "supported_ruleset_names": [
+    "live-A",
+    "live-B",
+    "live-C",
+    "live-D",
+    "live-E"
+  ],
+  "torch_version": "2.13.0"
+}
