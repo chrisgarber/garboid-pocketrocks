@@ -271,6 +271,45 @@ def test_rejects_registry_entries_that_do_not_match_corpus_opponents(
     assert str(captured.value)
 
 
+def test_rejects_distinct_opponent_names_that_share_one_bot_id() -> None:
+    candidate, incumbent, _, _ = _identities()
+
+    with pytest.raises(PromotionPlanningError) as captured:
+        plan_paired_games(
+            _held_out_corpus(),
+            candidate=candidate,
+            incumbent=incumbent,
+            registry={
+                "opponent-a": _bot_spec("opponent-a", bot_id="shared-opponent-id"),
+                "opponent-b": _bot_spec("opponent-b", bot_id="shared-opponent-id"),
+            },
+        )
+
+    assert captured.value.code == "opponent_identity_mismatch"
+    assert "different names and different bot IDs" in str(captured.value)
+
+
+def test_rejects_a_case_that_seats_one_opponent_identity_more_than_once() -> None:
+    candidate, incumbent, opponent_a, opponent_b = _identities()
+    corpus = _held_out_corpus(
+        opponent_names_by_seat=(None, "opponent-a", "opponent-a"),
+    )
+
+    with pytest.raises(PromotionPlanningError) as captured:
+        plan_paired_games(
+            corpus,
+            candidate=candidate,
+            incumbent=incumbent,
+            registry={
+                opponent_a.name: opponent_a,
+                opponent_b.name: opponent_b,
+            },
+        )
+
+    assert captured.value.code == "opponent_identity_mismatch"
+    assert "more than one non-focal seat" in str(captured.value)
+
+
 def test_requires_every_case_opponent_to_be_declared_by_the_recipe() -> None:
     candidate, incumbent, opponent_a, opponent_b = _identities()
     undeclared = _bot_spec("undeclared-opponent")

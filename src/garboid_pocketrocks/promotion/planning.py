@@ -139,6 +139,8 @@ def _resolve_recipe_opponents(
     registry: Mapping[str, BotSpec],
 ) -> dict[str, BotSpec]:
     resolved: dict[str, BotSpec] = {}
+    seen_names: set[str] = set()
+    seen_bot_ids: set[str] = set()
     for opponent_name in held_out.recipe.opponent_names:
         spec = registry.get(opponent_name)
         if spec is None or spec.name != opponent_name:
@@ -146,6 +148,13 @@ def _resolve_recipe_opponents(
                 "opponent_identity_mismatch",
                 f"Corpus opponent {opponent_name!r} does not match its registered identity.",
             )
+        if spec.name in seen_names or spec.bot_id in seen_bot_ids:
+            raise PromotionPlanningError(
+                "opponent_identity_mismatch",
+                "Corpus opponents must have different names and different bot IDs.",
+            )
+        seen_names.add(spec.name)
+        seen_bot_ids.add(spec.bot_id)
         resolved[opponent_name] = spec
     return resolved
 
@@ -193,6 +202,8 @@ def _build_twin_lineups(
 
     candidate_lineup: list[BotSpec] = []
     incumbent_lineup: list[BotSpec] = []
+    seen_opponent_names: set[str] = set()
+    seen_opponent_ids: set[str] = set()
     for seat, opponent_name in enumerate(case.opponent_names_by_seat):
         if seat == case.focal_seat:
             candidate_lineup.append(candidate)
@@ -209,6 +220,14 @@ def _build_twin_lineups(
                 "opponent_identity_mismatch",
                 f"Promotion case {case.case_id!r} uses undeclared opponent {opponent_name!r}.",
             )
+        if opponent.name in seen_opponent_names or opponent.bot_id in seen_opponent_ids:
+            raise PromotionPlanningError(
+                "opponent_identity_mismatch",
+                f"Promotion case {case.case_id!r} places one opponent identity in "
+                "more than one non-focal seat.",
+            )
+        seen_opponent_names.add(opponent.name)
+        seen_opponent_ids.add(opponent.bot_id)
         candidate_lineup.append(opponent)
         incumbent_lineup.append(opponent)
     return tuple(candidate_lineup), tuple(incumbent_lineup)
