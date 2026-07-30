@@ -400,6 +400,11 @@ uv run mypy src tests
 uv run pytest
 ```
 
+Pytest distributes the full suite across available CPUs with work stealing,
+capped at eight workers. Pass `-n 0` for a focused or debugger-driven run where
+worker startup would cost more than the test itself. Install the neural extra
+and use `uv run --extra neural pytest` to include the Torch-dependent tests.
+
 ## Roadmap
 
 1. ✅ Establish the repository scaffold and quality gates.

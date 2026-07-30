@@ -22,6 +22,17 @@ def test_neural_extra_is_optional_and_version_bounded() -> None:
     ]
 
 
+def test_default_pytest_run_uses_capped_workstealing_parallelism() -> None:
+    project = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
+
+    assert "pytest-xdist>=3.8.0" in project["dependency-groups"]["dev"]
+    assert project["tool"]["pytest"]["ini_options"]["addopts"] == [
+        "-n=auto",
+        "--maxprocesses=8",
+        "--dist=worksteal",
+    ]
+
+
 def test_neural_lock_does_not_pull_cuda_runtime() -> None:
     lock = Path("uv.lock").read_text(encoding="utf-8")
 
@@ -63,6 +74,6 @@ def test_ci_keeps_core_install_and_splits_neural_unit_and_smoke_steps() -> None:
     assert "run: uv run --extra neural mypy --config-file mypy.neural.ini src tests" in workflow
     assert 'run: uv run --extra neural pytest tests/neural -m "not neural_smoke" -q' in workflow
     assert (
-        "run: uv run --extra neural pytest "
+        "run: uv run --extra neural pytest -n 0 "
         "tests/neural/test_smoke.py::test_two_by_sixteen_smoke_is_deterministic -q"
     ) in workflow

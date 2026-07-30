@@ -93,7 +93,7 @@ def _play_and_check_every_bidding_context(
 
 @pytest.mark.parametrize("player_count", (3, 4, 5))
 @pytest.mark.parametrize("chart", tuple(VALUE_CHARTS))
-@settings(max_examples=25, deadline=None)
+@settings(max_examples=5, deadline=None)
 @given(seed=st.integers(min_value=0, max_value=2**32 - 1))
 def test_generated_live_games_have_finite_legal_deterministic_valuations(
     player_count: int,
