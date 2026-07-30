@@ -452,3 +452,52 @@ def test_replace_failure_rolls_back_the_complete_artifact_generation(
     else:
         assert not any((tmp_path / name).exists() for name in _ARTIFACT_NAMES)
     assert not tuple(path for path in tmp_path.iterdir() if path.name.startswith("."))
+
+
+def test_failed_rollback_preserves_and_reports_the_recovery_backup(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    report, summaries, development, held_out = _report_inputs()
+    artifacts = write_promotion_artifacts(
+        tmp_path,
+        report=report,
+        game_summaries=summaries,
+        development=development,
+        held_out=held_out,
+    )
+    previous_report = artifacts.report_json.read_bytes()
+    changed_report = replace(report, repository_commit="new-commit")
+    real_replace = os.replace
+
+    def fail_forward_and_rollback_replacements(source: Any, destination: Any) -> None:
+        source_path = Path(source)
+        destination_path = Path(destination)
+        if ".staged." in source_path.name and destination_path.name == "paired-games.jsonl":
+            raise OSError("simulated forward replacement failure")
+        if ".backup." in source_path.name and destination_path.name == "promotion-report.json":
+            raise OSError("simulated rollback restoration failure")
+        real_replace(source, destination)
+
+    monkeypatch.setattr(
+        "garboid_pocketrocks.promotion.reporting.os.replace",
+        fail_forward_and_rollback_replacements,
+    )
+
+    with pytest.raises(RuntimeError, match="could not be fully restored") as captured:
+        write_promotion_artifacts(
+            tmp_path,
+            report=changed_report,
+            game_summaries=summaries,
+            development=development,
+            held_out=held_out,
+            overwrite=True,
+        )
+
+    recovery_backups = tuple(tmp_path.glob(".promotion-report.json.backup.*"))
+    assert len(recovery_backups) == 1
+    assert recovery_backups[0].read_bytes() == previous_report
+    assert str(recovery_backups[0]) in str(captured.value)
+    assert not tuple(tmp_path.glob(".*.staged.*"))
+    assert not tuple(tmp_path.glob(".paired-games.jsonl.backup.*"))
+    assert not tuple(tmp_path.glob(".corpus-snapshot.json.backup.*"))

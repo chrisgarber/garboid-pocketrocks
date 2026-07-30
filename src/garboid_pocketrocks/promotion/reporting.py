@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import os
 import tempfile
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -61,6 +61,13 @@ class _PreparedArtifact:
     target: Path
     staged: Path
     backup: Path | None
+
+
+@dataclass(frozen=True, slots=True)
+class _RollbackFailure:
+    target: Path
+    backup: Path | None
+    error: OSError
 
 
 def build_promotion_report(
@@ -347,13 +354,28 @@ def _replace_artifact_generation(
             os.replace(artifact.staged, artifact.target)
             replaced.append(artifact)
     except Exception as replacement_error:
-        rollback_errors = _rollback_replaced_artifacts(replaced)
-        _remove_prepared_files(prepared_artifacts)
-        if rollback_errors:
-            error_summary = "; ".join(str(error) for error in rollback_errors)
+        rollback_failures = _rollback_replaced_artifacts(replaced)
+        preserved_backups = tuple(
+            failure.backup for failure in rollback_failures if failure.backup is not None
+        )
+        _remove_prepared_files(
+            prepared_artifacts,
+            preserve_backups=preserved_backups,
+        )
+        if rollback_failures:
+            failure_summary = "; ".join(
+                f"{failure.target}: {failure.error}" for failure in rollback_failures
+            )
+            recovery_summary = (
+                " Recovery copies were preserved at: "
+                + ", ".join(str(path) for path in preserved_backups)
+                if preserved_backups
+                else " No recovery copy was available for the unrestored files."
+            )
             raise RuntimeError(
                 "Promotion artifact replacement failed, and the previous artifact "
-                f"generation could not be fully restored: {error_summary}"
+                "generation could not be fully restored. "
+                f"Rollback errors: {failure_summary}.{recovery_summary}"
             ) from replacement_error
         raise
     _remove_prepared_files(prepared_artifacts)
@@ -361,8 +383,8 @@ def _replace_artifact_generation(
 
 def _rollback_replaced_artifacts(
     replaced_artifacts: Sequence[_PreparedArtifact],
-) -> tuple[OSError, ...]:
-    rollback_errors: list[OSError] = []
+) -> tuple[_RollbackFailure, ...]:
+    rollback_failures: list[_RollbackFailure] = []
     for artifact in reversed(replaced_artifacts):
         try:
             if artifact.backup is None:
@@ -370,16 +392,24 @@ def _rollback_replaced_artifacts(
             else:
                 os.replace(artifact.backup, artifact.target)
         except OSError as error:
-            rollback_errors.append(error)
-    return tuple(rollback_errors)
+            rollback_failures.append(
+                _RollbackFailure(
+                    target=artifact.target,
+                    backup=artifact.backup,
+                    error=error,
+                )
+            )
+    return tuple(rollback_failures)
 
 
 def _remove_prepared_files(
     prepared_artifacts: Sequence[_PreparedArtifact],
+    *,
+    preserve_backups: Collection[Path] = (),
 ) -> None:
     for artifact in prepared_artifacts:
         artifact.staged.unlink(missing_ok=True)
-        if artifact.backup is not None:
+        if artifact.backup is not None and artifact.backup not in preserve_backups:
             artifact.backup.unlink(missing_ok=True)
 
 
