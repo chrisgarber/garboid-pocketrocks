@@ -19,6 +19,7 @@ def test_parser_defaults_to_full_tournament() -> None:
     assert args.players == (3, 4, 5)
     assert args.charts == ("A", "B", "C", "D", "E")
     assert args.bootstrap_samples == 200
+    assert args.batch_size == 256
     assert args.seed == 0
 
 

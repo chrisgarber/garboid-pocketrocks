@@ -97,6 +97,7 @@ def _summary_payload(
             "charts": list(config.charts),
             "root_seed": config.root_seed,
             "fault_mode": config.fault_mode.value,
+            "batch_size": config.batch_size,
             "bootstrap_samples": config.bootstrap_samples,
         },
         "schedule": {

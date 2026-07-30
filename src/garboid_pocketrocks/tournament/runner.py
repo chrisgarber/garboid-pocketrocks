@@ -56,6 +56,7 @@ class TournamentRunner:
             plan.monte_carlo_config,
             plan.jobs,
             workers=workers,
+            batch_size=config.batch_size,
         )
         observations = observations_from_games(monte_carlo_result.game_summaries)
         bot_ids = tuple(spec.bot_id for spec in config.bot_specs)

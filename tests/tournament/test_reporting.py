@@ -85,6 +85,7 @@ def test_artifacts_contain_machine_data_and_three_svg_charts(tmp_path: Path) -> 
     payload = json.loads(artifacts.summary_json.read_text())
     assert payload["schema_version"] == 1
     assert payload["configuration"]["games"] == config.games
+    assert payload["configuration"]["batch_size"] == config.batch_size
     assert payload["leaderboard"][0]["pl_rating"] == fit.ratings[0].rating
     assert payload["schedule"]["condition_quotas"] == [
         {"chart": "A", "games": 1, "player_count": 3}

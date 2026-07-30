@@ -23,6 +23,7 @@ class TournamentConfig:
     charts: tuple[str, ...] = tuple(VALUE_CHARTS)
     root_seed: int = 0
     fault_mode: FaultMode = FaultMode.RECORD_AND_PASS
+    batch_size: int = 256
     bootstrap_samples: int = 200
 
     def __post_init__(self) -> None:
@@ -44,6 +45,8 @@ class TournamentConfig:
             raise ValueError("tournament games must cover every chart/player-count cell")
         if self.bootstrap_samples < 0:
             raise ValueError("bootstrap samples must be nonnegative")
+        if self.batch_size < 1:
+            raise ValueError("batch size must be positive")
 
         names = tuple(spec.name for spec in self.bot_specs)
         bot_ids = tuple(spec.bot_id for spec in self.bot_specs)
