@@ -1,0 +1,1801 @@
+{
+  "artifacts": {
+    "ratings_csv": "ratings.csv",
+    "report_html": "report.html",
+    "summary_json": "summary.json"
+  },
+  "bootstrap": {
+    "converged": 200,
+    "intervals": [
+      {
+        "bot_id": "bot_e0e2c541-1615-4f47-983c-224e7d888d89",
+        "lower": 1035.428165718232,
+        "upper": 1057.451966661622
+      },
+      {
+        "bot_id": "aggressive-v1",
+        "lower": 1383.6657854099988,
+        "upper": 1395.2927374458745
+      },
+      {
+        "bot_id": "balanced-v1",
+        "lower": 1473.8185537600214,
+        "upper": 1485.0673516500285
+      },
+      {
+        "bot_id": "passive-v1",
+        "lower": 1618.0841671470437,
+        "upper": 1629.813866408555
+      },
+      {
+        "bot_id": "aggressive-v2",
+        "lower": 1685.0159992914992,
+        "upper": 1696.926918227601
+      },
+      {
+        "bot_id": "balanced-v2",
+        "lower": 1678.8076263195444,
+        "upper": 1690.6063093841078
+      },
+      {
+        "bot_id": "passive-v2",
+        "lower": 1655.3468546992735,
+        "upper": 1665.6927286600746
+      },
+      {
+        "bot_id": "vector_ppo_small_v1_g1500",
+        "lower": 1260.6105760184023,
+        "upper": 1275.7661478864025
+      },
+      {
+        "bot_id": "vector_ppo_large_v1_g350k",
+        "lower": 1646.7801485027228,
+        "upper": 1661.6887602054724
+      }
+    ],
+    "requested": 200,
+    "warnings": []
+  },
+  "calibration": [
+    {
+      "count": 7915,
+      "lower_probability": 0.0,
+      "mean_prediction": 0.03086201970289195,
+      "observed_score": 0.029500947567909032,
+      "upper_probability": 0.1
+    },
+    {
+      "count": 10556,
+      "lower_probability": 0.1,
+      "mean_prediction": 0.16460344167498836,
+      "observed_score": 0.1724137931034483,
+      "upper_probability": 0.2
+    },
+    {
+      "count": 13190,
+      "lower_probability": 0.2,
+      "mean_prediction": 0.23751842187063926,
+      "observed_score": 0.23953752843062925,
+      "upper_probability": 0.3
+    },
+    {
+      "count": 5276,
+      "lower_probability": 0.3,
+      "mean_prediction": 0.33883617125802457,
+      "observed_score": 0.31643290371493554,
+      "upper_probability": 0.4
+    },
+    {
+      "count": 5279,
+      "lower_probability": 0.4,
+      "mean_prediction": 0.45130198981464403,
+      "observed_score": 0.41627202121613943,
+      "upper_probability": 0.5
+    },
+    {
+      "count": 21112,
+      "lower_probability": 0.5,
+      "mean_prediction": 0.5467027120177941,
+      "observed_score": 0.5331801818870784,
+      "upper_probability": 0.6
+    },
+    {
+      "count": 2638,
+      "lower_probability": 0.6,
+      "mean_prediction": 0.6674298178000065,
+      "observed_score": 0.6175132676269901,
+      "upper_probability": 0.7
+    },
+    {
+      "count": 5280,
+      "lower_probability": 0.7,
+      "mean_prediction": 0.7707644752145967,
+      "observed_score": 0.753030303030303,
+      "upper_probability": 0.8
+    },
+    {
+      "count": 5279,
+      "lower_probability": 0.8,
+      "mean_prediction": 0.8816633753653259,
+      "observed_score": 0.8902254214813412,
+      "upper_probability": 0.9
+    },
+    {
+      "count": 18475,
+      "lower_probability": 0.9,
+      "mean_prediction": 0.9310078640064242,
+      "observed_score": 0.9188633288227335,
+      "upper_probability": 1.0
+    }
+  ],
+  "condition_statistics": [
+    {
+      "bot_id": "aggressive-v1",
+      "chart": "A",
+      "first_place_ties": 1,
+      "games": 333,
+      "mean_final_money": 55.17717717717718,
+      "mean_normalized_finish": 0.32432432432432434,
+      "outright_wins": 29,
+      "player_count": 3
+    },
+    {
+      "bot_id": "aggressive-v2",
+      "chart": "A",
+      "first_place_ties": 5,
+      "games": 333,
+      "mean_final_money": 81.36636636636636,
+      "mean_normalized_finish": 0.7747747747747747,
+      "outright_wins": 200,
+      "player_count": 3
+    },
+    {
+      "bot_id": "balanced-v1",
+      "chart": "A",
+      "first_place_ties": 2,
+      "games": 333,
+      "mean_final_money": 61.549549549549546,
+      "mean_normalized_finish": 0.4069069069069069,
+      "outright_wins": 50,
+      "player_count": 3
+    },
+    {
+      "bot_id": "balanced-v2",
+      "chart": "A",
+      "first_place_ties": 8,
+      "games": 333,
+      "mean_final_money": 82.12012012012012,
+      "mean_normalized_finish": 0.7537537537537538,
+      "outright_wins": 186,
+      "player_count": 3
+    },
+    {
+      "bot_id": "bot_e0e2c541-1615-4f47-983c-224e7d888d89",
+      "chart": "A",
+      "first_place_ties": 0,
+      "games": 334,
+      "mean_final_money": 26.293413173652695,
+      "mean_normalized_finish": 0.10329341317365269,
+      "outright_wins": 10,
+      "player_count": 3
+    },
+    {
+      "bot_id": "passive-v1",
+      "chart": "A",
+      "first_place_ties": 5,
+      "games": 333,
+      "mean_final_money": 76.73273273273273,
+      "mean_normalized_finish": 0.5855855855855856,
+      "outright_wins": 125,
+      "player_count": 3
+    },
+    {
+      "bot_id": "passive-v2",
+      "chart": "A",
+      "first_place_ties": 3,
+      "games": 334,
+      "mean_final_money": 80.2185628742515,
+      "mean_normalized_finish": 0.687125748502994,
+      "outright_wins": 164,
+      "player_count": 3
+    },
+    {
+      "bot_id": "vector_ppo_large_v1_g350k",
+      "chart": "A",
+      "first_place_ties": 4,
+      "games": 333,
+      "mean_final_money": 79.70270270270271,
+      "mean_normalized_finish": 0.7072072072072072,
+      "outright_wins": 183,
+      "player_count": 3
+    },
+    {
+      "bot_id": "vector_ppo_small_v1_g1500",
+      "chart": "A",
+      "first_place_ties": 0,
+      "games": 334,
+      "mean_final_money": 35.48802395209581,
+      "mean_normalized_finish": 0.20059880239520958,
+      "outright_wins": 39,
+      "player_count": 3
+    },
+    {
+      "bot_id": "aggressive-v1",
+      "chart": "A",
+      "first_place_ties": 3,
+      "games": 444,
+      "mean_final_money": 41.653153153153156,
+      "mean_normalized_finish": 0.32732732732732733,
+      "outright_wins": 21,
+      "player_count": 4
+    },
+    {
+      "bot_id": "aggressive-v2",
+      "chart": "A",
+      "first_place_ties": 7,
+      "games": 444,
+      "mean_final_money": 60.141891891891895,
+      "mean_normalized_finish": 0.7402402402402403,
+      "outright_wins": 195,
+      "player_count": 4
+    },
+    {
+      "bot_id": "balanced-v1",
+      "chart": "A",
+      "first_place_ties": 7,
+      "games": 445,
+      "mean_final_money": 47.74831460674157,
+      "mean_normalized_finish": 0.46067415730337075,
+      "outright_wins": 58,
+      "player_count": 4
+    },
+    {
+      "bot_id": "balanced-v2",
+      "chart": "A",
+      "first_place_ties": 4,
+      "games": 445,
+      "mean_final_money": 60.08988764044944,
+      "mean_normalized_finish": 0.7123595505617978,
+      "outright_wins": 179,
+      "player_count": 4
+    },
+    {
+      "bot_id": "bot_e0e2c541-1615-4f47-983c-224e7d888d89",
+      "chart": "A",
+      "first_place_ties": 0,
+      "games": 445,
+      "mean_final_money": 11.808988764044944,
+      "mean_normalized_finish": 0.06591760299625468,
+      "outright_wins": 4,
+      "player_count": 4
+    },
+    {
+      "bot_id": "passive-v1",
+      "chart": "A",
+      "first_place_ties": 7,
+      "games": 445,
+      "mean_final_money": 58.173033707865166,
+      "mean_normalized_finish": 0.6307116104868914,
+      "outright_wins": 141,
+      "player_count": 4
+    },
+    {
+      "bot_id": "passive-v2",
+      "chart": "A",
+      "first_place_ties": 4,
+      "games": 444,
+      "mean_final_money": 59.707207207207205,
+      "mean_normalized_finish": 0.6644144144144144,
+      "outright_wins": 153,
+      "player_count": 4
+    },
+    {
+      "bot_id": "vector_ppo_large_v1_g350k",
+      "chart": "A",
+      "first_place_ties": 5,
+      "games": 444,
+      "mean_final_money": 58.52927927927928,
+      "mean_normalized_finish": 0.6839339339339339,
+      "outright_wins": 187,
+      "player_count": 4
+    },
+    {
+      "bot_id": "vector_ppo_small_v1_g1500",
+      "chart": "A",
+      "first_place_ties": 1,
+      "games": 444,
+      "mean_final_money": 30.725225225225227,
+      "mean_normalized_finish": 0.27477477477477474,
+      "outright_wins": 43,
+      "player_count": 4
+    },
+    {
+      "bot_id": "aggressive-v1",
+      "chart": "A",
+      "first_place_ties": 3,
+      "games": 556,
+      "mean_final_money": 33.43345323741007,
+      "mean_normalized_finish": 0.33138489208633093,
+      "outright_wins": 21,
+      "player_count": 5
+    },
+    {
+      "bot_id": "aggressive-v2",
+      "chart": "A",
+      "first_place_ties": 10,
+      "games": 556,
+      "mean_final_money": 49.54496402877698,
+      "mean_normalized_finish": 0.7243705035971223,
+      "outright_wins": 182,
+      "player_count": 5
+    },
+    {
+      "bot_id": "balanced-v1",
+      "chart": "A",
+      "first_place_ties": 9,
+      "games": 555,
+      "mean_final_money": 38.83063063063063,
+      "mean_normalized_finish": 0.4581081081081081,
+      "outright_wins": 45,
+      "player_count": 5
+    },
+    {
+      "bot_id": "balanced-v2",
+      "chart": "A",
+      "first_place_ties": 7,
+      "games": 556,
+      "mean_final_money": 50.327338129496404,
+      "mean_normalized_finish": 0.7225719424460432,
+      "outright_wins": 185,
+      "player_count": 5
+    },
+    {
+      "bot_id": "bot_e0e2c541-1615-4f47-983c-224e7d888d89",
+      "chart": "A",
+      "first_place_ties": 1,
+      "games": 555,
+      "mean_final_money": 6.6,
+      "mean_normalized_finish": 0.07117117117117117,
+      "outright_wins": 9,
+      "player_count": 5
+    },
+    {
+      "bot_id": "passive-v1",
+      "chart": "A",
+      "first_place_ties": 11,
+      "games": 555,
+      "mean_final_money": 47.553153153153154,
+      "mean_normalized_finish": 0.6342342342342342,
+      "outright_wins": 140,
+      "player_count": 5
+    },
+    {
+      "bot_id": "passive-v2",
+      "chart": "A",
+      "first_place_ties": 17,
+      "games": 556,
+      "mean_final_money": 48.660071942446045,
+      "mean_normalized_finish": 0.6861510791366906,
+      "outright_wins": 154,
+      "player_count": 5
+    },
+    {
+      "bot_id": "vector_ppo_large_v1_g350k",
+      "chart": "A",
+      "first_place_ties": 14,
+      "games": 556,
+      "mean_final_money": 47.71402877697842,
+      "mean_normalized_finish": 0.6973920863309353,
+      "outright_wins": 192,
+      "player_count": 5
+    },
+    {
+      "bot_id": "vector_ppo_small_v1_g1500",
+      "chart": "A",
+      "first_place_ties": 4,
+      "games": 555,
+      "mean_final_money": 24.133333333333333,
+      "mean_normalized_finish": 0.24684684684684685,
+      "outright_wins": 34,
+      "player_count": 5
+    },
+    {
+      "bot_id": "aggressive-v1",
+      "chart": "B",
+      "first_place_ties": 3,
+      "games": 333,
+      "mean_final_money": 54.174174174174176,
+      "mean_normalized_finish": 0.3228228228228228,
+      "outright_wins": 31,
+      "player_count": 3
+    },
+    {
+      "bot_id": "aggressive-v2",
+      "chart": "B",
+      "first_place_ties": 8,
+      "games": 333,
+      "mean_final_money": 74.82882882882883,
+      "mean_normalized_finish": 0.7102102102102102,
+      "outright_wins": 172,
+      "player_count": 3
+    },
+    {
+      "bot_id": "balanced-v1",
+      "chart": "B",
+      "first_place_ties": 4,
+      "games": 333,
+      "mean_final_money": 60.31531531531532,
+      "mean_normalized_finish": 0.4519519519519519,
+      "outright_wins": 64,
+      "player_count": 3
+    },
+    {
+      "bot_id": "balanced-v2",
+      "chart": "B",
+      "first_place_ties": 2,
+      "games": 333,
+      "mean_final_money": 76.86486486486487,
+      "mean_normalized_finish": 0.7072072072072072,
+      "outright_wins": 166,
+      "player_count": 3
+    },
+    {
+      "bot_id": "bot_e0e2c541-1615-4f47-983c-224e7d888d89",
+      "chart": "B",
+      "first_place_ties": 0,
+      "games": 333,
+      "mean_final_money": 25.58258258258258,
+      "mean_normalized_finish": 0.08858858858858859,
+      "outright_wins": 8,
+      "player_count": 3
+    },
+    {
+      "bot_id": "passive-v1",
+      "chart": "B",
+      "first_place_ties": 4,
+      "games": 333,
+      "mean_final_money": 73.83783783783784,
+      "mean_normalized_finish": 0.6276276276276276,
+      "outright_wins": 136,
+      "player_count": 3
+    },
+    {
+      "bot_id": "passive-v2",
+      "chart": "B",
+      "first_place_ties": 6,
+      "games": 334,
+      "mean_final_money": 76.12874251497006,
+      "mean_normalized_finish": 0.7005988023952096,
+      "outright_wins": 167,
+      "player_count": 3
+    },
+    {
+      "bot_id": "vector_ppo_large_v1_g350k",
+      "chart": "B",
+      "first_place_ties": 5,
+      "games": 334,
+      "mean_final_money": 76.27844311377245,
+      "mean_normalized_finish": 0.7514970059880239,
+      "outright_wins": 206,
+      "player_count": 3
+    },
+    {
+      "bot_id": "vector_ppo_small_v1_g1500",
+      "chart": "B",
+      "first_place_ties": 0,
+      "games": 334,
+      "mean_final_money": 28.491017964071855,
+      "mean_normalized_finish": 0.18562874251497005,
+      "outright_wins": 34,
+      "player_count": 3
+    },
+    {
+      "bot_id": "aggressive-v1",
+      "chart": "B",
+      "first_place_ties": 3,
+      "games": 444,
+      "mean_final_money": 40.25,
+      "mean_normalized_finish": 0.4039039039039039,
+      "outright_wins": 47,
+      "player_count": 4
+    },
+    {
+      "bot_id": "aggressive-v2",
+      "chart": "B",
+      "first_place_ties": 9,
+      "games": 445,
+      "mean_final_money": 52.66516853932584,
+      "mean_normalized_finish": 0.7303370786516854,
+      "outright_wins": 191,
+      "player_count": 4
+    },
+    {
+      "bot_id": "balanced-v1",
+      "chart": "B",
+      "first_place_ties": 9,
+      "games": 444,
+      "mean_final_money": 44.623873873873876,
+      "mean_normalized_finish": 0.48123123123123124,
+      "outright_wins": 67,
+      "player_count": 4
+    },
+    {
+      "bot_id": "balanced-v2",
+      "chart": "B",
+      "first_place_ties": 14,
+      "games": 445,
+      "mean_final_money": 53.429213483146064,
+      "mean_normalized_finish": 0.7168539325842697,
+      "outright_wins": 178,
+      "player_count": 4
+    },
+    {
+      "bot_id": "bot_e0e2c541-1615-4f47-983c-224e7d888d89",
+      "chart": "B",
+      "first_place_ties": 0,
+      "games": 445,
+      "mean_final_money": 7.806741573033708,
+      "mean_normalized_finish": 0.044194756554307116,
+      "outright_wins": 1,
+      "player_count": 4
+    },
+    {
+      "bot_id": "passive-v1",
+      "chart": "B",
+      "first_place_ties": 9,
+      "games": 445,
+      "mean_final_money": 51.57752808988764,
+      "mean_normalized_finish": 0.6209737827715356,
+      "outright_wins": 131,
+      "player_count": 4
+    },
+    {
+      "bot_id": "passive-v2",
+      "chart": "B",
+      "first_place_ties": 13,
+      "games": 444,
+      "mean_final_money": 52.873873873873876,
+      "mean_normalized_finish": 0.6989489489489489,
+      "outright_wins": 169,
+      "player_count": 4
+    },
+    {
+      "bot_id": "vector_ppo_large_v1_g350k",
+      "chart": "B",
+      "first_place_ties": 16,
+      "games": 444,
+      "mean_final_money": 49.0990990990991,
+      "mean_normalized_finish": 0.6238738738738738,
+      "outright_wins": 148,
+      "player_count": 4
+    },
+    {
+      "bot_id": "vector_ppo_small_v1_g1500",
+      "chart": "B",
+      "first_place_ties": 6,
+      "games": 444,
+      "mean_final_money": 25.436936936936938,
+      "mean_normalized_finish": 0.2635135135135135,
+      "outright_wins": 29,
+      "player_count": 4
+    },
+    {
+      "bot_id": "aggressive-v1",
+      "chart": "B",
+      "first_place_ties": 3,
+      "games": 556,
+      "mean_final_money": 32.669064748201436,
+      "mean_normalized_finish": 0.3471223021582734,
+      "outright_wins": 16,
+      "player_count": 5
+    },
+    {
+      "bot_id": "aggressive-v2",
+      "chart": "B",
+      "first_place_ties": 17,
+      "games": 556,
+      "mean_final_money": 46.388489208633096,
+      "mean_normalized_finish": 0.7158273381294964,
+      "outright_wins": 174,
+      "player_count": 5
+    },
+    {
+      "bot_id": "balanced-v1",
+      "chart": "B",
+      "first_place_ties": 3,
+      "games": 556,
+      "mean_final_money": 37.568345323741006,
+      "mean_normalized_finish": 0.4568345323741007,
+      "outright_wins": 52,
+      "player_count": 5
+    },
+    {
+      "bot_id": "balanced-v2",
+      "chart": "B",
+      "first_place_ties": 14,
+      "games": 555,
+      "mean_final_money": 47.15495495495495,
+      "mean_normalized_finish": 0.7274774774774775,
+      "outright_wins": 171,
+      "player_count": 5
+    },
+    {
+      "bot_id": "bot_e0e2c541-1615-4f47-983c-224e7d888d89",
+      "chart": "B",
+      "first_place_ties": 1,
+      "games": 556,
+      "mean_final_money": 3.962230215827338,
+      "mean_normalized_finish": 0.05440647482014389,
+      "outright_wins": 2,
+      "player_count": 5
+    },
+    {
+      "bot_id": "passive-v1",
+      "chart": "B",
+      "first_place_ties": 8,
+      "games": 556,
+      "mean_final_money": 45.83453237410072,
+      "mean_normalized_finish": 0.6528776978417267,
+      "outright_wins": 150,
+      "player_count": 5
+    },
+    {
+      "bot_id": "passive-v2",
+      "chart": "B",
+      "first_place_ties": 13,
+      "games": 555,
+      "mean_final_money": 45.48288288288288,
+      "mean_normalized_finish": 0.6675675675675675,
+      "outright_wins": 145,
+      "player_count": 5
+    },
+    {
+      "bot_id": "vector_ppo_large_v1_g350k",
+      "chart": "B",
+      "first_place_ties": 18,
+      "games": 555,
+      "mean_final_money": 47.425225225225226,
+      "mean_normalized_finish": 0.7166666666666667,
+      "outright_wins": 224,
+      "player_count": 5
+    },
+    {
+      "bot_id": "vector_ppo_small_v1_g1500",
+      "chart": "B",
+      "first_place_ties": 2,
+      "games": 555,
+      "mean_final_money": 20.807207207207206,
+      "mean_normalized_finish": 0.2418918918918919,
+      "outright_wins": 27,
+      "player_count": 5
+    },
+    {
+      "bot_id": "aggressive-v1",
+      "chart": "C",
+      "first_place_ties": 4,
+      "games": 334,
+      "mean_final_money": 51.65868263473054,
+      "mean_normalized_finish": 0.4101796407185629,
+      "outright_wins": 50,
+      "player_count": 3
+    },
+    {
+      "bot_id": "aggressive-v2",
+      "chart": "C",
+      "first_place_ties": 6,
+      "games": 334,
+      "mean_final_money": 68.62574850299401,
+      "mean_normalized_finish": 0.7634730538922155,
+      "outright_wins": 198,
+      "player_count": 3
+    },
+    {
+      "bot_id": "balanced-v1",
+      "chart": "C",
+      "first_place_ties": 6,
+      "games": 333,
+      "mean_final_money": 55.8948948948949,
+      "mean_normalized_finish": 0.4864864864864865,
+      "outright_wins": 70,
+      "player_count": 3
+    },
+    {
+      "bot_id": "balanced-v2",
+      "chart": "C",
+      "first_place_ties": 6,
+      "games": 333,
+      "mean_final_money": 70.03903903903904,
+      "mean_normalized_finish": 0.7417417417417418,
+      "outright_wins": 184,
+      "player_count": 3
+    },
+    {
+      "bot_id": "bot_e0e2c541-1615-4f47-983c-224e7d888d89",
+      "chart": "C",
+      "first_place_ties": 1,
+      "games": 333,
+      "mean_final_money": 16.564564564564563,
+      "mean_normalized_finish": 0.08258258258258258,
+      "outright_wins": 10,
+      "player_count": 3
+    },
+    {
+      "bot_id": "passive-v1",
+      "chart": "C",
+      "first_place_ties": 6,
+      "games": 333,
+      "mean_final_money": 66.87987987987988,
+      "mean_normalized_finish": 0.6186186186186187,
+      "outright_wins": 135,
+      "player_count": 3
+    },
+    {
+      "bot_id": "passive-v2",
+      "chart": "C",
+      "first_place_ties": 2,
+      "games": 333,
+      "mean_final_money": 69.69669669669669,
+      "mean_normalized_finish": 0.7177177177177178,
+      "outright_wins": 173,
+      "player_count": 3
+    },
+    {
+      "bot_id": "vector_ppo_large_v1_g350k",
+      "chart": "C",
+      "first_place_ties": 3,
+      "games": 334,
+      "mean_final_money": 58.88622754491018,
+      "mean_normalized_finish": 0.5658682634730539,
+      "outright_wins": 128,
+      "player_count": 3
+    },
+    {
+      "bot_id": "vector_ppo_small_v1_g1500",
+      "chart": "C",
+      "first_place_ties": 2,
+      "games": 333,
+      "mean_final_money": 23.942942942942942,
+      "mean_normalized_finish": 0.16966966966966968,
+      "outright_wins": 34,
+      "player_count": 3
+    },
+    {
+      "bot_id": "aggressive-v1",
+      "chart": "C",
+      "first_place_ties": 7,
+      "games": 444,
+      "mean_final_money": 40.26801801801802,
+      "mean_normalized_finish": 0.4376876876876877,
+      "outright_wins": 55,
+      "player_count": 4
+    },
+    {
+      "bot_id": "aggressive-v2",
+      "chart": "C",
+      "first_place_ties": 7,
+      "games": 444,
+      "mean_final_money": 52.078828828828826,
+      "mean_normalized_finish": 0.7192192192192192,
+      "outright_wins": 184,
+      "player_count": 4
+    },
+    {
+      "bot_id": "balanced-v1",
+      "chart": "C",
+      "first_place_ties": 3,
+      "games": 445,
+      "mean_final_money": 43.566292134831464,
+      "mean_normalized_finish": 0.4943820224719101,
+      "outright_wins": 65,
+      "player_count": 4
+    },
+    {
+      "bot_id": "balanced-v2",
+      "chart": "C",
+      "first_place_ties": 4,
+      "games": 444,
+      "mean_final_money": 53.14414414414414,
+      "mean_normalized_finish": 0.728978978978979,
+      "outright_wins": 187,
+      "player_count": 4
+    },
+    {
+      "bot_id": "bot_e0e2c541-1615-4f47-983c-224e7d888d89",
+      "chart": "C",
+      "first_place_ties": 0,
+      "games": 445,
+      "mean_final_money": 5.701123595505618,
+      "mean_normalized_finish": 0.05842696629213483,
+      "outright_wins": 4,
+      "player_count": 4
+    },
+    {
+      "bot_id": "passive-v1",
+      "chart": "C",
+      "first_place_ties": 10,
+      "games": 444,
+      "mean_final_money": 50.57657657657658,
+      "mean_normalized_finish": 0.6388888888888888,
+      "outright_wins": 139,
+      "player_count": 4
+    },
+    {
+      "bot_id": "passive-v2",
+      "chart": "C",
+      "first_place_ties": 9,
+      "games": 444,
+      "mean_final_money": 51.950450450450454,
+      "mean_normalized_finish": 0.7064564564564565,
+      "outright_wins": 176,
+      "player_count": 4
+    },
+    {
+      "bot_id": "vector_ppo_large_v1_g350k",
+      "chart": "C",
+      "first_place_ties": 7,
+      "games": 445,
+      "mean_final_money": 44.06067415730337,
+      "mean_normalized_finish": 0.5528089887640449,
+      "outright_wins": 128,
+      "player_count": 4
+    },
+    {
+      "bot_id": "vector_ppo_small_v1_g1500",
+      "chart": "C",
+      "first_place_ties": 2,
+      "games": 445,
+      "mean_final_money": 23.451685393258426,
+      "mean_normalized_finish": 0.250936329588015,
+      "outright_wins": 38,
+      "player_count": 4
+    },
+    {
+      "bot_id": "aggressive-v1",
+      "chart": "C",
+      "first_place_ties": 6,
+      "games": 556,
+      "mean_final_money": 31.573741007194243,
+      "mean_normalized_finish": 0.4307553956834532,
+      "outright_wins": 39,
+      "player_count": 5
+    },
+    {
+      "bot_id": "aggressive-v2",
+      "chart": "C",
+      "first_place_ties": 11,
+      "games": 555,
+      "mean_final_money": 42.94234234234234,
+      "mean_normalized_finish": 0.7198198198198198,
+      "outright_wins": 192,
+      "player_count": 5
+    },
+    {
+      "bot_id": "balanced-v1",
+      "chart": "C",
+      "first_place_ties": 9,
+      "games": 556,
+      "mean_final_money": 34.739208633093526,
+      "mean_normalized_finish": 0.5071942446043165,
+      "outright_wins": 61,
+      "player_count": 5
+    },
+    {
+      "bot_id": "balanced-v2",
+      "chart": "C",
+      "first_place_ties": 17,
+      "games": 556,
+      "mean_final_money": 42.60071942446043,
+      "mean_normalized_finish": 0.7126798561151079,
+      "outright_wins": 190,
+      "player_count": 5
+    },
+    {
+      "bot_id": "bot_e0e2c541-1615-4f47-983c-224e7d888d89",
+      "chart": "C",
+      "first_place_ties": 3,
+      "games": 555,
+      "mean_final_money": -1.2720720720720722,
+      "mean_normalized_finish": 0.060810810810810814,
+      "outright_wins": 2,
+      "player_count": 5
+    },
+    {
+      "bot_id": "passive-v1",
+      "chart": "C",
+      "first_place_ties": 15,
+      "games": 556,
+      "mean_final_money": 41.91187050359712,
+      "mean_normalized_finish": 0.6654676258992805,
+      "outright_wins": 158,
+      "player_count": 5
+    },
+    {
+      "bot_id": "passive-v2",
+      "chart": "C",
+      "first_place_ties": 14,
+      "games": 555,
+      "mean_final_money": 41.637837837837836,
+      "mean_normalized_finish": 0.6995495495495495,
+      "outright_wins": 163,
+      "player_count": 5
+    },
+    {
+      "bot_id": "vector_ppo_large_v1_g350k",
+      "chart": "C",
+      "first_place_ties": 11,
+      "games": 555,
+      "mean_final_money": 35.21081081081081,
+      "mean_normalized_finish": 0.5626126126126126,
+      "outright_wins": 125,
+      "player_count": 5
+    },
+    {
+      "bot_id": "vector_ppo_small_v1_g1500",
+      "chart": "C",
+      "first_place_ties": 4,
+      "games": 556,
+      "mean_final_money": 16.964028776978417,
+      "mean_normalized_finish": 0.22482014388489208,
+      "outright_wins": 26,
+      "player_count": 5
+    },
+    {
+      "bot_id": "aggressive-v1",
+      "chart": "D",
+      "first_place_ties": 2,
+      "games": 333,
+      "mean_final_money": 58.150150150150154,
+      "mean_normalized_finish": 0.2552552552552553,
+      "outright_wins": 20,
+      "player_count": 3
+    },
+    {
+      "bot_id": "aggressive-v2",
+      "chart": "D",
+      "first_place_ties": 5,
+      "games": 333,
+      "mean_final_money": 87.06006006006007,
+      "mean_normalized_finish": 0.7027027027027027,
+      "outright_wins": 163,
+      "player_count": 3
+    },
+    {
+      "bot_id": "balanced-v1",
+      "chart": "D",
+      "first_place_ties": 3,
+      "games": 334,
+      "mean_final_money": 65.84730538922156,
+      "mean_normalized_finish": 0.3592814371257485,
+      "outright_wins": 36,
+      "player_count": 3
+    },
+    {
+      "bot_id": "balanced-v2",
+      "chart": "D",
+      "first_place_ties": 2,
+      "games": 333,
+      "mean_final_money": 89.67567567567568,
+      "mean_normalized_finish": 0.7252252252252253,
+      "outright_wins": 176,
+      "player_count": 3
+    },
+    {
+      "bot_id": "bot_e0e2c541-1615-4f47-983c-224e7d888d89",
+      "chart": "D",
+      "first_place_ties": 0,
+      "games": 333,
+      "mean_final_money": 36.62162162162162,
+      "mean_normalized_finish": 0.13213213213213212,
+      "outright_wins": 18,
+      "player_count": 3
+    },
+    {
+      "bot_id": "passive-v1",
+      "chart": "D",
+      "first_place_ties": 4,
+      "games": 333,
+      "mean_final_money": 85.97897897897897,
+      "mean_normalized_finish": 0.6171171171171171,
+      "outright_wins": 143,
+      "player_count": 3
+    },
+    {
+      "bot_id": "passive-v2",
+      "chart": "D",
+      "first_place_ties": 3,
+      "games": 334,
+      "mean_final_money": 85.18862275449102,
+      "mean_normalized_finish": 0.6497005988023952,
+      "outright_wins": 141,
+      "player_count": 3
+    },
+    {
+      "bot_id": "vector_ppo_large_v1_g350k",
+      "chart": "D",
+      "first_place_ties": 5,
+      "games": 334,
+      "mean_final_money": 98.07485029940119,
+      "mean_normalized_finish": 0.8607784431137725,
+      "outright_wins": 247,
+      "player_count": 3
+    },
+    {
+      "bot_id": "vector_ppo_small_v1_g1500",
+      "chart": "D",
+      "first_place_ties": 0,
+      "games": 333,
+      "mean_final_money": 43.27927927927928,
+      "mean_normalized_finish": 0.22972972972972974,
+      "outright_wins": 44,
+      "player_count": 3
+    },
+    {
+      "bot_id": "aggressive-v1",
+      "chart": "D",
+      "first_place_ties": 2,
+      "games": 445,
+      "mean_final_money": 42.48988764044944,
+      "mean_normalized_finish": 0.30786516853932583,
+      "outright_wins": 15,
+      "player_count": 4
+    },
+    {
+      "bot_id": "aggressive-v2",
+      "chart": "D",
+      "first_place_ties": 10,
+      "games": 444,
+      "mean_final_money": 60.30855855855856,
+      "mean_normalized_finish": 0.6854354354354354,
+      "outright_wins": 149,
+      "player_count": 4
+    },
+    {
+      "bot_id": "balanced-v1",
+      "chart": "D",
+      "first_place_ties": 5,
+      "games": 444,
+      "mean_final_money": 49.56306306306306,
+      "mean_normalized_finish": 0.4249249249249249,
+      "outright_wins": 40,
+      "player_count": 4
+    },
+    {
+      "bot_id": "balanced-v2",
+      "chart": "D",
+      "first_place_ties": 9,
+      "games": 444,
+      "mean_final_money": 61.6509009009009,
+      "mean_normalized_finish": 0.6794294294294294,
+      "outright_wins": 154,
+      "player_count": 4
+    },
+    {
+      "bot_id": "bot_e0e2c541-1615-4f47-983c-224e7d888d89",
+      "chart": "D",
+      "first_place_ties": 1,
+      "games": 445,
+      "mean_final_money": 14.121348314606742,
+      "mean_normalized_finish": 0.060674157303370786,
+      "outright_wins": 1,
+      "player_count": 4
+    },
+    {
+      "bot_id": "passive-v1",
+      "chart": "D",
+      "first_place_ties": 6,
+      "games": 444,
+      "mean_final_money": 61.8445945945946,
+      "mean_normalized_finish": 0.6433933933933934,
+      "outright_wins": 154,
+      "player_count": 4
+    },
+    {
+      "bot_id": "passive-v2",
+      "chart": "D",
+      "first_place_ties": 9,
+      "games": 445,
+      "mean_final_money": 60.53932584269663,
+      "mean_normalized_finish": 0.6891385767790262,
+      "outright_wins": 163,
+      "player_count": 4
+    },
+    {
+      "bot_id": "vector_ppo_large_v1_g350k",
+      "chart": "D",
+      "first_place_ties": 13,
+      "games": 444,
+      "mean_final_money": 64.73198198198199,
+      "mean_normalized_finish": 0.7830330330330331,
+      "outright_wins": 242,
+      "player_count": 4
+    },
+    {
+      "bot_id": "vector_ppo_small_v1_g1500",
+      "chart": "D",
+      "first_place_ties": 0,
+      "games": 445,
+      "mean_final_money": 33.662921348314605,
+      "mean_normalized_finish": 0.2876404494382022,
+      "outright_wins": 55,
+      "player_count": 4
+    },
+    {
+      "bot_id": "aggressive-v1",
+      "chart": "D",
+      "first_place_ties": 3,
+      "games": 556,
+      "mean_final_money": 34.39028776978417,
+      "mean_normalized_finish": 0.2756294964028777,
+      "outright_wins": 15,
+      "player_count": 5
+    },
+    {
+      "bot_id": "aggressive-v2",
+      "chart": "D",
+      "first_place_ties": 17,
+      "games": 556,
+      "mean_final_money": 53.185251798561154,
+      "mean_normalized_finish": 0.6964928057553957,
+      "outright_wins": 129,
+      "player_count": 5
+    },
+    {
+      "bot_id": "balanced-v1",
+      "chart": "D",
+      "first_place_ties": 5,
+      "games": 555,
+      "mean_final_money": 43.535135135135135,
+      "mean_normalized_finish": 0.45315315315315313,
+      "outright_wins": 50,
+      "player_count": 5
+    },
+    {
+      "bot_id": "balanced-v2",
+      "chart": "D",
+      "first_place_ties": 14,
+      "games": 556,
+      "mean_final_money": 53.95503597122302,
+      "mean_normalized_finish": 0.6834532374100719,
+      "outright_wins": 154,
+      "player_count": 5
+    },
+    {
+      "bot_id": "bot_e0e2c541-1615-4f47-983c-224e7d888d89",
+      "chart": "D",
+      "first_place_ties": 0,
+      "games": 555,
+      "mean_final_money": 11.9009009009009,
+      "mean_normalized_finish": 0.07207207207207207,
+      "outright_wins": 7,
+      "player_count": 5
+    },
+    {
+      "bot_id": "passive-v1",
+      "chart": "D",
+      "first_place_ties": 9,
+      "games": 556,
+      "mean_final_money": 52.94604316546763,
+      "mean_normalized_finish": 0.641636690647482,
+      "outright_wins": 149,
+      "player_count": 5
+    },
+    {
+      "bot_id": "passive-v2",
+      "chart": "D",
+      "first_place_ties": 12,
+      "games": 556,
+      "mean_final_money": 52.669064748201436,
+      "mean_normalized_finish": 0.6497302158273381,
+      "outright_wins": 142,
+      "player_count": 5
+    },
+    {
+      "bot_id": "vector_ppo_large_v1_g350k",
+      "chart": "D",
+      "first_place_ties": 16,
+      "games": 555,
+      "mean_final_money": 60.74954954954955,
+      "mean_normalized_finish": 0.7977477477477477,
+      "outright_wins": 274,
+      "player_count": 5
+    },
+    {
+      "bot_id": "vector_ppo_small_v1_g1500",
+      "chart": "D",
+      "first_place_ties": 1,
+      "games": 555,
+      "mean_final_money": 30.803603603603605,
+      "mean_normalized_finish": 0.2972972972972973,
+      "outright_wins": 42,
+      "player_count": 5
+    },
+    {
+      "bot_id": "aggressive-v1",
+      "chart": "E",
+      "first_place_ties": 3,
+      "games": 333,
+      "mean_final_money": 57.08408408408408,
+      "mean_normalized_finish": 0.3303303303303303,
+      "outright_wins": 31,
+      "player_count": 3
+    },
+    {
+      "bot_id": "aggressive-v2",
+      "chart": "E",
+      "first_place_ties": 5,
+      "games": 333,
+      "mean_final_money": 84.37237237237237,
+      "mean_normalized_finish": 0.7342342342342343,
+      "outright_wins": 194,
+      "player_count": 3
+    },
+    {
+      "bot_id": "balanced-v1",
+      "chart": "E",
+      "first_place_ties": 4,
+      "games": 333,
+      "mean_final_money": 62.792792792792795,
+      "mean_normalized_finish": 0.4099099099099099,
+      "outright_wins": 54,
+      "player_count": 3
+    },
+    {
+      "bot_id": "balanced-v2",
+      "chart": "E",
+      "first_place_ties": 7,
+      "games": 334,
+      "mean_final_money": 82.7065868263473,
+      "mean_normalized_finish": 0.7035928143712575,
+      "outright_wins": 164,
+      "player_count": 3
+    },
+    {
+      "bot_id": "bot_e0e2c541-1615-4f47-983c-224e7d888d89",
+      "chart": "E",
+      "first_place_ties": 1,
+      "games": 333,
+      "mean_final_money": 31.696696696696698,
+      "mean_normalized_finish": 0.13213213213213212,
+      "outright_wins": 10,
+      "player_count": 3
+    },
+    {
+      "bot_id": "passive-v1",
+      "chart": "E",
+      "first_place_ties": 5,
+      "games": 334,
+      "mean_final_money": 78.76347305389221,
+      "mean_normalized_finish": 0.6107784431137725,
+      "outright_wins": 136,
+      "player_count": 3
+    },
+    {
+      "bot_id": "passive-v2",
+      "chart": "E",
+      "first_place_ties": 7,
+      "games": 333,
+      "mean_final_money": 80.89789789789789,
+      "mean_normalized_finish": 0.6651651651651652,
+      "outright_wins": 149,
+      "player_count": 3
+    },
+    {
+      "bot_id": "vector_ppo_large_v1_g350k",
+      "chart": "E",
+      "first_place_ties": 7,
+      "games": 334,
+      "mean_final_money": 84.52694610778443,
+      "mean_normalized_finish": 0.7559880239520959,
+      "outright_wins": 205,
+      "player_count": 3
+    },
+    {
+      "bot_id": "vector_ppo_small_v1_g1500",
+      "chart": "E",
+      "first_place_ties": 1,
+      "games": 333,
+      "mean_final_money": 36.9009009009009,
+      "mean_normalized_finish": 0.2042042042042042,
+      "outright_wins": 37,
+      "player_count": 3
+    },
+    {
+      "bot_id": "aggressive-v1",
+      "chart": "E",
+      "first_place_ties": 2,
+      "games": 444,
+      "mean_final_money": 42.95945945945946,
+      "mean_normalized_finish": 0.36936936936936937,
+      "outright_wins": 30,
+      "player_count": 4
+    },
+    {
+      "bot_id": "aggressive-v2",
+      "chart": "E",
+      "first_place_ties": 7,
+      "games": 445,
+      "mean_final_money": 61.325842696629216,
+      "mean_normalized_finish": 0.7063670411985019,
+      "outright_wins": 179,
+      "player_count": 4
+    },
+    {
+      "bot_id": "balanced-v1",
+      "chart": "E",
+      "first_place_ties": 3,
+      "games": 444,
+      "mean_final_money": 48.8963963963964,
+      "mean_normalized_finish": 0.4496996996996997,
+      "outright_wins": 53,
+      "player_count": 4
+    },
+    {
+      "bot_id": "balanced-v2",
+      "chart": "E",
+      "first_place_ties": 8,
+      "games": 444,
+      "mean_final_money": 61.42342342342342,
+      "mean_normalized_finish": 0.7027027027027026,
+      "outright_wins": 169,
+      "player_count": 4
+    },
+    {
+      "bot_id": "bot_e0e2c541-1615-4f47-983c-224e7d888d89",
+      "chart": "E",
+      "first_place_ties": 0,
+      "games": 445,
+      "mean_final_money": 11.626966292134831,
+      "mean_normalized_finish": 0.062172284644194754,
+      "outright_wins": 3,
+      "player_count": 4
+    },
+    {
+      "bot_id": "passive-v1",
+      "chart": "E",
+      "first_place_ties": 5,
+      "games": 444,
+      "mean_final_money": 59.961711711711715,
+      "mean_normalized_finish": 0.6246246246246246,
+      "outright_wins": 143,
+      "player_count": 4
+    },
+    {
+      "bot_id": "passive-v2",
+      "chart": "E",
+      "first_place_ties": 4,
+      "games": 444,
+      "mean_final_money": 60.7545045045045,
+      "mean_normalized_finish": 0.6809309309309309,
+      "outright_wins": 164,
+      "player_count": 4
+    },
+    {
+      "bot_id": "vector_ppo_large_v1_g350k",
+      "chart": "E",
+      "first_place_ties": 9,
+      "games": 445,
+      "mean_final_money": 60.70337078651686,
+      "mean_normalized_finish": 0.7033707865168539,
+      "outright_wins": 201,
+      "player_count": 4
+    },
+    {
+      "bot_id": "vector_ppo_small_v1_g1500",
+      "chart": "E",
+      "first_place_ties": 4,
+      "games": 445,
+      "mean_final_money": 29.27640449438202,
+      "mean_normalized_finish": 0.2584269662921348,
+      "outright_wins": 37,
+      "player_count": 4
+    },
+    {
+      "bot_id": "aggressive-v1",
+      "chart": "E",
+      "first_place_ties": 6,
+      "games": 555,
+      "mean_final_money": 34.863063063063066,
+      "mean_normalized_finish": 0.35225225225225226,
+      "outright_wins": 24,
+      "player_count": 5
+    },
+    {
+      "bot_id": "aggressive-v2",
+      "chart": "E",
+      "first_place_ties": 12,
+      "games": 556,
+      "mean_final_money": 51.18345323741007,
+      "mean_normalized_finish": 0.700089928057554,
+      "outright_wins": 163,
+      "player_count": 5
+    },
+    {
+      "bot_id": "balanced-v1",
+      "chart": "E",
+      "first_place_ties": 8,
+      "games": 556,
+      "mean_final_money": 40.93884892086331,
+      "mean_normalized_finish": 0.46492805755395683,
+      "outright_wins": 57,
+      "player_count": 5
+    },
+    {
+      "bot_id": "balanced-v2",
+      "chart": "E",
+      "first_place_ties": 11,
+      "games": 555,
+      "mean_final_money": 51.2018018018018,
+      "mean_normalized_finish": 0.6774774774774774,
+      "outright_wins": 159,
+      "player_count": 5
+    },
+    {
+      "bot_id": "bot_e0e2c541-1615-4f47-983c-224e7d888d89",
+      "chart": "E",
+      "first_place_ties": 1,
+      "games": 555,
+      "mean_final_money": 6.621621621621622,
+      "mean_normalized_finish": 0.08108108108108109,
+      "outright_wins": 5,
+      "player_count": 5
+    },
+    {
+      "bot_id": "passive-v1",
+      "chart": "E",
+      "first_place_ties": 10,
+      "games": 556,
+      "mean_final_money": 49.90467625899281,
+      "mean_normalized_finish": 0.635341726618705,
+      "outright_wins": 157,
+      "player_count": 5
+    },
+    {
+      "bot_id": "passive-v2",
+      "chart": "E",
+      "first_place_ties": 12,
+      "games": 556,
+      "mean_final_money": 50.12769784172662,
+      "mean_normalized_finish": 0.6695143884892086,
+      "outright_wins": 144,
+      "player_count": 5
+    },
+    {
+      "bot_id": "vector_ppo_large_v1_g350k",
+      "chart": "E",
+      "first_place_ties": 12,
+      "games": 555,
+      "mean_final_money": 53.34234234234234,
+      "mean_normalized_finish": 0.7238738738738739,
+      "outright_wins": 218,
+      "player_count": 5
+    },
+    {
+      "bot_id": "vector_ppo_small_v1_g1500",
+      "chart": "E",
+      "first_place_ties": 2,
+      "games": 556,
+      "mean_final_money": 25.142086330935253,
+      "mean_normalized_finish": 0.25719424460431656,
+      "outright_wins": 37,
+      "player_count": 5
+    }
+  ],
+  "configuration": {
+    "batch_size": 64,
+    "bootstrap_samples": 200,
+    "bots": [
+      {
+        "bot_id": "bot_e0e2c541-1615-4f47-983c-224e7d888d89",
+        "name": "random"
+      },
+      {
+        "bot_id": "aggressive-v1",
+        "name": "aggressive-v1"
+      },
+      {
+        "bot_id": "balanced-v1",
+        "name": "balanced-v1"
+      },
+      {
+        "bot_id": "passive-v1",
+        "name": "passive-v1"
+      },
+      {
+        "bot_id": "aggressive-v2",
+        "name": "aggressive-v2"
+      },
+      {
+        "bot_id": "balanced-v2",
+        "name": "balanced-v2"
+      },
+      {
+        "bot_id": "passive-v2",
+        "name": "passive-v2"
+      },
+      {
+        "bot_id": "vector_ppo_small_v1_g1500",
+        "name": "vector_ppo_small_v1_g1500"
+      },
+      {
+        "bot_id": "vector_ppo_large_v1_g350k",
+        "name": "vector_ppo_large_v1_g350k"
+      }
+    ],
+    "charts": [
+      "A",
+      "B",
+      "C",
+      "D",
+      "E"
+    ],
+    "fault_mode": "record_and_pass",
+    "games": 15000,
+    "player_counts": [
+      3,
+      4,
+      5
+    ],
+    "root_seed": 0
+  },
+  "leaderboard": [
+    {
+      "bot_id": "aggressive-v2",
+      "bot_name": "aggressive-v2",
+      "faults": 0,
+      "first_place_ties": 136,
+      "games": 6667,
+      "log_worth": 1.0957278987063603,
+      "mean_final_money": 59.17969101544923,
+      "mean_normalized_finish": 0.7194265286735663,
+      "mean_winning_money": 72.18671902891825,
+      "outright_wins": 2665,
+      "pl_rating": 1690.347432030247,
+      "rank": 1,
+      "rating_interval_lower": 1685.0159992914992,
+      "rating_interval_upper": 1696.926918227601,
+      "worth": 0.2042177083499202
+    },
+    {
+      "bot_id": "balanced-v2",
+      "bot_name": "balanced-v2",
+      "faults": 0,
+      "first_place_ties": 127,
+      "games": 6666,
+      "log_worth": 1.0657860646981565,
+      "mean_final_money": 59.82043204320432,
+      "mean_normalized_finish": 0.7112336233623362,
+      "mean_winning_money": 73.33968486625137,
+      "outright_wins": 2602,
+      "pl_rating": 1685.1460027151168,
+      "rank": 2,
+      "rating_interval_lower": 1678.8076263195444,
+      "rating_interval_upper": 1690.6063093841078,
+      "worth": 0.19819369073701523
+    },
+    {
+      "bot_id": "passive-v2",
+      "bot_name": "passive-v2",
+      "faults": 0,
+      "first_place_ties": 128,
+      "games": 6667,
+      "log_worth": 0.9287847238857916,
+      "mean_final_money": 58.54957252137393,
+      "mean_normalized_finish": 0.6813784310784461,
+      "mean_winning_money": 73.43446893787575,
+      "outright_wins": 2367,
+      "pl_rating": 1661.346432183854,
+      "rank": 3,
+      "rating_interval_lower": 1655.3468546992735,
+      "rating_interval_upper": 1665.6927286600746,
+      "worth": 0.17281876561221937
+    },
+    {
+      "bot_id": "vector_ppo_large_v1_g350k",
+      "bot_name": "vector_ppo_large_v1_g350k",
+      "faults": 0,
+      "first_place_ties": 145,
+      "games": 6667,
+      "log_worth": 0.8858245257300843,
+      "mean_final_money": 58.72746362681866,
+      "mean_normalized_finish": 0.6967276636168191,
+      "mean_winning_money": 75.65378316410089,
+      "outright_wins": 2908,
+      "pl_rating": 1653.8834813836563,
+      "rank": 4,
+      "rating_interval_lower": 1646.7801485027228,
+      "rating_interval_upper": 1661.6887602054724,
+      "worth": 0.16555165312725897
+    },
+    {
+      "bot_id": "passive-v1",
+      "bot_name": "passive-v1",
+      "faults": 0,
+      "first_place_ties": 114,
+      "games": 6667,
+      "log_worth": 0.7118747224971591,
+      "mean_final_money": 57.76061196940153,
+      "mean_normalized_finish": 0.6326933653317334,
+      "mean_winning_money": 75.18258551754775,
+      "outright_wins": 2137,
+      "pl_rating": 1623.66530551477,
+      "rank": 5,
+      "rating_interval_lower": 1618.0841671470437,
+      "rating_interval_upper": 1629.813866408555,
+      "worth": 0.13911952370011935
+    },
+    {
+      "bot_id": "balanced-v1",
+      "bot_name": "balanced-v1",
+      "faults": 0,
+      "first_place_ties": 80,
+      "games": 6666,
+      "log_worth": -0.11658037262690613,
+      "mean_final_money": 47.24557455745575,
+      "mean_normalized_finish": 0.4548079807980798,
+      "mean_winning_money": 65.55543237250555,
+      "outright_wins": 822,
+      "pl_rating": 1479.747914987964,
+      "rank": 6,
+      "rating_interval_lower": 1473.8185537600214,
+      "rating_interval_upper": 1485.0673516500285,
+      "worth": 0.060756759969852255
+    },
+    {
+      "bot_id": "aggressive-v1",
+      "bot_name": "aggressive-v1",
+      "faults": 0,
+      "first_place_ties": 51,
+      "games": 6666,
+      "log_worth": -0.632954341204671,
+      "mean_final_money": 41.56090609060906,
+      "mean_normalized_finish": 0.34998499849985,
+      "mean_winning_money": 61.18989898989899,
+      "outright_wins": 444,
+      "pl_rating": 1390.0445689272415,
+      "rank": 7,
+      "rating_interval_lower": 1383.6657854099988,
+      "rating_interval_upper": 1395.2927374458745,
+      "worth": 0.03625235637644439
+    },
+    {
+      "bot_id": "vector_ppo_small_v1_g1500",
+      "bot_name": "vector_ppo_small_v1_g1500",
+      "faults": 0,
+      "first_place_ties": 29,
+      "games": 6667,
+      "log_worth": -1.3295376719700718,
+      "mean_final_money": 27.729263536823158,
+      "mean_normalized_finish": 0.2441752912354382,
+      "mean_winning_money": 81.25299145299145,
+      "outright_wins": 556,
+      "pl_rating": 1269.035650232361,
+      "rank": 8,
+      "rating_interval_lower": 1260.6105760184023,
+      "rating_interval_upper": 1275.7661478864025,
+      "worth": 0.018064000803910577
+    },
+    {
+      "bot_id": "bot_e0e2c541-1615-4f47-983c-224e7d888d89",
+      "bot_name": "random",
+      "faults": 0,
+      "first_place_ties": 9,
+      "games": 6667,
+      "log_worth": -2.6089255497159067,
+      "mean_final_money": 12.559022048897555,
+      "mean_normalized_finish": 0.07464626768661567,
+      "mean_winning_money": 75.04854368932038,
+      "outright_wins": 94,
+      "pl_rating": 1046.7832120247897,
+      "rank": 9,
+      "rating_interval_lower": 1035.428165718232,
+      "rating_interval_upper": 1057.451966661622,
+      "worth": 0.005025541323259676
+    }
+  ],
+  "model": {
+    "diagnostics": {
+      "gradient_norm": 0.08523567509831188,
+      "iterations": 21,
+      "objective": 41599.593855869556,
+      "optimizer_message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH",
+      "pseudo_weight": 0.5
+    },
+    "tie_prevalence": [
+      {
+        "order": 2,
+        "prevalence": 0.04036744706903425
+      },
+      {
+        "order": 3,
+        "prevalence": 0.0011730428236257728
+      }
+    ]
+  },
+  "pair_outcomes": 95000,
+  "schedule": {
+    "condition_quotas": [
+      {
+        "chart": "A",
+        "games": 1000,
+        "player_count": 3
+      },
+      {
+        "chart": "A",
+        "games": 1000,
+        "player_count": 4
+      },
+      {
+        "chart": "A",
+        "games": 1000,
+        "player_count": 5
+      },
+      {
+        "chart": "B",
+        "games": 1000,
+        "player_count": 3
+      },
+      {
+        "chart": "B",
+        "games": 1000,
+        "player_count": 4
+      },
+      {
+        "chart": "B",
+        "games": 1000,
+        "player_count": 5
+      },
+      {
+        "chart": "C",
+        "games": 1000,
+        "player_count": 3
+      },
+      {
+        "chart": "C",
+        "games": 1000,
+        "player_count": 4
+      },
+      {
+        "chart": "C",
+        "games": 1000,
+        "player_count": 5
+      },
+      {
+        "chart": "D",
+        "games": 1000,
+        "player_count": 3
+      },
+      {
+        "chart": "D",
+        "games": 1000,
+        "player_count": 4
+      },
+      {
+        "chart": "D",
+        "games": 1000,
+        "player_count": 5
+      },
+      {
+        "chart": "E",
+        "games": 1000,
+        "player_count": 3
+      },
+      {
+        "chart": "E",
+        "games": 1000,
+        "player_count": 4
+      },
+      {
+        "chart": "E",
+        "games": 1000,
+        "player_count": 5
+      }
+    ],
+    "pair_exposure": {
+      "maximum": 2641,
+      "median": 2639.0,
+      "minimum": 2637
+    }
+  },
+  "schema_version": 1,
+  "warnings": []
+}

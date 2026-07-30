@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Garboid PocketRocks tournament</title>
+<style>
+:root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+body { margin: 0 auto; max-width: 1100px; padding: 1rem; }
+h1, h2 { line-height: 1.2; }
+.meta { color: #666; }
+.warning { border-left: .3rem solid #b45309; padding: .5rem .75rem; }
+.table-wrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; }
+th, td { border-bottom: 1px solid currentColor; padding: .4rem; text-align: right; }
+th[scope="row"] { text-align: left; }
+svg { display: block; height: auto; margin: 1rem 0 2rem; max-width: 100%; }
+.grid { stroke: currentColor; stroke-opacity: .18; }
+.mark { fill: #2563eb; stroke: #1e3a8a; }
+.interval { stroke: #2563eb; stroke-width: 2; }
+.axis { stroke: currentColor; stroke-width: 1; }
+.axis-label { fill: currentColor; font-size: 12px; }
+.label { fill: currentColor; font-size: 12px; }
+@media (prefers-color-scheme: dark) {
+  .meta { color: #aaa; }
+  .mark { fill: #60a5fa; stroke: #bfdbfe; }
+  .interval { stroke: #60a5fa; }
+}
+</style>
+</head>
+<body>
+<h1>Garboid PocketRocks tournament</h1>
+<p class="meta">15,000 games · charts A, B, C, D, E ·
+players 3, 4, 5 · seed 0</p>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>Rank</th><th>Bot</th><th>PL rating</th><th>95% interval</th>
+<th>Worth</th><th>Games</th><th>Wins</th><th>Tied first</th>
+<th>Mean finish</th><th>Mean money</th><th>Winning money</th><th>Faults</th></tr></thead>
+<tbody><tr><td>1</td><th scope="row">aggressive-v2</th><td>1690.35</td><td>1685.0–1696.9</td><td>0.20421771</td><td>6667</td><td>2665</td><td>136</td><td>0.719</td><td>59.18</td><td>72.19</td><td>0</td></tr><tr><td>2</td><th scope="row">balanced-v2</th><td>1685.15</td><td>1678.8–1690.6</td><td>0.19819369</td><td>6666</td><td>2602</td><td>127</td><td>0.711</td><td>59.82</td><td>73.34</td><td>0</td></tr><tr><td>3</td><th scope="row">passive-v2</th><td>1661.35</td><td>1655.3–1665.7</td><td>0.17281877</td><td>6667</td><td>2367</td><td>128</td><td>0.681</td><td>58.55</td><td>73.43</td><td>0</td></tr><tr><td>4</td><th scope="row">vector_ppo_large_v1_g350k</th><td>1653.88</td><td>1646.8–1661.7</td><td>0.16555165</td><td>6667</td><td>2908</td><td>145</td><td>0.697</td><td>58.73</td><td>75.65</td><td>0</td></tr><tr><td>5</td><th scope="row">passive-v1</th><td>1623.67</td><td>1618.1–1629.8</td><td>0.13911952</td><td>6667</td><td>2137</td><td>114</td><td>0.633</td><td>57.76</td><td>75.18</td><td>0</td></tr><tr><td>6</td><th scope="row">balanced-v1</th><td>1479.75</td><td>1473.8–1485.1</td><td>0.06075676</td><td>6666</td><td>822</td><td>80</td><td>0.455</td><td>47.25</td><td>65.56</td><td>0</td></tr><tr><td>7</td><th scope="row">aggressive-v1</th><td>1390.04</td><td>1383.7–1395.3</td><td>0.036252356</td><td>6666</td><td>444</td><td>51</td><td>0.350</td><td>41.56</td><td>61.19</td><td>0</td></tr><tr><td>8</td><th scope="row">vector_ppo_small_v1_g1500</th><td>1269.04</td><td>1260.6–1275.8</td><td>0.018064001</td><td>6667</td><td>556</td><td>29</td><td>0.244</td><td>27.73</td><td>81.25</td><td>0</td></tr><tr><td>9</td><th scope="row">random</th><td>1046.78</td><td>1035.4–1057.5</td><td>0.0050255413</td><td>6667</td><td>94</td><td>9</td><td>0.075</td><td>12.56</td><td>75.05</td><td>0</td></tr></tbody>
+</table>
+</div>
+<h2>PL rating leaderboard</h2>
+<svg viewBox="0 0 800 402" role="img" aria-labelledby="rating-title rating-desc"><title id="rating-title">PL rating leaderboard</title><desc id="rating-desc">Bot ratings with optional 95 percent bootstrap intervals.</desc><text class="label" x="5" y="39">aggressive-v2</text><line class="interval" x1="724.76" x2="734.09" y1="35" y2="35"/><circle class="mark" cx="728.94" cy="35" r="5"/><text class="label" x="736.94" y="39">1690</text><text class="label" x="5" y="77">balanced-v2</text><line class="interval" x1="719.90" x2="729.14" y1="73" y2="73"/><circle class="mark" cx="724.86" cy="73" r="5"/><text class="label" x="732.86" y="77">1685</text><text class="label" x="5" y="115">passive-v2</text><line class="interval" x1="701.52" x2="709.62" y1="111" y2="111"/><circle class="mark" cx="706.22" cy="111" r="5"/><text class="label" x="714.22" y="115">1661</text><text class="label" x="5" y="153">vector_ppo_large_v1_g350k</text><line class="interval" x1="694.81" x2="706.49" y1="149" y2="149"/><circle class="mark" cx="700.37" cy="149" r="5"/><text class="label" x="708.37" y="153">1654</text><text class="label" x="5" y="191">passive-v1</text><line class="interval" x1="672.33" x2="681.52" y1="187" y2="187"/><circle class="mark" cx="676.70" cy="187" r="5"/><text class="label" x="684.70" y="191">1624</text><text class="label" x="5" y="229">balanced-v1</text><line class="interval" x1="559.32" x2="568.13" y1="225" y2="225"/><circle class="mark" cx="563.96" cy="225" r="5"/><text class="label" x="571.96" y="229">1480</text><text class="label" x="5" y="267">aggressive-v1</text><line class="interval" x1="488.70" x2="497.81" y1="263" y2="263"/><circle class="mark" cx="493.70" cy="263" r="5"/><text class="label" x="501.70" y="267">1390</text><text class="label" x="5" y="305">vector_ppo_small_v1_g1500</text><line class="interval" x1="392.30" x2="404.18" y1="301" y2="301"/><circle class="mark" cx="398.90" cy="301" r="5"/><text class="label" x="406.90" y="305">1269</text><text class="label" x="5" y="343">random</text><line class="interval" x1="215.91" x2="233.16" y1="339" y2="339"/><circle class="mark" cx="224.80" cy="339" r="5"/><text class="label" x="232.80" y="343">1047</text><line class="axis" x1="190" x2="760" y1="378" y2="378"/><text x="475" y="397" text-anchor="middle" class="axis-label">PL rating</text></svg>
+<h2>Rating versus mean winning money</h2>
+<svg viewBox="0 0 800 430" role="img" aria-labelledby="money-title money-desc"><title id="money-title">Rating versus mean winning money</title><desc id="money-desc">Scatter plot comparing PL rating with final money in first-place finishes.</desc><line class="axis" x1="70" x2="750" y1="370" y2="370"/><line class="axis" x1="70" x2="70" y1="35" y2="370"/><text x="410" y="410" text-anchor="middle" class="axis-label">PL rating</text><text x="18" y="202" text-anchor="middle" transform="rotate(-90 18 202)" class="axis-label">Mean winning final money</text><circle class="mark" cx="719.09" cy="187.85" r="5"/><text class="label" x="727.09" y="191.85">aggressive-v2</text><circle class="mark" cx="714.09" cy="170.35" r="5"/><text class="label" x="722.09" y="174.35">balanced-v2</text><circle class="mark" cx="691.23" cy="168.91" r="5"/><text class="label" x="699.23" y="172.91">passive-v2</text><circle class="mark" cx="684.07" cy="135.22" r="5"/><text class="label" x="692.07" y="139.22">vector_ppo_large_v1_g350k</text><circle class="mark" cx="655.04" cy="142.37" r="5"/><text class="label" x="663.04" y="146.37">passive-v1</text><circle class="mark" cx="516.80" cy="288.51" r="5"/><text class="label" x="524.80" y="292.51">balanced-v1</text><circle class="mark" cx="430.63" cy="354.77" r="5"/><text class="label" x="438.63" y="358.77">aggressive-v1</text><circle class="mark" cx="314.40" cy="50.23" r="5"/><text class="label" x="322.40" y="54.23">vector_ppo_small_v1_g1500</text><circle class="mark" cx="100.91" cy="144.41" r="5"/><text class="label" x="108.91" y="148.41">random</text></svg>
+<h2>PL calibration</h2>
+<svg viewBox="0 0 800 430" role="img" aria-labelledby="calibration-title calibration-desc"><title id="calibration-title">PL calibration</title><desc id="calibration-desc">Predicted pairwise probability versus observed result, including ties as one half.</desc><line class="axis" x1="70" x2="750" y1="370" y2="370"/><line class="axis" x1="70" x2="70" y1="35" y2="370"/><text x="410" y="410" text-anchor="middle" class="axis-label">Predicted pairwise score</text><text x="18" y="202" text-anchor="middle" transform="rotate(-90 18 202)" class="axis-label">Observed pairwise score</text><line class="grid" x1="70" y1="370" x2="750" y2="35"/><circle class="mark" cx="90.99" cy="360.12" r="12.00"/><text class="label" x="98.99" y="364.12">n=7915</text><circle class="mark" cx="181.93" cy="312.24" r="12.00"/><text class="label" x="189.93" y="316.24">n=10556</text><circle class="mark" cx="231.51" cy="289.75" r="12.00"/><text class="label" x="239.51" y="293.75">n=13190</text><circle class="mark" cx="300.41" cy="263.99" r="12.00"/><text class="label" x="308.41" y="267.99">n=5276</text><circle class="mark" cx="376.89" cy="230.55" r="12.00"/><text class="label" x="384.89" y="234.55">n=5279</text><circle class="mark" cx="441.76" cy="191.38" r="12.00"/><text class="label" x="449.76" y="195.38">n=21112</text><circle class="mark" cx="523.85" cy="163.13" r="12.00"/><text class="label" x="531.85" y="167.13">n=2638</text><circle class="mark" cx="594.12" cy="117.73" r="12.00"/><text class="label" x="602.12" y="121.73">n=5280</text><circle class="mark" cx="669.53" cy="71.77" r="12.00"/><text class="label" x="677.53" y="75.77">n=5279</text><circle class="mark" cx="703.09" cy="62.18" r="12.00"/><text class="label" x="711.09" y="66.18">n=18475</text></svg>
+</body>
+</html>
