@@ -417,6 +417,26 @@ def _scripted_metrics_config(*, games: int = 1) -> MonteCarloConfig:
     )
 
 
+def test_batched_reveal_pass_matches_scalar_default_choice() -> None:
+    config = MonteCarloConfig(
+        bot_specs=tuple(
+            BotSpec(f"pass-{index}", f"pass-{index}", _pass_metrics_brain) for index in range(3)
+        ),
+        games=30,
+        player_counts=(3,),
+        value_charts=("A",),
+        root_seed=31337,
+    )
+    jobs = MonteCarloRunner.plan(config)
+
+    assert MonteCarloRunner.run_jobs(
+        config,
+        jobs,
+        workers=1,
+        batch_size=8,
+    ) == MonteCarloRunner.run_jobs(config, jobs, workers=1)
+
+
 def test_behavior_statistics_defines_empty_rates_and_six_action_buckets() -> None:
     behavior = monte_carlo.BehaviorStatistics(
         bidding_requests=0,

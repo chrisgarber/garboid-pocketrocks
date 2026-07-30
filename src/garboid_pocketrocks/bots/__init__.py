@@ -30,7 +30,6 @@ from garboid_pocketrocks.bots.registry import (
     registered_bot_specs,
 )
 from garboid_pocketrocks.neural.tournament_bot import (
-    VECTOR_PPO_SMALL_V1_G1500_BOT_SPEC,
     VectorPpoSmallV1G1500Brain,
 )
 
@@ -58,7 +57,6 @@ __all__ = [
     "PocketRocksFastBot",
     "RandomBot",
     "RandomBotBrain",
-    "VECTOR_PPO_SMALL_V1_G1500_BOT_SPEC",
     "VectorPpoSmallV1G1500Brain",
     "registered_bot_specs",
 ]

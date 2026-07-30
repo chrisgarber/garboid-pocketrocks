@@ -270,9 +270,8 @@ def run_batch_matches(jobs: Sequence[BatchGameJob]) -> tuple[MatchResult, ...]:
                 )
                 decisions[row].append((step_indices[row], ((winner, decision),)))
                 step_indices[row] += 1
-                assert decision.action_kind == "selectInfoToReveal"
-                assert decision.value is not None
-                reveal_index = decision.value
+                reveal_index = decision.value if decision.action_kind == "selectInfoToReveal" else 0
+                assert reveal_index is not None
             reveal_indices[row] = reveal_index
             revealed_suit = int(engine.hand_cards[row, winner, reveal_index])
             histories[row].append(
