@@ -22,10 +22,11 @@ Live server -> PocketRocksFastBot --+
 Simulator -> DecisionContext -------+
 ```
 
-The immutable game engine produces SDK `DecisionContext` batches and consumes
-SDK `BotDecision` values. Match runners, replay, Monte Carlo evaluation,
-PettingZoo, and Gymnasium all drive that one engine, so training logic does not
-reimplement game rules.
+The SDK `SimEngine` is the sole game engine. Garboid's synchronous
+`SdkGameSession` translates its decision phases into immutable snapshots for
+match runners, replay, Monte Carlo evaluation, PettingZoo, and Gymnasium.
+Garboid owns orchestration and learning interfaces, while the SDK owns setup,
+legal actions, transitions, reveals, objectives, and scoring.
 
 ## Requirements and setup
 
@@ -173,21 +174,17 @@ information-asymmetry, value-chart, endgame, and cash-constraint
 visualizations, follow the
 [heuristic bot visualization runbook](docs/analysis/heuristic-bot-visualizations.md).
 
-## Configurable rules
+## SDK game variants
 
-`LIVE_RULESET` models the current public 30-resource and 30-action decks,
-3–5-player setup values, four active objectives, and value chart A.
-`live_ruleset("A")` through `live_ruleset("E")` select any live chart.
+Local simulation accepts SDK value charts A through E and can enable or disable
+objectives. CLI `--ruleset live-A` through `live-E` selects the corresponding
+SDK value chart. Python environments take a nonempty `value_charts` tuple and
+optionally an `objectives_enabled` tuple; seeded selection remains reproducible.
 
-Training can use:
-
-- `FixedRulesetSampler` for one ruleset;
-- `WeightedRulesetSampler` for a finite weighted pool;
-- `RulesetVariationSampler` for validated combinations of resource counts,
-  action counts, player setup, charts, and objective configuration.
-
-Brains receive public `RulesetKnowledge`; shuffled deck order and hidden cards
-remain private.
+`RulesetKnowledge` is derived from the pinned SDK constants and public game
+context. Garboid does not define alternative deck composition, setup, action,
+objective, or scoring rules. Shuffled deck order and hidden cards remain
+private.
 
 ## Bayesian heuristic bots
 
@@ -265,11 +262,9 @@ classes. Python callers that need the prebuilt specs import them from
 re-exported from the `bots` package. `aggressive`, `balanced`, and `passive`
 remain aliases to v2.
 
-Fast bot wrappers reconcile the chart, starting cash, private-card count, and
-objective state exposed by each SDK context with their configured ruleset
-knowledge. Pass an explicit `Ruleset` when a game uses different resource or
-action deck counts, because the SDK context does not expose those initial
-counts.
+Fast bot wrappers derive chart, starting cash, private-card count, and objective
+state from each SDK context, then combine it with the SDK's canonical public
+deck configuration.
 
 Reveal decisions use the same finite-population model from an observer's
 perspective, without access to the bot's hand. For each candidate suit, the
@@ -284,17 +279,15 @@ bid, and additive value breakdown:
 ```python
 from garboid_pocketrocks.heuristics import HeuristicValuator
 from garboid_pocketrocks.heuristics.profiles import BALANCED_PROFILE
-from garboid_pocketrocks.rules import live_ruleset
-from garboid_pocketrocks.simulator import GameEngine
+from garboid_pocketrocks.knowledge import canonical_knowledge
+from garboid_pocketrocks.simulator import SdkGameSession
 
-ruleset = live_ruleset("A")
-transition = GameEngine.start(ruleset, player_count=3, seed=42)
-assert transition.pending is not None
-_, context = transition.pending.contexts[0]
+session = SdkGameSession.start(player_count=3, seed=42, value_chart="A")
+_, context = session.pending.contexts[0]
 
 evaluation = HeuristicValuator(BALANCED_PROFILE).evaluate_bid(
     context,
-    ruleset.knowledge(3),
+    canonical_knowledge(3, value_chart="A"),
 )
 chosen = evaluation.points[evaluation.chosen_bid]
 print(evaluation.reservation_bid, evaluation.chosen_bid)
@@ -321,12 +314,10 @@ order and opponent hands.
 PettingZoo exposes the underlying multi-agent game:
 
 ```python
-from garboid_pocketrocks.rules import LIVE_RULESET
-from garboid_pocketrocks.simulator import FixedRulesetSampler
 from garboid_pocketrocks.training import EnvironmentBounds, PocketRocksAECEnv
 
 env = PocketRocksAECEnv(
-    ruleset_sampler=FixedRulesetSampler(LIVE_RULESET),
+    value_charts=("A",),
     player_count=3,
     bounds=EnvironmentBounds(max_bid=100, max_hand_size=5),
 )
@@ -344,7 +335,7 @@ env = PocketRocksEnv(
         BotSpec.from_bot_class(RandomBot),
         BotSpec.from_bot_class(RandomBot),
     ),
-    ruleset_sampler=FixedRulesetSampler(LIVE_RULESET),
+    value_charts=("A",),
     player_count=3,
     bounds=EnvironmentBounds(max_bid=100, max_hand_size=5),
 )
