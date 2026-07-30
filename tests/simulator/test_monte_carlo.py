@@ -362,6 +362,29 @@ def test_faults_are_aggregated_for_the_responsible_bot() -> None:
     assert raising.faults > 0
 
 
+def test_batched_fault_aggregation_matches_scalar() -> None:
+    config = MonteCarloConfig(
+        bot_specs=(
+            BotSpec("raising", "raising", _raising_brain),
+            _random_spec("one", "one"),
+            _random_spec("two", "two"),
+        ),
+        games=6,
+        player_counts=(3,),
+        value_charts=("A",),
+        root_seed=3,
+        fault_mode=FaultMode.RECORD_AND_PASS,
+    )
+    jobs = MonteCarloRunner.plan(config)
+
+    assert MonteCarloRunner.run_jobs(
+        config,
+        jobs,
+        workers=1,
+        batch_size=4,
+    ) == MonteCarloRunner.run_jobs(config, jobs, workers=1)
+
+
 class ScriptedMetricsBrain:
     def __init__(self, bidding_decision: str) -> None:
         self.bidding_decision = bidding_decision
