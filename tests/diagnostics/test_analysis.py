@@ -279,6 +279,18 @@ def _build(
     )
 
 
+def test_report_owns_the_exact_validated_sources_in_canonical_order() -> None:
+    first_game = _game(game_index=0, chart="A", decision_counts=(1, 0, 0))
+    second_game = _game(game_index=1, chart="E", decision_counts=(1, 0, 0))
+    first_trace = _trace(first_game, seat=0)
+    second_trace = _trace(second_game, seat=0)
+
+    report = _build((second_trace, first_trace), (second_game, first_game))
+
+    assert report.game_summaries == (first_game, second_game)
+    assert report.decision_traces == (first_trace, second_trace)
+
+
 def test_slices_keep_every_dimension_and_add_decision_weighted_measures() -> None:
     game = _game(decision_counts=(2, 1, 1), fault_counts=(1, 0, 0))
     owned = ((1,), (), ())

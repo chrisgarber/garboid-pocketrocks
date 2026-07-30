@@ -12,14 +12,34 @@ uv run --extra neural garboid-tournament \
 ```
 
 Current defaults are 15,000 games, player counts three through five, value
-charts A through E, root seed zero, batch size 64, 200 bootstrap samples, and
-all available CPUs except one. Use `--bots` or `--exclude-bots` for an
-explicit field, `--bootstrap-samples 0` for a quick run, and `--overwrite`
-only when replacing the three known output artifacts.
+charts A through E, batch size 64, 200 bootstrap samples, and all available
+CPUs except one. Ordinary tournaments retain root seed zero when `--seed` is
+omitted. Use `--bots` or `--exclude-bots` for an explicit field,
+`--bootstrap-samples 0` for a quick run, and `--overwrite` only when replacing
+an existing known artifact generation.
 
 The curated default field contains random, all six explicit heuristic v1/v2
 generations, and the two frozen neural policies. Moving unversioned heuristic
 aliases are omitted because they duplicate v2 behavior.
+
+Decision diagnostics are opt-in:
+
+```bash
+uv run --extra neural garboid-tournament \
+  --decision-reports \
+  --output-dir tournament-results
+```
+
+The flag records each already-selected public decision while retaining batch
+execution. It does not change the schedule, actions, summaries, ratings,
+analysis, or bootstrap results. Explanation-aware policies are invoked only
+when the flag is present.
+
+When decision diagnostics are enabled and `--seed` is omitted, the CLI uses a
+fresh, private 63-bit root seed. Pass an explicit `--seed` only when a fixed,
+byte-reproducible diagnostic run is required. That explicit seed is sensitive:
+keep it private when sharing artifacts because it can reconstruct hidden game
+state. Diagnostic artifacts and CLI output never publish the resolved seed.
 
 ## Schedule
 
@@ -63,6 +83,18 @@ Each successful run writes:
 - `summary.json`: exact configuration, schedule, diagnostics, leaderboard,
   condition statistics, and calibration;
 - `report.html`: leaderboard, intervals, comparison plots, and calibration.
+
+With `--decision-reports`, the same generation also writes:
+
+- `game-summaries.jsonl`: public per-game outcomes and decision counts;
+- `decision-traces.jsonl`: one public row per policy decision;
+- `decision-slices.csv`: filterable additive decision aggregates.
+
+The CLI prints each diagnostic path after a successful run. Diagnostic
+generations withhold the root seed from all published artifacts because it
+could be used to reconstruct hidden state; games are identified only by their
+opaque `game_index`. Without the flag, output and the original three artifacts
+remain unchanged.
 
 Writes are atomic. A bootstrap failure still preserves primary ratings and
 reports the missing uncertainty explicitly.

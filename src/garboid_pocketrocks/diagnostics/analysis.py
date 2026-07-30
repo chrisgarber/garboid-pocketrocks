@@ -83,6 +83,8 @@ class DecisionReport:
     """Validated additive diagnostic results for one tournament."""
 
     schema_version: int
+    game_summaries: tuple[GameSummary, ...]
+    decision_traces: tuple[DecisionTrace, ...]
     slices: tuple[DecisionSlice, ...]
     reconciliation: DecisionReconciliation
 
@@ -200,6 +202,8 @@ def build_decision_report(
         )
     return DecisionReport(
         schema_version=1,
+        game_summaries=ordered_games,
+        decision_traces=ordered_traces,
         slices=frozen_slices,
         reconciliation=DecisionReconciliation(
             game_count=len(ordered_games),

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import secrets
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -54,6 +55,22 @@ def _charts(value: str) -> tuple[str, ...]:
     return charts
 
 
+def _secure_randbits(width: int) -> int:
+    return secrets.randbits(width)
+
+
+def _resolve_root_seed(
+    requested_seed: int | None,
+    *,
+    decision_reports: bool,
+) -> int:
+    if requested_seed is not None:
+        return requested_seed
+    if decision_reports:
+        return _secure_randbits(63)
+    return 0
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Rank registered PocketRocks bots with a multiplayer Plackett-Luce model"
@@ -61,7 +78,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--games", type=_positive_int, default=15_000)
     parser.add_argument("--players", type=_players, default=(3, 4, 5))
     parser.add_argument("--charts", type=_charts, default=("A", "B", "C", "D", "E"))
-    parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--seed", type=int)
     parser.add_argument(
         "--workers",
         type=_positive_int,
@@ -73,6 +90,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--exclude-bots", type=_csv, default=())
     parser.add_argument("--output-dir", type=Path, default=Path("tournament-results"))
     parser.add_argument("--overwrite", action="store_true")
+    parser.add_argument("--decision-reports", action="store_true")
     return parser
 
 
@@ -157,9 +175,13 @@ def main() -> None:
             games=args.games,
             player_counts=args.players,
             charts=args.charts,
-            root_seed=args.seed,
+            root_seed=_resolve_root_seed(
+                args.seed,
+                decision_reports=args.decision_reports,
+            ),
             batch_size=args.batch_size,
             bootstrap_samples=args.bootstrap_samples,
+            decision_reports=args.decision_reports,
         )
         run = TournamentRunner.run(
             config,
@@ -171,3 +193,11 @@ def main() -> None:
         parser.error(str(error))
     print(_leaderboard(run))
     print(f"\nArtifacts: {run.artifacts.report_html.parent}")
+    if run.config.decision_reports:
+        for path in (
+            run.artifacts.game_summaries_jsonl,
+            run.artifacts.decision_traces_jsonl,
+            run.artifacts.decision_slices_csv,
+        ):
+            if path is not None:
+                print(path)

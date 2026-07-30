@@ -22,6 +22,7 @@ if TYPE_CHECKING:
 
     from garboid_pocketrocks.neural.encoding import NeuralObservationEncoder
     from garboid_pocketrocks.neural.model import NeuralPolicy
+    from garboid_pocketrocks.neural.policy import PolicySelection
     from garboid_pocketrocks.training.actions import ActionCodec
 
 CHECKPOINTS_PATH = Path(__file__).with_name("checkpoints")
@@ -37,6 +38,14 @@ class _Runtime:
     encoder: NeuralObservationEncoder
     codec: ActionCodec
     device: torch.device
+
+
+@dataclass(frozen=True, slots=True)
+class _NeuralPolicyChoice:
+    decision: BotDecision
+    action_index: int
+    policy_selection: PolicySelection
+    legal_action_mask: torch.Tensor
 
 
 @cache
@@ -91,7 +100,7 @@ class _FrozenNeuralBrain:
         ruleset: RulesetKnowledge,
         history: PublicHistory,
     ) -> BotDecision:
-        return self.choose_explained_decision(context, ruleset, history).decision
+        return self._choose_raw(context, ruleset, history).decision
 
     def choose_explained_decision(
         self,
@@ -100,6 +109,30 @@ class _FrozenNeuralBrain:
         history: PublicHistory,
     ) -> ExplainedBotDecision:
         """Choose once and retain finite diagnostics from that masked selection."""
+
+        choice = self._choose_raw(context, ruleset, history)
+        selection = choice.policy_selection
+        legal_action_probabilities = tuple(
+            float(probability.item())
+            for probability in selection.probabilities[0][choice.legal_action_mask]
+        )
+        return ExplainedBotDecision(
+            decision=choice.decision,
+            explanation=NeuralPolicyExplanation(
+                predicted_value=float(selection.value[0].item()),
+                selected_probability=float(selection.probabilities[0, choice.action_index].item()),
+                entropy=float(selection.entropy[0].item()),
+                legal_action_probabilities=legal_action_probabilities,
+            ),
+        )
+
+    def _choose_raw(
+        self,
+        context: DecisionContext,
+        ruleset: RulesetKnowledge,
+        history: PublicHistory,
+    ) -> _NeuralPolicyChoice:
+        """Run masked inference once without constructing diagnostic records."""
 
         import torch
 
@@ -117,18 +150,11 @@ class _FrozenNeuralBrain:
                 deterministic=True,
             )
         action_index = int(selection.actions[0].item())
-        legal_action_probabilities = tuple(
-            float(probability.item())
-            for probability in selection.probabilities[0][batch.action_mask[0]]
-        )
-        return ExplainedBotDecision(
+        return _NeuralPolicyChoice(
             decision=self._runtime.codec.decode(action_index),
-            explanation=NeuralPolicyExplanation(
-                predicted_value=float(selection.value[0].item()),
-                selected_probability=float(selection.probabilities[0, action_index].item()),
-                entropy=float(selection.entropy[0].item()),
-                legal_action_probabilities=legal_action_probabilities,
-            ),
+            action_index=action_index,
+            policy_selection=selection,
+            legal_action_mask=batch.action_mask[0],
         )
 
 

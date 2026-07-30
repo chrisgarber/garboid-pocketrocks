@@ -8,6 +8,7 @@ import pytest
 from pocketrocks import OBJECTIVES, ActionId, BotDecision, DecisionContext, Suit
 from pocketrocks.sim.constants import VALUE_CHARTS
 
+import garboid_pocketrocks.bots.heuristic as heuristic_module
 from garboid_pocketrocks.bots import (
     AggressiveHeuristicBot,
     AggressiveHeuristicBrain,
@@ -304,6 +305,32 @@ def test_heuristic_explanation_reuses_the_single_bid_evaluation(
         reservation_bid=evaluation.reservation_bid,
         chosen_bid=evaluation.chosen_bid,
     )
+
+
+def test_ordinary_heuristic_choice_does_not_construct_an_explanation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = make_context(
+        action_id=ActionId.AUCTION2,
+        current_resources=(int(Suit.BRICK), int(Suit.WOOD)),
+        legal_max=9,
+    )
+    knowledge = make_knowledge()
+    brain = HeuristicBotBrain(BALANCED_PROFILE)
+    expected = brain.choose_decision(context, knowledge)
+
+    def reject_explanation(**_values: object) -> None:
+        raise RuntimeError("explanation construction is disabled")
+
+    monkeypatch.setattr(
+        heuristic_module,
+        "HeuristicBidExplanation",
+        reject_explanation,
+    )
+
+    assert brain.choose_decision(context, knowledge) == expected
+    with pytest.raises(RuntimeError, match="explanation construction"):
+        brain.choose_explained_decision(context, knowledge, ())
 
 
 def test_heuristic_reveal_decision_has_no_bid_explanation() -> None:

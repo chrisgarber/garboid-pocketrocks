@@ -370,15 +370,21 @@ def test_automatic_reveals_are_not_recorded_as_bot_decisions() -> None:
 
 def test_decision_traces_are_opt_in_finalized_and_behavior_preserving() -> None:
     lineup = _random_lineup()
-    common = {
-        "player_count": 3,
-        "seed": 31,
-        "value_chart": "C",
-        "game_index": 7,
-    }
-
-    omitted = MatchRunner.run(lineup, **common)
-    captured = MatchRunner.run(lineup, capture_decision_traces=True, **common)
+    omitted = MatchRunner.run(
+        lineup,
+        player_count=3,
+        seed=31,
+        value_chart="C",
+        game_index=7,
+    )
+    captured = MatchRunner.run(
+        lineup,
+        player_count=3,
+        seed=31,
+        value_chart="C",
+        game_index=7,
+        capture_decision_traces=True,
+    )
 
     assert omitted.decision_traces == ()
     assert replace(captured, decision_traces=()) == omitted
@@ -438,15 +444,20 @@ def test_tracing_off_never_invokes_the_explanation_protocol() -> None:
     _FAILING_EXPLANATION_CALLS = 0
     ordinary_spec = BotSpec("opt-in", "opt-in", _always_pass_brain)
     explanation_spec = BotSpec("opt-in", "opt-in", _failing_explanation_brain)
-    common = {
-        "player_count": 3,
-        "seed": 31,
-        "value_chart": "C",
-        "fault_mode": FaultMode.RAISE,
-    }
-
-    expected = MatchRunner.run((ordinary_spec, *_random_lineup()[1:]), **common)
-    actual = MatchRunner.run((explanation_spec, *_random_lineup()[1:]), **common)
+    expected = MatchRunner.run(
+        (ordinary_spec, *_random_lineup()[1:]),
+        player_count=3,
+        seed=31,
+        value_chart="C",
+        fault_mode=FaultMode.RAISE,
+    )
+    actual = MatchRunner.run(
+        (explanation_spec, *_random_lineup()[1:]),
+        player_count=3,
+        seed=31,
+        value_chart="C",
+        fault_mode=FaultMode.RAISE,
+    )
 
     assert _FAILING_EXPLANATION_CALLS == 0
     assert actual.result == expected.result

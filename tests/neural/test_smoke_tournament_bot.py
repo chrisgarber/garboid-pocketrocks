@@ -139,6 +139,35 @@ def test_frozen_neural_explanation_reuses_the_selected_masked_output() -> None:
     )
 
 
+def test_ordinary_neural_choice_does_not_construct_an_explanation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session = SdkGameSession.start(
+        player_count=3,
+        seed=19,
+        value_chart="B",
+        objectives_enabled=True,
+        player_names=("neural", "random-1", "random-2"),
+    )
+    context = session.pending.contexts[0][1]
+    history = public_history_from_sdk_events(session.events)
+    knowledge = canonical_knowledge(3, value_chart="B")
+    brain = VectorPpoSmallV1G1500Brain(seed=7)
+    expected = brain.choose_decision_with_history(context, knowledge, history)
+
+    def reject_explanation(**_values: object) -> None:
+        raise RuntimeError("explanation construction is disabled")
+
+    monkeypatch.setattr(
+        "garboid_pocketrocks.neural.tournament_bot.NeuralPolicyExplanation",
+        reject_explanation,
+    )
+
+    assert brain.choose_decision_with_history(context, knowledge, history) == expected
+    with pytest.raises(RuntimeError, match="explanation construction"):
+        brain.choose_explained_decision(context, knowledge, history)
+
+
 def test_smoke_spec_is_pickle_safe_and_completes_a_match() -> None:
     restored = pickle.loads(pickle.dumps(VECTOR_PPO_SMALL_V1_G1500_BOT_SPEC))
     random_spec = BotSpec.from_bot_class(RandomBot)
