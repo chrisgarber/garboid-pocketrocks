@@ -48,12 +48,10 @@ from garboid_pocketrocks.knowledge import (
     canonical_knowledge,
     knowledge_for_context,
 )
-from garboid_pocketrocks.rules import LIVE_RULESET
 from garboid_pocketrocks.simulator.monte_carlo import (
     MonteCarloConfig,
     MonteCarloRunner,
 )
-from garboid_pocketrocks.simulator.sampling import FixedRulesetSampler
 
 
 def make_knowledge(
@@ -425,7 +423,7 @@ def test_two_worker_monte_carlo_smoke_uses_all_three_heuristic_specs() -> None:
             bot_specs=specs,
             games=3,
             player_counts=(3,),
-            ruleset_sampler=FixedRulesetSampler(LIVE_RULESET),
+            value_charts=("A",),
             root_seed=1234,
         ),
         workers=2,

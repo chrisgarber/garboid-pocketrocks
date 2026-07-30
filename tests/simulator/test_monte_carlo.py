@@ -5,19 +5,18 @@ from dataclasses import replace
 
 import pytest
 from pocketrocks import BotDecision, DecisionContext
+from pocketrocks.sim.constants import ACTION_WIRE_IDS
 
 from garboid_pocketrocks import simulator
 from garboid_pocketrocks.bots import BotBrain, BotSpec, RandomBot
-from garboid_pocketrocks.rules import LIVE_RULESET, RulesetKnowledge
+from garboid_pocketrocks.knowledge import RulesetKnowledge
 from garboid_pocketrocks.simulator import monte_carlo
 from garboid_pocketrocks.simulator.errors import SimulationError
-from garboid_pocketrocks.simulator.events import EventKind
 from garboid_pocketrocks.simulator.monte_carlo import (
     MonteCarloConfig,
     MonteCarloRunner,
 )
 from garboid_pocketrocks.simulator.runner import FaultMode
-from garboid_pocketrocks.simulator.sampling import FixedRulesetSampler
 
 
 def _random_spec(name: str = "random", bot_id: str = "random") -> BotSpec:
@@ -34,15 +33,57 @@ def _small_random_config(
         bot_specs=tuple(_random_spec(f"random-{index}", f"random-{index}") for index in range(3)),
         games=games,
         player_counts=(3,),
-        ruleset_sampler=FixedRulesetSampler(LIVE_RULESET),
+        value_charts=("A",),
         root_seed=seed,
         capture_replays=capture_replays,
     )
 
 
-def test_public_simulator_api_exports_monte_carlo_and_sampling_types() -> None:
+def test_public_simulator_api_exports_monte_carlo() -> None:
     assert simulator.MonteCarloRunner is MonteCarloRunner
-    assert simulator.FixedRulesetSampler is FixedRulesetSampler
+
+
+def test_sdk_variant_configuration_requires_value_charts() -> None:
+    with pytest.raises(ValueError, match="value_charts"):
+        replace(_small_random_config(games=0), value_charts=())
+
+
+def test_sdk_variant_configuration_rejects_unknown_chart() -> None:
+    with pytest.raises(ValueError, match="A-E"):
+        replace(_small_random_config(games=0), value_charts=("Z",))
+
+
+def test_sdk_variant_configuration_requires_objective_modes() -> None:
+    with pytest.raises(ValueError, match="objectives_enabled"):
+        replace(_small_random_config(games=0), objectives_enabled=())
+
+
+def test_sdk_variant_configuration_requires_boolean_objective_modes() -> None:
+    with pytest.raises(ValueError, match="booleans"):
+        replace(
+            _small_random_config(games=0),
+            objectives_enabled=(True, 1),  # type: ignore[arg-type]
+        )
+
+
+def test_sdk_variant_planning_is_deterministic_and_normalizes_charts() -> None:
+    config = replace(
+        _small_random_config(games=40, seed=77),
+        value_charts=("a", "E"),
+        objectives_enabled=(True, False),
+    )
+
+    first = MonteCarloRunner.plan(config)
+    second = MonteCarloRunner.plan(config)
+
+    assert first == second
+    assert config.value_charts == ("A", "E")
+    assert {(job.value_chart, job.objectives_enabled) for job in first} == {
+        ("A", True),
+        ("A", False),
+        ("E", True),
+        ("E", False),
+    }
 
 
 def test_worker_count_does_not_change_monte_carlo_result() -> None:
@@ -152,7 +193,7 @@ def test_repeated_bot_identity_is_aggregated_once() -> None:
         bot_specs=(repeated, repeated, repeated),
         games=3,
         player_counts=(3,),
-        ruleset_sampler=FixedRulesetSampler(LIVE_RULESET),
+        value_charts=("A",),
         root_seed=4,
     )
 
@@ -175,7 +216,7 @@ def test_unpicklable_closure_works_serially_and_fails_clearly_in_workers() -> No
         bot_specs=(closure_spec, _random_spec("one", "one"), _random_spec("two", "two")),
         games=1,
         player_counts=(3,),
-        ruleset_sampler=FixedRulesetSampler(LIVE_RULESET),
+        value_charts=("A",),
         root_seed=9,
     )
 
@@ -198,7 +239,7 @@ def test_main_module_factory_fails_before_spawn_workers(
         ),
         games=1,
         player_counts=(3,),
-        ruleset_sampler=FixedRulesetSampler(LIVE_RULESET),
+        value_charts=("A",),
         root_seed=9,
     )
 
@@ -230,7 +271,7 @@ def test_faults_are_aggregated_for_the_responsible_bot() -> None:
         ),
         games=1,
         player_counts=(3,),
-        ruleset_sampler=FixedRulesetSampler(LIVE_RULESET),
+        value_charts=("A",),
         root_seed=3,
         fault_mode=FaultMode.RECORD_AND_PASS,
     )
@@ -292,7 +333,7 @@ def _scripted_metrics_config(*, games: int = 1) -> MonteCarloConfig:
         ),
         games=games,
         player_counts=(3,),
-        ruleset_sampler=FixedRulesetSampler(LIVE_RULESET),
+        value_charts=("A",),
         root_seed=31337,
         capture_replays=True,
     )
@@ -348,19 +389,11 @@ def test_behavior_wins_resources_and_objectives_match_exact_events() -> None:
     expected_wins = {bot_id: [0] * 6 for bot_id in bot_ids_by_seat}
     expected_resources = {bot_id: 0 for bot_id in bot_ids_by_seat}
     expected_objectives = {bot_id: 0 for bot_id in bot_ids_by_seat}
-    for event in replay.events:
-        if event.seat is None:
-            continue
-        bot_id = bot_ids_by_seat[event.seat]
-        if event.kind is EventKind.AUCTION_RESOLVED:
-            assert event.action_id is not None
-            expected_wins[bot_id][int(event.action_id) - 1] += 1
-        elif event.kind is EventKind.RESOURCES_AWARDED:
-            assert event.resource_ids is not None
-            expected_resources[bot_id] += len(event.resource_ids)
-        elif event.kind is EventKind.OBJECTIVE_CLAIMED:
-            assert event.objective_ids is not None
-            expected_objectives[bot_id] += len(event.objective_ids)
+    for turn in replay.turns:
+        bot_id = bot_ids_by_seat[turn.winner_seat]
+        expected_wins[bot_id][ACTION_WIRE_IDS[turn.action] - 1] += 1
+        expected_resources[bot_id] += len(turn.bundle_suits)
+        expected_objectives[bot_id] += len(turn.claimed_objective_wire_ids)
 
     for statistics in result.bot_statistics:
         behavior = statistics.behavior
@@ -379,7 +412,7 @@ def test_duplicate_bot_ids_aggregate_behavior() -> None:
         bot_specs=(repeated, repeated, repeated),
         games=2,
         player_counts=(3,),
-        ruleset_sampler=FixedRulesetSampler(LIVE_RULESET),
+        value_charts=("A",),
         root_seed=41,
     )
 

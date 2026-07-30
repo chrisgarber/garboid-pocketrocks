@@ -5,38 +5,45 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
-from pocketrocks import ActionId, BotDecision
+from pocketrocks import BotDecision
+from pocketrocks.sim import RevealRecord, ScoreRow, TurnRecord
 from pocketrocks.types import decisionActionKind
 
-from garboid_pocketrocks.rules import PlayerSetup, Ruleset
-from garboid_pocketrocks.simulator.engine import GameEngine
 from garboid_pocketrocks.simulator.errors import SimulationError
-from garboid_pocketrocks.simulator.events import EventKind, GameEvent
-from garboid_pocketrocks.simulator.model import GameResult, Score
+from garboid_pocketrocks.simulator.session import (
+    SdkGameSession,
+    SessionResult,
+    SessionScore,
+)
 
 
 class ReplayDivergence(SimulationError):
-    """Raised when recorded decisions no longer reproduce a replay."""
+    """Raised when recorded SDK decisions no longer reproduce a replay."""
 
 
 @dataclass(frozen=True, slots=True)
 class MatchReplay:
     schema_version: int
-    ruleset: Ruleset
     player_count: int
     seed: int
+    value_chart: str
+    objectives_enabled: bool
     root_seed: int | None
     game_index: int | None
     bot_names: tuple[str, ...]
     decisions: tuple[tuple[int, tuple[tuple[int, BotDecision], ...]], ...]
-    events: tuple[GameEvent, ...]
+    turns: tuple[TurnRecord, ...]
+    result: SessionResult
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "schema_version": self.schema_version,
-            "ruleset": _ruleset_to_dict(self.ruleset),
-            "player_count": self.player_count,
-            "seed": self.seed,
+            "configuration": {
+                "player_count": self.player_count,
+                "seed": self.seed,
+                "value_chart": self.value_chart,
+                "objectives_enabled": self.objectives_enabled,
+            },
             "root_seed": self.root_seed,
             "game_index": self.game_index,
             "bot_names": list(self.bot_names),
@@ -54,19 +61,24 @@ class MatchReplay:
                 }
                 for step, decisions in self.decisions
             ],
-            "events": [_event_to_dict(event) for event in self.events],
+            "turns": [_turn_to_dict(turn) for turn in self.turns],
+            "result": _result_to_dict(self.result),
         }
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> MatchReplay:
         version = int(payload["schema_version"])
-        if version != 1:
+        if version == 1:
+            raise ReplayDivergence("replay schema version 1 used the removed project game engine")
+        if version != 2:
             raise ReplayDivergence(f"unsupported replay schema version {version}")
+        configuration = cast(dict[str, Any], payload["configuration"])
         return cls(
             schema_version=version,
-            ruleset=_ruleset_from_dict(cast(dict[str, Any], payload["ruleset"])),
-            player_count=int(payload["player_count"]),
-            seed=int(payload["seed"]),
+            player_count=int(configuration["player_count"]),
+            seed=int(configuration["seed"]),
+            value_chart=str(configuration["value_chart"]),
+            objectives_enabled=bool(configuration["objectives_enabled"]),
             root_seed=_optional_int(payload.get("root_seed")),
             game_index=_optional_int(payload.get("game_index")),
             bot_names=tuple(str(name) for name in cast(list[object], payload["bot_names"])),
@@ -84,24 +96,23 @@ class MatchReplay:
                                 value=_optional_int(by_seat.get("value")),
                             ),
                         )
-                        for by_seat in cast(
-                            list[dict[str, Any]],
-                            item["by_seat"],
-                        )
+                        for by_seat in cast(list[dict[str, Any]], item["by_seat"])
                     ),
                 )
                 for item in cast(list[dict[str, Any]], payload["decisions"])
             ),
-            events=tuple(
-                _event_from_dict(item) for item in cast(list[dict[str, Any]], payload["events"])
+            turns=tuple(
+                _turn_from_dict(item) for item in cast(list[dict[str, Any]], payload["turns"])
             ),
+            result=_result_from_dict(cast(dict[str, Any], payload["result"])),
         )
 
 
 @dataclass(frozen=True, slots=True)
 class ReplayedMatch:
-    events: tuple[GameEvent, ...]
-    result: GameResult
+    events: tuple[object, ...]
+    turns: tuple[TurnRecord, ...]
+    result: SessionResult
 
 
 def save_replay(replay: MatchReplay, path: Path) -> None:
@@ -119,137 +130,144 @@ def load_replay(path: Path) -> MatchReplay:
 
 
 def replay_match(replay: MatchReplay) -> ReplayedMatch:
-    transition = GameEngine.start(
-        replay.ruleset,
+    session = SdkGameSession.start(
         player_count=replay.player_count,
         seed=replay.seed,
+        value_chart=replay.value_chart,
+        objectives_enabled=replay.objectives_enabled,
+        player_names=replay.bot_names,
     )
-    regenerated_events = list(transition.events)
     for expected_step, (recorded_step, decisions) in enumerate(replay.decisions):
         if recorded_step != expected_step:
             raise ReplayDivergence(f"expected decision step {expected_step}, got {recorded_step}")
-        if transition.pending is None:
-            raise ReplayDivergence(f"decision step {expected_step} has no pending batch")
-        recorded_seats = tuple(seat for seat, _ in decisions)
-        if recorded_seats != transition.pending.acting_seats:
+        recorded_seats = tuple(seat for seat, _decision in decisions)
+        if recorded_seats != session.pending.acting_seats:
             raise ReplayDivergence(
                 f"decision step {expected_step} expected seats "
-                f"{transition.pending.acting_seats}, got {recorded_seats}"
+                f"{session.pending.acting_seats}, got {recorded_seats}"
             )
-        transition = GameEngine.step(transition.state, dict(decisions))
-        regenerated_events.extend(transition.events)
-    if transition.result is None:
-        raise ReplayDivergence("recorded decisions ended before the game terminated")
-    recorded_engine_events = tuple(
-        event
-        for event in replay.events
-        if event.kind not in (EventKind.BOT_FAULT, EventKind.FALLBACK_APPLIED)
+        try:
+            session.step(dict(decisions))
+        except SimulationError as error:
+            raise ReplayDivergence(
+                f"decision step {expected_step} is no longer valid: {error}"
+            ) from error
+    if not session.terminated or session.result is None:
+        raise ReplayDivergence("recorded decisions ended before the SDK game terminated")
+    if session.history != replay.turns:
+        raise ReplayDivergence("SDK turn history differs from replay")
+    if session.result != replay.result:
+        raise ReplayDivergence("SDK terminal result differs from replay")
+    return ReplayedMatch(
+        events=session.events,
+        turns=session.history,
+        result=session.result,
     )
-    if tuple(regenerated_events) != recorded_engine_events:
-        raise ReplayDivergence("regenerated event stream differs from replay")
-    return ReplayedMatch(events=replay.events, result=transition.result)
+
+
+def _turn_to_dict(turn: TurnRecord) -> dict[str, Any]:
+    return {
+        "turn_index": turn.turn_index,
+        "action": turn.action,
+        "upcoming_before": list(turn.upcoming_before),
+        "raw_bids": list(turn.raw_bids),
+        "effective_bids": list(turn.effective_bids),
+        "winner_seat": turn.winner_seat,
+        "paid": turn.paid,
+        "bundle_suits": list(turn.bundle_suits),
+        "claimed_objective_wire_ids": list(turn.claimed_objective_wire_ids),
+        "reveal": (
+            {
+                "seat": turn.reveal.seat,
+                "suit": turn.reveal.suit,
+                "auto": turn.reveal.auto,
+            }
+            if turn.reveal is not None
+            else None
+        ),
+    }
+
+
+def _turn_from_dict(payload: dict[str, Any]) -> TurnRecord:
+    reveal_payload = payload.get("reveal")
+    reveal = (
+        RevealRecord(
+            seat=int(reveal_payload["seat"]),
+            suit=int(reveal_payload["suit"]),
+            auto=bool(reveal_payload["auto"]),
+        )
+        if isinstance(reveal_payload, dict)
+        else None
+    )
+    return TurnRecord(
+        turn_index=int(payload["turn_index"]),
+        action=str(payload["action"]),
+        upcoming_before=tuple(int(value) for value in payload["upcoming_before"]),
+        raw_bids=tuple(int(value) for value in payload["raw_bids"]),
+        effective_bids=tuple(int(value) for value in payload["effective_bids"]),
+        winner_seat=int(payload["winner_seat"]),
+        paid=int(payload["paid"]),
+        bundle_suits=tuple(int(value) for value in payload["bundle_suits"]),
+        claimed_objective_wire_ids=tuple(
+            int(value) for value in payload["claimed_objective_wire_ids"]
+        ),
+        reveal=reveal,
+    )
+
+
+def _result_to_dict(result: SessionResult) -> dict[str, Any]:
+    return {
+        "scores": [
+            {
+                "seat": score.seat,
+                "final_money": score.final_money,
+                "rank": score.rank,
+            }
+            for score in result.scores
+        ],
+        "rows": [
+            {
+                "seat": row.seat,
+                "name": row.name,
+                "cash": row.cash,
+                "items_value": row.items_value,
+                "objectives_value": row.objectives_value,
+                "investments_value": row.investments_value,
+                "loans_value": row.loans_value,
+                "total": row.total,
+            }
+            for row in result.rows
+        ],
+        "ranking": list(result.ranking),
+    }
+
+
+def _result_from_dict(payload: dict[str, Any]) -> SessionResult:
+    return SessionResult(
+        scores=tuple(
+            SessionScore(
+                seat=int(score["seat"]),
+                final_money=int(score["final_money"]),
+                rank=int(score["rank"]),
+            )
+            for score in cast(list[dict[str, Any]], payload["scores"])
+        ),
+        rows=tuple(
+            ScoreRow(
+                seat=int(row["seat"]),
+                name=str(row["name"]),
+                cash=int(row["cash"]),
+                items_value=int(row["items_value"]),
+                objectives_value=int(row["objectives_value"]),
+                investments_value=int(row["investments_value"]),
+                loans_value=int(row["loans_value"]),
+                total=int(row["total"]),
+            )
+            for row in cast(list[dict[str, Any]], payload["rows"])
+        ),
+        ranking=tuple(int(seat) for seat in payload["ranking"]),
+    )
 
 
 def _optional_int(value: object) -> int | None:
     return None if value is None else int(cast(int | str, value))
-
-
-def _ruleset_to_dict(ruleset: Ruleset) -> dict[str, Any]:
-    return {
-        "name": ruleset.name,
-        "resource_counts": list(ruleset.resource_counts),
-        "action_counts": list(ruleset.action_counts),
-        "player_setups": [
-            {
-                "player_count": setup.player_count,
-                "starting_cash": setup.starting_cash,
-                "private_cards_per_player": setup.private_cards_per_player,
-            }
-            for setup in ruleset.player_setups
-        ],
-        "value_chart": list(ruleset.value_chart),
-        "objective_pool": list(ruleset.objective_pool),
-        "active_objective_count": ruleset.active_objective_count,
-        "objectives_enabled": ruleset.objectives_enabled,
-    }
-
-
-def _ruleset_from_dict(payload: dict[str, Any]) -> Ruleset:
-    return Ruleset(
-        name=str(payload["name"]),
-        resource_counts=tuple(int(value) for value in payload["resource_counts"]),
-        action_counts=tuple(int(value) for value in payload["action_counts"]),
-        player_setups=tuple(
-            PlayerSetup(
-                player_count=int(setup["player_count"]),
-                starting_cash=int(setup["starting_cash"]),
-                private_cards_per_player=int(setup["private_cards_per_player"]),
-            )
-            for setup in payload["player_setups"]
-        ),
-        value_chart=tuple(int(value) for value in payload["value_chart"]),
-        objective_pool=tuple(int(value) for value in payload["objective_pool"]),
-        active_objective_count=int(payload["active_objective_count"]),
-        objectives_enabled=bool(payload["objectives_enabled"]),
-    )
-
-
-def _event_to_dict(event: GameEvent) -> dict[str, Any]:
-    return {
-        "kind": event.kind.value,
-        "turn_index": event.turn_index,
-        "seat": event.seat,
-        "action_id": int(event.action_id) if event.action_id is not None else None,
-        "amount": event.amount,
-        "resource_ids": (list(event.resource_ids) if event.resource_ids is not None else None),
-        "objective_ids": (list(event.objective_ids) if event.objective_ids is not None else None),
-        "scores": (
-            [
-                {
-                    "seat": score.seat,
-                    "final_money": score.final_money,
-                    "rank": score.rank,
-                }
-                for score in event.scores
-            ]
-            if event.scores is not None
-            else None
-        ),
-        "automatic": event.automatic,
-    }
-
-
-def _event_from_dict(payload: dict[str, Any]) -> GameEvent:
-    scores_payload = payload.get("scores")
-    return GameEvent(
-        kind=EventKind(str(payload["kind"])),
-        turn_index=_optional_int(payload.get("turn_index")),
-        seat=_optional_int(payload.get("seat")),
-        action_id=(
-            ActionId(int(payload["action_id"])) if payload.get("action_id") is not None else None
-        ),
-        amount=_optional_int(payload.get("amount")),
-        resource_ids=(
-            tuple(int(value) for value in payload["resource_ids"])
-            if payload.get("resource_ids") is not None
-            else None
-        ),
-        objective_ids=(
-            tuple(int(value) for value in payload["objective_ids"])
-            if payload.get("objective_ids") is not None
-            else None
-        ),
-        scores=(
-            tuple(
-                Score(
-                    seat=int(score["seat"]),
-                    final_money=int(score["final_money"]),
-                    rank=int(score["rank"]),
-                )
-                for score in cast(list[dict[str, Any]], scores_payload)
-            )
-            if scores_payload is not None
-            else None
-        ),
-        automatic=(bool(payload["automatic"]) if payload.get("automatic") is not None else None),
-    )
