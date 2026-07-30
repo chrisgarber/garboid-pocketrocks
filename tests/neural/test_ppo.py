@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import io
 import math
+from typing import cast
 
+import numpy as np
 import pytest
 
 torch = pytest.importorskip("torch")
@@ -20,6 +23,7 @@ from garboid_pocketrocks.neural.planning import (  # noqa: E402
 )
 from garboid_pocketrocks.neural.ppo import (  # noqa: E402
     PPOConfig,
+    PPOError,
     PPOTrainer,
     ppo_loss,
 )
@@ -59,6 +63,12 @@ def _one_game_rollout(
         max_inference_batch=32,
     )
     return plans, rollout
+
+
+def _serialized_torch_state(value: object) -> bytes:
+    buffer = io.BytesIO()
+    torch.save(value, buffer)
+    return buffer.getvalue()
 
 
 def test_ppo_loss_matches_the_clipped_formula() -> None:
@@ -105,6 +115,88 @@ def test_ppo_loss_matches_the_clipped_formula() -> None:
         epochs=1,
         minibatch_size=512,
     )
+
+
+def test_update_does_not_change_global_torch_rng() -> None:
+    configure_torch_runtime(197, deterministic_algorithms=True)
+    model = _model(197)
+    _, rollout = _one_game_rollout(model, 197)
+    trainer = PPOTrainer(model, PPOConfig(epochs=2, minibatch_size=16))
+    before = torch.get_rng_state().clone()
+
+    trainer.update(rollout, update_seed=123)
+
+    assert torch.equal(torch.get_rng_state(), before)
+
+
+def test_update_is_exactly_repeatable_for_metrics_parameters_and_optimizer() -> None:
+    configure_torch_runtime(199, deterministic_algorithms=True)
+    rollout_model = _model(199)
+    initial_state = {
+        name: tensor.detach().clone() for name, tensor in rollout_model.state_dict().items()
+    }
+    _, rollout = _one_game_rollout(rollout_model, 199)
+    first_model = _model(1)
+    first_model.load_state_dict(initial_state)
+    second_model = _model(2)
+    second_model.load_state_dict(initial_state)
+    config = PPOConfig(epochs=2, minibatch_size=16)
+    first_trainer = PPOTrainer(first_model, config)
+    second_trainer = PPOTrainer(second_model, config)
+
+    torch.manual_seed(1)
+    first = first_trainer.update(rollout, update_seed=123)
+    torch.manual_seed(2)
+    second = second_trainer.update(rollout, update_seed=123)
+
+    assert first == second
+    for name, tensor in first_model.state_dict().items():
+        assert torch.equal(tensor, second_model.state_dict()[name])
+    assert _serialized_torch_state(first_trainer.optimizer.state_dict()) == _serialized_torch_state(
+        second_trainer.optimizer.state_dict()
+    )
+
+
+def test_minibatch_iteration_matches_one_seeded_cpu_permutation_per_epoch() -> None:
+    from garboid_pocketrocks.neural.ppo import (
+        _derive_local_seed,
+        _iter_minibatch_indices,
+    )
+
+    actual = tuple(
+        _iter_minibatch_indices(
+            transition_count=7,
+            epochs=2,
+            minibatch_size=3,
+            update_seed=123,
+        )
+    )
+    expected: list[np.ndarray[tuple[int], np.dtype[np.int64]]] = []
+    for epoch_index in range(2):
+        generator = torch.Generator(device="cpu")
+        generator.manual_seed(_derive_local_seed(123, "epoch", epoch_index))
+        permutation = torch.randperm(7, generator=generator).numpy()
+        expected.extend(permutation[start : start + 3] for start in range(0, 7, 3))
+
+    assert all(indices.dtype == np.int64 for indices in actual)
+    assert [indices.tolist() for indices in actual] == [indices.tolist() for indices in expected]
+
+
+@pytest.mark.parametrize("update_seed", (-1, True, 1.5, "123"))
+def test_update_seed_validation_rejects_values_that_are_not_nonnegative_integers(
+    update_seed: object,
+) -> None:
+    from garboid_pocketrocks.neural.ppo import _validate_update_seed
+
+    with pytest.raises(PPOError, match="update seed must be a nonnegative integer"):
+        _validate_update_seed(cast(int, update_seed))
+
+
+def test_update_seed_validation_accepts_large_nonnegative_integers() -> None:
+    from garboid_pocketrocks.neural.ppo import _validate_update_seed
+
+    _validate_update_seed(0)
+    _validate_update_seed(2**63)
 
 
 def test_update_flattens_valid_transitions_and_is_deterministic() -> None:
