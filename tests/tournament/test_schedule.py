@@ -17,7 +17,7 @@ from .helpers import random_specs
 def test_default_config_describes_full_tournament() -> None:
     config = TournamentConfig(bot_specs=random_specs())
 
-    assert config.games == 10_000
+    assert config.games == 15_000
     assert config.player_counts == (3, 4, 5)
     assert config.charts == ("A", "B", "C", "D", "E")
     assert config.fault_mode is FaultMode.RECORD_AND_PASS
@@ -46,14 +46,14 @@ def test_config_rejects_duplicate_names_and_ids() -> None:
         )
 
 
-def test_default_plan_allocates_exactly_ten_thousand_games() -> None:
+def test_default_plan_allocates_exactly_fifteen_thousand_games() -> None:
     plan = TournamentPlanner.plan(TournamentConfig(bot_specs=random_specs()))
     counts = tuple(quota.games for quota in plan.quotas)
 
-    assert sum(counts) == 10_000
-    assert max(counts) - min(counts) == 1
+    assert sum(counts) == 15_000
+    assert max(counts) - min(counts) <= 1
     assert len(plan.quotas) == 15
-    assert len(plan.jobs) == 10_000
+    assert len(plan.jobs) == 15_000
 
 
 def test_plan_is_seeded_unique_and_condition_balanced() -> None:

@@ -15,7 +15,7 @@ from garboid_pocketrocks.tournament.cli import (
 def test_parser_defaults_to_full_tournament() -> None:
     args = _parser().parse_args(())
 
-    assert args.games == 10_000
+    assert args.games == 15_000
     assert args.players == (3, 4, 5)
     assert args.charts == ("A", "B", "C", "D", "E")
     assert args.bootstrap_samples == 200

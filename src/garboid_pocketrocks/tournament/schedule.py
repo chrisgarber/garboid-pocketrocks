@@ -18,7 +18,7 @@ from garboid_pocketrocks.simulator.seeding import derive_seed
 @dataclass(frozen=True, slots=True)
 class TournamentConfig:
     bot_specs: tuple[BotSpec, ...]
-    games: int = 10_000
+    games: int = 15_000
     player_counts: tuple[int, ...] = (3, 4, 5)
     charts: tuple[str, ...] = tuple(VALUE_CHARTS)
     root_seed: int = 0

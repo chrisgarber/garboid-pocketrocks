@@ -58,7 +58,7 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Rank registered PocketRocks bots with a multiplayer Plackett-Luce model"
     )
-    parser.add_argument("--games", type=_positive_int, default=10_000)
+    parser.add_argument("--games", type=_positive_int, default=15_000)
     parser.add_argument("--players", type=_players, default=(3, 4, 5))
     parser.add_argument("--charts", type=_charts, default=("A", "B", "C", "D", "E"))
     parser.add_argument("--seed", type=int, default=0)
