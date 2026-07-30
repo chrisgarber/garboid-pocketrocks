@@ -98,6 +98,7 @@ def _report_inputs() -> tuple[
         interval=RatingDifferenceInterval(lower=10.5, upper=240.0),
         bootstrap_requested=1_000,
         bootstrap_converged=998,
+        unattributed_faults=3,
         faults_by_identity=(("opponent-a", 2),),
         warnings=("Two bootstrap fits did not converge and were excluded.",),
         failures=(
@@ -154,7 +155,18 @@ def test_report_payload_has_complete_explicit_schema() -> None:
         {"name": "opponent-a", "bot_id": "opponent-a"},
         {"name": "opponent-b", "bot_id": "opponent-b"},
     ]
-    assert payload["execution"] == {"workers": 2, "batch_size": 32}
+    assert payload["execution"] == {
+        "bot_ids": ["candidate", "incumbent", "opponent-a", "opponent-b"],
+        "games": 4,
+        "player_counts": [3],
+        "value_charts": [case.chart for case in held_out.cases],
+        "root_seed": held_out.recipe.root_seed,
+        "objectives_enabled": [True],
+        "fault_mode": "record_and_pass",
+        "capture_replays": False,
+        "workers": 2,
+        "batch_size": 32,
+    }
     assert payload["coverage"] == {
         "requested_pairs": 2,
         "completed_pairs": 2,
@@ -169,7 +181,8 @@ def test_report_payload_has_complete_explicit_schema() -> None:
         "seed": 42,
     }
     assert payload["faults"] == {
-        "total": 2,
+        "total": 5,
+        "unattributed": 3,
         "by_identity": [{"bot_id": "opponent-a", "count": 2}],
     }
     assert payload["warnings"] == ["Two bootstrap fits did not converge and were excluded."]
@@ -191,6 +204,10 @@ def test_report_payload_has_complete_explicit_schema() -> None:
             "digest": corpus.digest,
             "purpose": corpus.recipe.purpose,
             "root_seed": corpus.recipe.root_seed,
+            "repetitions_per_seat_cell": corpus.recipe.repetitions_per_seat_cell,
+            "charts": list(corpus.recipe.charts),
+            "player_counts": list(corpus.recipe.player_counts),
+            "opponent_names": list(corpus.recipe.opponent_names),
             "engine_seeds": list(corpus.engine_seeds),
         }
 

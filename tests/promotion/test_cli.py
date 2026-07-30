@@ -60,6 +60,7 @@ def _completed_run(tmp_path: Path, *, promoted: bool) -> PromotionRun:
         interval=RatingDifferenceInterval(lower=10.0, upper=90.0) if promoted else None,
         bootstrap_requested=1_000,
         bootstrap_converged=1_000,
+        unattributed_faults=0,
         faults_by_identity=(),
         warnings=(),
         failures=failures,

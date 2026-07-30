@@ -77,7 +77,11 @@ def test_validation_fails_closed_for_one_mutated_field(
 def test_reports_missing_and_unexpected_games_in_stable_order() -> None:
     plan = promotion_plan(pair_count=1)
     result = result_for_plan(plan)
-    unexpected = replace(result.game_summaries[0], game_index=99)
+    unexpected = replace(
+        result.game_summaries[0],
+        game_index=99,
+        fault_counts=(2, 0, 0),
+    )
     result = replace(result, game_summaries=(unexpected,))
 
     analysis = analyze_promotion(
@@ -94,22 +98,26 @@ def test_reports_missing_and_unexpected_games_in_stable_order() -> None:
         )
     )
     assert _failure_codes(analysis) == (
+        "bot_fault",
         "missing_paired_game",
         "missing_paired_game",
         "unexpected_game",
     )
     assert analysis.completed_games == 0
     assert analysis.completed_pairs == 0
+    assert analysis.unattributed_faults == 2
+    assert analysis.faults_by_identity == ()
 
 
 def test_duplicate_game_index_is_unexpected_and_cannot_complete_a_pair() -> None:
     plan = promotion_plan(pair_count=1)
     result = result_for_plan(plan)
+    duplicate_with_fault = replace(result.game_summaries[0], fault_counts=(1, 0, 0))
     result = replace(
         result,
         game_summaries=(
-            result.game_summaries[0],
-            result.game_summaries[0],
+            duplicate_with_fault,
+            duplicate_with_fault,
             result.game_summaries[1],
         ),
     )
@@ -124,6 +132,8 @@ def test_duplicate_game_index_is_unexpected_and_cannot_complete_a_pair() -> None
     assert "unexpected_game" in _failure_codes(analysis)
     assert analysis.completed_games == 1
     assert analysis.completed_pairs == 0
+    assert analysis.unattributed_faults == 2
+    assert analysis.faults_by_identity == ()
 
 
 def test_any_nonzero_fault_is_counted_by_identity_and_fails() -> None:
@@ -149,6 +159,7 @@ def test_any_nonzero_fault_is_counted_by_identity_and_fails() -> None:
         )
     )
     assert analysis.faults_by_identity == expected_faults
+    assert analysis.unattributed_faults == 0
 
 
 def test_faults_remain_attributed_when_the_same_summary_has_a_seed_mismatch() -> None:
@@ -177,6 +188,7 @@ def test_faults_remain_attributed_when_the_same_summary_has_a_seed_mismatch() ->
             )
         )
     )
+    assert analysis.unattributed_faults == 0
     assert analysis.promoted is False
 
 
@@ -216,6 +228,7 @@ def test_faults_are_not_attributed_through_malformed_or_mismatched_identities(
 
     assert "bot_fault" in _failure_codes(analysis)
     assert analysis.faults_by_identity == ()
+    assert analysis.unattributed_faults == 4
     assert analysis.promoted is False
 
 

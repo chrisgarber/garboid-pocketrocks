@@ -57,6 +57,7 @@ class PromotionAnalysis:
     interval: RatingDifferenceInterval | None
     bootstrap_requested: int
     bootstrap_converged: int
+    unattributed_faults: int
     faults_by_identity: tuple[tuple[str, int], ...]
     warnings: tuple[str, ...]
     failures: tuple[PromotionFailure, ...]
@@ -67,6 +68,7 @@ class PromotionAnalysis:
 class _ValidatedResults:
     pairs: tuple[tuple[GameSummary, GameSummary], ...]
     completed_games: int
+    unattributed_faults: int
     faults_by_identity: tuple[tuple[str, int], ...]
     failures: tuple[PromotionFailure, ...]
 
@@ -306,11 +308,16 @@ def _validate_results(
     failures: list[PromotionFailure] = []
     exact_by_index: dict[int, GameSummary] = {}
     faults: defaultdict[str, int] = defaultdict(int)
+    unattributed_faults = 0
     saw_any_fault = any(
         count != 0 for summary in result.game_summaries for count in summary.fault_counts
     )
     for game_index, summaries in summaries_by_index.items():
+        fault_count_for_summaries = sum(
+            abs(count) for summary in summaries for count in summary.fault_counts
+        )
         if game_index not in expected_by_index:
+            unattributed_faults += fault_count_for_summaries
             failures.append(
                 PromotionFailure(
                     "unexpected_game",
@@ -319,6 +326,7 @@ def _validate_results(
             )
             continue
         if len(summaries) != 1:
+            unattributed_faults += fault_count_for_summaries
             failures.append(
                 PromotionFailure(
                     "unexpected_game",
@@ -338,6 +346,8 @@ def _validate_results(
                 strict=True,
             ):
                 faults[bot_id] += abs(count)
+        else:
+            unattributed_faults += fault_count_for_summaries
         if not summary_failures:
             exact_by_index[game_index] = summary
 
@@ -369,6 +379,7 @@ def _validate_results(
     return _ValidatedResults(
         pairs=tuple(validated_pairs),
         completed_games=len(exact_by_index),
+        unattributed_faults=unattributed_faults,
         faults_by_identity=nonzero_faults,
         failures=_ordered_failures(failures),
     )
@@ -527,6 +538,7 @@ def _analysis_from_results(
         interval=interval,
         bootstrap_requested=bootstrap_requested,
         bootstrap_converged=bootstrap_converged,
+        unattributed_faults=validated.unattributed_faults,
         faults_by_identity=validated.faults_by_identity,
         warnings=warnings,
         failures=ordered_failures,

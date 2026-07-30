@@ -155,8 +155,24 @@ def test_real_paired_gate_is_deterministic_across_serial_parallel_and_repeat_run
     assert serial_games == parallel_games
     assert serial_corpora == parallel_corpora
     assert serial_report != parallel_report
-    assert json.loads(serial_report)["execution"]["workers"] == 1
-    assert json.loads(parallel_report)["execution"]["workers"] == 2
+    serial_payload = json.loads(serial_report)
+    parallel_payload = json.loads(parallel_report)
+    assert serial_payload["execution"] == {
+        "bot_ids": [spec.bot_id for spec in serial.plan.monte_carlo_config.bot_specs],
+        "games": 2 * len(held_out.cases),
+        "player_counts": list(held_out.recipe.player_counts),
+        "value_charts": list(held_out.recipe.charts),
+        "root_seed": held_out.recipe.root_seed,
+        "objectives_enabled": [True],
+        "fault_mode": "record_and_pass",
+        "capture_replays": False,
+        "workers": 1,
+        "batch_size": 4,
+    }
+    assert parallel_payload["execution"] == {
+        **serial_payload["execution"],
+        "workers": 2,
+    }
     assert _artifact_bytes(serial) == _artifact_bytes(repeated)
 
     requested_cells = {
