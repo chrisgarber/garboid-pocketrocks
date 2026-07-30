@@ -23,8 +23,6 @@ from garboid_pocketrocks.training.actions import ActionCodec
 from garboid_pocketrocks.training.bounds import EnvironmentBounds
 
 _CHECKPOINT_SCHEMA_VERSION = 1
-_STAGE1_RULESETS = ("live-A",)
-_STAGE1_PLAYER_COUNTS = (3,)
 _ENCODER_CONFIG_FIELDS = frozenset(
     {
         "schema_version",
@@ -277,12 +275,11 @@ def _validate_manifest(
     ):
         raise CheckpointError("unsupported encoder schema")
     if (
-        manifest.supported_ruleset_names != _STAGE1_RULESETS
-        or manifest.supported_player_counts != _STAGE1_PLAYER_COUNTS
-        or manifest.supported_ruleset_names != manifest.encoder_config.supported_ruleset_names
+        manifest.supported_ruleset_names
+        != manifest.encoder_config.supported_ruleset_names
         or manifest.supported_player_counts != manifest.encoder_config.supported_player_counts
     ):
-        raise CheckpointError("checkpoint support is not live-A with three players")
+        raise CheckpointError("checkpoint support does not match its encoder config")
     expected_size, expected_hash = _action_space_contract(manifest.encoder_config)
     if manifest.action_space_size != expected_size or manifest.action_space_hash != expected_hash:
         raise CheckpointError("checkpoint action-space contract is incompatible")
