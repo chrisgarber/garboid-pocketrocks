@@ -9,6 +9,7 @@ from garboid_pocketrocks.neural.run_config import (
 )
 from garboid_pocketrocks.neural.trainer import (
     inspect_checkpoint,
+    resolve_games_per_cell,
     resume,
     train,
 )
@@ -59,3 +60,15 @@ def test_committed_profiles_have_exact_wall_envelopes() -> None:
     assert long.max_wall_seconds == 28_800.0
     assert long.checkpoint_interval_seconds == 900.0
     assert long.evaluation_interval_seconds == 1_800.0
+
+
+def test_target_decisions_use_measured_decisions_per_game() -> None:
+    config = TrainingRunConfig(
+        games_per_cell=None,
+        target_decisions_per_update=8192,
+    )
+
+    assert resolve_games_per_cell(
+        config,
+        estimated_decisions_per_game=76.0,
+    ) == 8

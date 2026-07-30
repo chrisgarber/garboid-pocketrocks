@@ -92,6 +92,19 @@ def train(
         stage1_model_config(),
     ).to(device)
     trainer = PPOTrainer(model, resolved.ppo)
+    selected_result = next(
+        (
+            result
+            for result in benchmarks
+            if result.candidate == candidate
+        ),
+        None,
+    )
+    estimated_decisions_per_game = (
+        selected_result.decisions / selected_result.games
+        if selected_result is not None
+        else 20.0
+    )
     return _run_updates(
         resolved,
         run_dir,
@@ -100,6 +113,10 @@ def train(
         initial_progress=TrainingProgress(0, 0, 0, ()),
         lineage=(),
         max_updates_this_run=resolved.max_updates,
+        games_per_cell=resolve_games_per_cell(
+            resolved,
+            estimated_decisions_per_game=estimated_decisions_per_game,
+        ),
     )
 
 
@@ -147,6 +164,13 @@ def resume(
             str(checkpoint.resolve()),
         ),
         max_updates_this_run=limit,
+        games_per_cell=resolve_games_per_cell(
+            config,
+            estimated_decisions_per_game=(
+                loaded.manifest.progress.completed_decisions
+                / loaded.manifest.progress.completed_episodes
+            ),
+        ),
     )
 
 
@@ -182,6 +206,7 @@ def _run_updates(
     initial_progress: TrainingProgress,
     lineage: tuple[str, ...],
     max_updates_this_run: int | None,
+    games_per_cell: int,
 ) -> TrainingRunResult:
     started = time.perf_counter()
     update_index = initial_progress.next_update_index
@@ -194,7 +219,6 @@ def _run_updates(
         }
     )
     durations: list[float] = []
-    games_per_cell = config.games_per_cell or _estimated_games_per_cell(config)
     checkpoint = run_dir / "checkpoints" / "latest"
 
     while True:
@@ -353,11 +377,27 @@ def _resolved_config(
     )
 
 
-def _estimated_games_per_cell(config: TrainingRunConfig) -> int:
+def resolve_games_per_cell(
+    config: TrainingRunConfig,
+    *,
+    estimated_decisions_per_game: float,
+) -> int:
+    """Resolve balanced games from a measured complete-path decision rate."""
+
+    if config.games_per_cell is not None:
+        return config.games_per_cell
+    if (
+        not math.isfinite(estimated_decisions_per_game)
+        or estimated_decisions_per_game <= 0.0
+    ):
+        raise TrainerError("estimated_decisions_per_game must be positive")
     assert config.target_decisions_per_update is not None
     return max(
         1,
-        math.ceil(config.target_decisions_per_update / (15.0 * 20.0)),
+        math.ceil(
+            config.target_decisions_per_update
+            / (15.0 * estimated_decisions_per_game)
+        ),
     )
 
 
