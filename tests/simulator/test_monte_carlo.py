@@ -9,6 +9,7 @@ from pocketrocks.sim.constants import ACTION_WIRE_IDS
 
 from garboid_pocketrocks import simulator
 from garboid_pocketrocks.bots import BotBrain, BotSpec, RandomBot
+from garboid_pocketrocks.bots.registry import registered_bot_specs
 from garboid_pocketrocks.knowledge import RulesetKnowledge
 from garboid_pocketrocks.simulator import monte_carlo
 from garboid_pocketrocks.simulator.errors import SimulationError
@@ -95,11 +96,90 @@ def test_worker_count_does_not_change_monte_carlo_result() -> None:
     )
 
 
+def test_worker_count_does_not_change_batched_monte_carlo_result() -> None:
+    config = _small_random_config(games=12)
+
+    assert MonteCarloRunner.run(
+        config,
+        workers=1,
+        batch_size=4,
+    ) == MonteCarloRunner.run(
+        config,
+        workers=2,
+        batch_size=4,
+    )
+
+
 def test_run_jobs_executes_a_valid_explicit_plan() -> None:
     config = _small_random_config()
     jobs = MonteCarloRunner.plan(config)
 
     assert MonteCarloRunner.run_jobs(config, jobs) == MonteCarloRunner.run(config)
+
+
+def test_batched_run_jobs_matches_scalar_for_mixed_sdk_variants() -> None:
+    config = MonteCarloConfig(
+        bot_specs=tuple(
+            _random_spec(f"random-{index}", f"random-{index}") for index in range(5)
+        ),
+        games=30,
+        player_counts=(3, 4, 5),
+        value_charts=("A", "E"),
+        objectives_enabled=(True, False),
+        root_seed=20260729,
+    )
+    jobs = MonteCarloRunner.plan(config)
+    scalar = MonteCarloRunner.run_jobs(config, jobs, workers=1)
+
+    for batch_size in (1, 7, 32):
+        assert (
+            MonteCarloRunner.run_jobs(
+                config,
+                jobs,
+                workers=1,
+                batch_size=batch_size,
+            )
+            == scalar
+        )
+
+
+def test_batched_run_jobs_matches_scalar_for_registered_bot_strategies() -> None:
+    config = MonteCarloConfig(
+        bot_specs=registered_bot_specs(),
+        games=30,
+        player_counts=(3, 4, 5),
+        value_charts=("A", "E"),
+        root_seed=42,
+        fault_mode=FaultMode.RECORD_AND_PASS,
+    )
+    jobs = MonteCarloRunner.plan(config)
+
+    assert MonteCarloRunner.run_jobs(
+        config,
+        jobs,
+        workers=1,
+        batch_size=8,
+    ) == MonteCarloRunner.run_jobs(config, jobs, workers=1)
+
+
+def test_replay_capture_keeps_scalar_results_when_batching_is_requested() -> None:
+    config = _small_random_config(games=3, capture_replays=True)
+    jobs = MonteCarloRunner.plan(config)
+
+    assert MonteCarloRunner.run_jobs(
+        config,
+        jobs,
+        workers=1,
+        batch_size=8,
+    ) == MonteCarloRunner.run_jobs(config, jobs, workers=1)
+
+
+def test_run_jobs_rejects_nonpositive_batch_size() -> None:
+    config = _small_random_config(games=1)
+    jobs = MonteCarloRunner.plan(config)
+
+    with pytest.raises(ValueError, match="batch size"):
+        MonteCarloRunner.run_jobs(config, jobs, batch_size=0)
 
 
 def test_run_jobs_rejects_wrong_job_count() -> None:

@@ -7,10 +7,12 @@ import statistics
 from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures.process import BrokenProcessPool
 from dataclasses import dataclass, field, replace
+from itertools import batched
 
 from pocketrocks.sim.constants import ACTION_WIRE_IDS, VALUE_CHARTS
 
 from garboid_pocketrocks.bots.base import BotSpec
+from garboid_pocketrocks.simulator.batch_match import run_batch_matches
 from garboid_pocketrocks.simulator.errors import SimulationError
 from garboid_pocketrocks.simulator.replay import MatchReplay
 from garboid_pocketrocks.simulator.runner import (
@@ -329,9 +331,15 @@ class MonteCarloRunner:
         config: MonteCarloConfig,
         *,
         workers: int = 1,
+        batch_size: int | None = None,
     ) -> MonteCarloResult:
         jobs = MonteCarloRunner.plan(config)
-        return MonteCarloRunner.run_jobs(config, jobs, workers=workers)
+        return MonteCarloRunner.run_jobs(
+            config,
+            jobs,
+            workers=workers,
+            batch_size=batch_size,
+        )
 
     @staticmethod
     def run_jobs(
@@ -339,17 +347,40 @@ class MonteCarloRunner:
         jobs: tuple[GameJob, ...],
         *,
         workers: int = 1,
+        batch_size: int | None = None,
     ) -> MonteCarloResult:
         if workers < 1:
             raise ValueError("workers must be positive")
+        if batch_size is not None and batch_size < 1:
+            raise ValueError("batch size must be positive")
         _validate_jobs(config, jobs)
+        use_batches = batch_size is not None and not config.capture_replays
         if workers == 1:
-            completed = tuple(_execute_job(job) for job in jobs)
+            if use_batches:
+                assert batch_size is not None
+                completed = tuple(
+                    game
+                    for chunk in _batch_job_chunks(jobs, batch_size)
+                    for game in _execute_batch_jobs(chunk)
+                )
+            else:
+                completed = tuple(_execute_job(job) for job in jobs)
         else:
             _validate_picklable_bot_specs(config.bot_specs)
             try:
                 with ProcessPoolExecutor(max_workers=workers) as executor:
-                    completed = tuple(executor.map(_execute_job, jobs))
+                    if use_batches:
+                        assert batch_size is not None
+                        completed = tuple(
+                            game
+                            for chunk_results in executor.map(
+                                _execute_batch_jobs,
+                                _batch_job_chunks(jobs, batch_size),
+                            )
+                            for game in chunk_results
+                        )
+                    else:
+                        completed = tuple(executor.map(_execute_job, jobs))
             except (BrokenProcessPool, pickle.PicklingError) as error:
                 names = ", ".join(spec.name for spec in config.bot_specs)
                 raise SimulationError(
@@ -433,6 +464,28 @@ def _execute_job(job: GameJob) -> _CompletedGame:
             objectives_enabled=job.objectives_enabled,
             fault_mode=job.fault_mode,
         ),
+    )
+
+
+def _batch_job_chunks(
+    jobs: tuple[GameJob, ...],
+    batch_size: int,
+) -> tuple[tuple[GameJob, ...], ...]:
+    by_player_count: dict[int, list[GameJob]] = {}
+    for job in jobs:
+        by_player_count.setdefault(job.player_count, []).append(job)
+    chunks = [
+        tuple(chunk)
+        for player_jobs in by_player_count.values()
+        for chunk in batched(player_jobs, batch_size, strict=False)
+    ]
+    return tuple(sorted(chunks, key=lambda chunk: chunk[0].game_index))
+
+
+def _execute_batch_jobs(jobs: tuple[GameJob, ...]) -> tuple[_CompletedGame, ...]:
+    return tuple(
+        _CompletedGame(job=job, match=match)
+        for job, match in zip(jobs, run_batch_matches(jobs), strict=True)
     )
 
 
