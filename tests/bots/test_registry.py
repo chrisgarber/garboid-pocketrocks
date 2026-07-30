@@ -14,6 +14,12 @@ def test_registered_bot_specs_have_unique_names_and_ids() -> None:
         "aggressive",
         "balanced",
         "passive",
+        "aggressive-v1",
+        "balanced-v1",
+        "passive-v1",
+        "aggressive-v2",
+        "balanced-v2",
+        "passive-v2",
     )
     assert len({spec.name for spec in specs}) == len(specs)
     assert len({spec.bot_id for spec in specs}) == len(specs)

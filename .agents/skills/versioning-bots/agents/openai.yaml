@@ -1,0 +1,4 @@
+interface:
+  display_name: "Versioning Bots"
+  short_description: "Preserve bot generations as behavior evolves"
+  default_prompt: "Use $versioning-bots when changing a bot strategy or strength."

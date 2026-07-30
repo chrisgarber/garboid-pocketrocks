@@ -17,7 +17,7 @@ from garboid_pocketrocks.heuristics.valuation import HeuristicValuator
 
 from .helpers import make_context, make_knowledge
 
-NO_LIQUIDITY = HeuristicProfile("test", 0.0, 0.0, 0.0)
+NO_LIQUIDITY = HeuristicProfile("test", 0.0, 0.0, 0.0, 0.0)
 
 
 def test_constant_ten_dollar_resource_has_ten_dollar_reservation() -> None:
@@ -123,7 +123,7 @@ def test_profile_shading_never_exceeds_reservation_or_legal_maximum(
 
 def test_chosen_bid_is_floor_of_shaded_reservation() -> None:
     chart = (10, 10, 10, 10, 10, 10)
-    profile = HeuristicProfile("half", 0.0, 0.0, 0.25)
+    profile = HeuristicProfile("half", 0.0, 0.0, 0.0, 0.25)
     result = HeuristicValuator(profile).evaluate_bid(
         make_context(value_chart=chart, legal_max=30),
         make_knowledge(value_chart=chart),
@@ -131,6 +131,41 @@ def test_chosen_bid_is_floor_of_shaded_reservation() -> None:
 
     assert result.reservation_bid == 10
     assert result.chosen_bid == 7
+
+
+def test_future_cash_preserves_personality_and_defers_spending() -> None:
+    chart = (10, 10, 10, 10, 10, 10)
+    knowledge = make_knowledge(value_chart=chart)
+    early_context = make_context(
+        action_id=ActionId.AUCTION2,
+        current_resources=(1, 2),
+        value_chart=chart,
+        cash=(30, 30, 30),
+        legal_max=30,
+    )
+    late_context = make_context(
+        action_id=ActionId.AUCTION2,
+        current_resources=(1, 2),
+        value_chart=chart,
+        cash=(30, 30, 30),
+        won=((1, 1, 2, 2, 2), (0, 0, 0, 0, 0), (0, 0, 0, 0, 0)),
+        legal_max=30,
+    )
+
+    early_results = tuple(
+        HeuristicValuator(profile).evaluate_bid(early_context, knowledge)
+        for profile in (AGGRESSIVE_PROFILE, BALANCED_PROFILE, PASSIVE_PROFILE)
+    )
+    late_results = tuple(
+        HeuristicValuator(profile).evaluate_bid(late_context, knowledge)
+        for profile in (AGGRESSIVE_PROFILE, BALANCED_PROFILE, PASSIVE_PROFILE)
+    )
+
+    assert late_results[0].chosen_bid > late_results[1].chosen_bid > late_results[2].chosen_bid
+    for early, late in zip(early_results, late_results, strict=True):
+        assert early.chosen_bid < late.chosen_bid
+        assert early.points[early.chosen_bid].breakdown.future_cash < 0.0
+        assert late.points[late.chosen_bid].breakdown.future_cash == 0.0
 
 
 def test_breakdown_components_sum_to_each_point_delta() -> None:
@@ -147,6 +182,7 @@ def test_breakdown_components_sum_to_each_point_delta() -> None:
             + breakdown.objective_progress
             + breakdown.terminal_cash
             + breakdown.liquidity
+            + breakdown.future_cash
         )
         assert breakdown.total == expected == point.win_delta
         assert all(
@@ -157,9 +193,27 @@ def test_breakdown_components_sum_to_each_point_delta() -> None:
                 breakdown.objective_progress,
                 breakdown.terminal_cash,
                 breakdown.liquidity,
+                breakdown.future_cash,
                 breakdown.total,
             )
         )
+
+
+def test_zero_horizon_has_no_future_cash_component() -> None:
+    won = ((1, 2, 2, 2, 2), (0, 0, 0, 0, 0), (0, 0, 0, 0, 0))
+    result = HeuristicValuator(BALANCED_PROFILE).evaluate_bid(
+        make_context(
+            action_id=ActionId.AUCTION1,
+            current_resources=(1, 0),
+            won=won,
+            cash=(20, 20, 20),
+            legal_max=20,
+        ),
+        make_knowledge(),
+    )
+
+    assert result.belief.normalized_horizon == 0.0
+    assert all(point.breakdown.future_cash == 0.0 for point in result.points)
 
 
 def test_financial_actions_have_no_resource_or_objective_value() -> None:

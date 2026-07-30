@@ -55,6 +55,7 @@ def _assert_finite_legal_evaluation(
                 breakdown.objective_progress,
                 breakdown.terminal_cash,
                 breakdown.liquidity,
+                breakdown.future_cash,
                 breakdown.total,
             )
         )

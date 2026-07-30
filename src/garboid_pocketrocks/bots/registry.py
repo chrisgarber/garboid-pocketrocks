@@ -5,20 +5,29 @@ from types import MappingProxyType
 
 from garboid_pocketrocks.bots.base import BotSpec
 from garboid_pocketrocks.bots.heuristic import (
-    AggressiveHeuristicBot,
-    BalancedHeuristicBot,
-    PassiveHeuristicBot,
+    AGGRESSIVE_HEURISTIC_BOT_SPEC,
+    AGGRESSIVE_HEURISTIC_V1_BOT_SPEC,
+    AGGRESSIVE_HEURISTIC_V2_BOT_SPEC,
+    BALANCED_HEURISTIC_BOT_SPEC,
+    BALANCED_HEURISTIC_V1_BOT_SPEC,
+    BALANCED_HEURISTIC_V2_BOT_SPEC,
+    PASSIVE_HEURISTIC_BOT_SPEC,
+    PASSIVE_HEURISTIC_V1_BOT_SPEC,
+    PASSIVE_HEURISTIC_V2_BOT_SPEC,
 )
 from garboid_pocketrocks.bots.random_bot import RandomBot
 
-BOT_SPECS = tuple(
-    BotSpec.from_bot_class(bot_class)
-    for bot_class in (
-        RandomBot,
-        AggressiveHeuristicBot,
-        BalancedHeuristicBot,
-        PassiveHeuristicBot,
-    )
+BOT_SPECS = (
+    BotSpec.from_bot_class(RandomBot),
+    AGGRESSIVE_HEURISTIC_BOT_SPEC,
+    BALANCED_HEURISTIC_BOT_SPEC,
+    PASSIVE_HEURISTIC_BOT_SPEC,
+    AGGRESSIVE_HEURISTIC_V1_BOT_SPEC,
+    BALANCED_HEURISTIC_V1_BOT_SPEC,
+    PASSIVE_HEURISTIC_V1_BOT_SPEC,
+    AGGRESSIVE_HEURISTIC_V2_BOT_SPEC,
+    BALANCED_HEURISTIC_V2_BOT_SPEC,
+    PASSIVE_HEURISTIC_V2_BOT_SPEC,
 )
 
 

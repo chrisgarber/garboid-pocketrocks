@@ -83,5 +83,14 @@ class BotSpec:
             brain_factory=bot_class.build_brain,
         )
 
+    @classmethod
+    def for_simulation(
+        cls,
+        name: str,
+        brain_factory: BrainFactory,
+    ) -> BotSpec:
+        """Create a local-only spec whose simulation identity is its name."""
+        return cls(name=name, bot_id=name, brain_factory=brain_factory)
+
     def make_brain(self, *, seed: int | None = None) -> BotBrain:
         return self.brain_factory(seed)

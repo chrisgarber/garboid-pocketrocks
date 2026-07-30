@@ -11,6 +11,7 @@ class ActionEconomics:
     bid: int
     terminal_cash: float
     liquidity: float
+    future_cash: float
     win_delta: float
 
 
@@ -58,6 +59,28 @@ def cash_option_value(
     return value
 
 
+def future_cash_value(
+    cash: int,
+    *,
+    horizon: float,
+    starting_cash: int,
+    weight: float,
+) -> float:
+    """Return utility for liquid cash protected for future resource auctions."""
+    cash = _require_nonnegative_integer(cash, "cash")
+    horizon = _require_finite_number(horizon, "horizon")
+    starting_cash = _require_positive_integer(starting_cash, "starting_cash")
+    weight = _require_finite_number(weight, "weight")
+    if not 0.0 <= horizon <= 1.0:
+        raise ValueError("horizon must be between zero and one")
+    if weight < 0.0:
+        raise ValueError("weight must be nonnegative")
+    value = weight * min(float(cash), starting_cash * horizon)
+    if not math.isfinite(value):
+        raise ValueError("future cash value must be finite")
+    return value
+
+
 def _action_terms(action_id: ActionId, bid: int, cash: int) -> tuple[float, int]:
     if action_id in (ActionId.AUCTION1, ActionId.AUCTION2):
         return -float(bid), cash - bid
@@ -80,6 +103,7 @@ def evaluate_action_curve(
     horizon: float,
     starting_cash: int,
     liquidity_strength: float,
+    future_cash_weight: float,
     gross_value: float,
 ) -> tuple[ActionEconomics, ...]:
     """Evaluate every legal integer bid with component-wise cash accounting."""
@@ -90,11 +114,17 @@ def evaluate_action_curve(
     horizon = _require_finite_number(horizon, "horizon")
     starting_cash = _require_positive_integer(starting_cash, "starting_cash")
     liquidity_strength = _require_finite_number(liquidity_strength, "liquidity_strength")
+    future_cash_weight = _require_finite_number(
+        future_cash_weight,
+        "future_cash_weight",
+    )
     gross_value = _require_finite_number(gross_value, "gross_value")
     if not 0.0 <= horizon <= 1.0:
         raise ValueError("horizon must be between zero and one")
     if liquidity_strength < 0.0:
         raise ValueError("liquidity_strength must be nonnegative")
+    if future_cash_weight < 0.0:
+        raise ValueError("future_cash_weight must be nonnegative")
 
     _, final_cash = _action_terms(action_id, legal_max, cash)
     if final_cash < 0:
@@ -105,6 +135,12 @@ def evaluate_action_curve(
         horizon=horizon,
         starting_cash=starting_cash,
         strength=liquidity_strength,
+    )
+    current_future_cash = future_cash_value(
+        cash,
+        horizon=horizon,
+        starting_cash=starting_cash,
+        weight=future_cash_weight,
     )
     curve: list[ActionEconomics] = []
     for bid in range(legal_max + 1):
@@ -121,14 +157,26 @@ def evaluate_action_curve(
             )
             - current_option
         )
-        win_delta = gross_value + terminal_cash + liquidity
-        if not all(math.isfinite(value) for value in (terminal_cash, liquidity, win_delta)):
+        future_cash = (
+            future_cash_value(
+                post_cash,
+                horizon=horizon,
+                starting_cash=starting_cash,
+                weight=future_cash_weight,
+            )
+            - current_future_cash
+        )
+        win_delta = gross_value + terminal_cash + liquidity + future_cash
+        if not all(
+            math.isfinite(value) for value in (terminal_cash, liquidity, future_cash, win_delta)
+        ):
             raise ValueError("action economics must be finite")
         curve.append(
             ActionEconomics(
                 bid=bid,
                 terminal_cash=terminal_cash,
                 liquidity=liquidity,
+                future_cash=future_cash,
                 win_delta=win_delta,
             )
         )

@@ -70,8 +70,13 @@ def test_seed_42_live_a_heuristic_tournament_is_reproducible_and_distinct() -> N
     by_name = _statistics_by_name(serial)
     assert set(by_name) == {"aggressive", "balanced", "passive"}
     summary = _behavior_summary(by_name)
-    pass_rates = [statistics.behavior.pass_rate() for statistics in by_name.values()]
-    mean_nonzero_bids = [statistics.behavior.mean_nonzero_bid() for statistics in by_name.values()]
-    assert max(pass_rates) - min(pass_rates) >= 0.10, summary
-    assert max(mean_nonzero_bids) - min(mean_nonzero_bids) >= 1.0, summary
-    assert _loan_wins(by_name["aggressive"]) > _loan_wins(by_name["passive"]), summary
+    assert (
+        by_name["aggressive"].behavior.mean_nonzero_bid()
+        > by_name["balanced"].behavior.mean_nonzero_bid()
+        > by_name["passive"].behavior.mean_nonzero_bid()
+    ), summary
+    assert (
+        _loan_wins(by_name["aggressive"])
+        > _loan_wins(by_name["balanced"])
+        > _loan_wins(by_name["passive"])
+    ), summary

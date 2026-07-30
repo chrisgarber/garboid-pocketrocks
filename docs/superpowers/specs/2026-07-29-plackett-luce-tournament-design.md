@@ -73,14 +73,13 @@ The output directory must either not exist or be empty unless `--overwrite` is
 explicitly supplied. Overwrite replaces only the three known report artifacts;
 it does not recursively delete the directory.
 
-The current registry has four distinct bot identities. Therefore,
-`--players 3,4` works immediately, while the full default produces a clear
-preflight error until a fifth real bot is registered. This is intentional: a
-duplicate strategy instance would violate the unique-lineup requirement and
-distort uncertainty estimates. The in-progress v2 aggressive, balanced, and
-passive bots will become tournament participants simply by adding their
-`BotSpec` values to the shared registry; no scheduler or scoring change will be
-required.
+The current registry has ten distinct simulator identities: random, the latest
+unversioned aggressive/balanced/passive profiles, and explicit v1/v2 names for
+each heuristic profile. The full 3/4/5-player default therefore runs
+immediately. Future `BotSpec` additions become tournament participants through
+the shared registry without scheduler or scoring changes. Duplicate strategy
+instances are never inserted merely to fill a lineup because that would
+distort uncertainty estimates.
 
 ## Components
 
@@ -368,7 +367,8 @@ Implementation follows test-driven development.
 - per-player-count seat counts for each bot differ by at most one;
 - every greedy lineup choice minimizes the documented candidate score;
 - global indices and derived seeds are unique;
-- four bots with requested five-player games fail before execution.
+- fewer distinct bots than the maximum requested player count fail before
+  execution.
 
 ### Model unit tests
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -46,18 +47,24 @@ def test_bot_filters_reject_unknown_or_empty_selection() -> None:
         )
 
 
-def test_cli_reports_current_five_bot_preflight_error() -> None:
+def test_cli_runs_all_conditions_with_current_registry(tmp_path: Path) -> None:
     completed = subprocess.run(
         [
             "uv",
             "run",
             "garboid-tournament",
+            "--games",
+            "15",
+            "--bootstrap-samples",
+            "0",
             "--output-dir",
-            "/tmp/garboid-tournament-preflight",
+            str(tmp_path),
         ],
         text=True,
         capture_output=True,
     )
 
-    assert completed.returncode == 2
-    assert "5 distinct bots" in completed.stderr
+    assert completed.returncode == 0, completed.stderr
+    assert (tmp_path / "ratings.csv").is_file()
+    assert (tmp_path / "summary.json").is_file()
+    assert (tmp_path / "report.html").is_file()

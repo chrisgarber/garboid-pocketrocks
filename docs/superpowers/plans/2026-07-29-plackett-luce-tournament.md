@@ -32,7 +32,8 @@
 - Test: `tests/simulator/test_cli.py`
 
 **Interfaces:**
-- Consumes: existing `BotSpec.from_bot_class` and the four live bot wrapper classes.
+- Consumes: existing live bot classes and module-scoped versioned heuristic
+  `BotSpec` values.
 - Produces: `BOT_SPECS: tuple[BotSpec, ...]`, `BOT_SPECS_BY_NAME: Mapping[str, BotSpec]`, and `registered_bot_specs() -> tuple[BotSpec, ...]`.
 
 - [ ] **Step 1: Write failing registry tests**
@@ -45,6 +46,12 @@ def test_registered_bot_specs_have_unique_names_and_ids() -> None:
         "aggressive",
         "balanced",
         "passive",
+        "aggressive-v1",
+        "balanced-v1",
+        "passive-v1",
+        "aggressive-v2",
+        "balanced-v2",
+        "passive-v2",
     )
     assert len({spec.name for spec in specs}) == len(specs)
     assert len({spec.bot_id for spec in specs}) == len(specs)
@@ -713,14 +720,24 @@ def test_parser_defaults_to_full_tournament() -> None:
     assert args.bootstrap_samples == 200
 
 
-def test_cli_reports_current_five_bot_preflight_error() -> None:
+def test_cli_runs_all_conditions_with_current_registry(tmp_path: Path) -> None:
     completed = subprocess.run(
-        ["uv", "run", "garboid-tournament", "--output-dir", "ignored"],
+        [
+            "uv",
+            "run",
+            "garboid-tournament",
+            "--games",
+            "15",
+            "--bootstrap-samples",
+            "0",
+            "--output-dir",
+            str(tmp_path),
+        ],
         text=True,
         capture_output=True,
     )
-    assert completed.returncode == 2
-    assert "5 distinct bots" in completed.stderr
+    assert completed.returncode == 0
+    assert (tmp_path / "ratings.csv").is_file()
 ```
 
 Also test `--bots`, `--exclude-bots`, comma parsers, and a programmatic
@@ -764,11 +781,10 @@ git commit -m "feat: add Plackett-Luce tournament command"
 
 - [ ] **Step 1: Update README with exact commands and interpretation**
 
-Document the default full command, the current four-bot preflight behavior,
-the temporary `--players 3,4` command, automatic inclusion of v2 registered
-bots, PL worth versus 1500-centered display rating, output files, deterministic
-seed/worker behavior, and the warning that one global worth averages over
-charts, player counts, and opponent mixtures.
+Document the default full command, automatic inclusion of registered
+generations, PL worth versus 1500-centered display rating, output files,
+deterministic seed/worker behavior, and the warning that one global worth
+averages over charts, player counts, and opponent mixtures.
 
 - [ ] **Step 2: Run focused tournament tests**
 
@@ -800,14 +816,10 @@ Run: `uv run mypy`
 
 Expected: exit 0 with no errors.
 
-- [ ] **Step 7: Verify the current-registry preflight and a programmatic 15-game tournament**
+- [ ] **Step 7: Verify the current registry with a 15-game tournament**
 
-Run: `uv run garboid-tournament --output-dir /tmp/garboid-tournament-current`
-
-Expected: exit 2 with a clear `5 distinct bots` message.
-
-Run a test-backed five-spec tournament through `TournamentRunner` with 15
-games, zero bootstrap samples, and a fresh temporary output directory.
+Run `garboid-tournament` with the current shared registry, 15 games, zero
+bootstrap samples, and a fresh temporary output directory.
 
 Expected: 15 game summaries, all 15 condition cells, finite ratings, and three
 nonempty artifacts containing three SVG charts.
