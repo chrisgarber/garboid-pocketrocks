@@ -14,6 +14,7 @@ from garboid_pocketrocks.neural.model import PolicyValueOutput  # noqa: E402
 from garboid_pocketrocks.neural.policy import (  # noqa: E402
     PolicyError,
     evaluate_masked_policy,
+    evaluate_row_seeded_policy,
 )
 
 
@@ -139,6 +140,73 @@ def test_seeded_generators_produce_identical_sample_sequences() -> None:
     )
 
     assert torch.equal(first.actions, second.actions)
+
+
+def test_row_seeded_sampling_is_independent_of_batch_order() -> None:
+    phases = (1, 2, 1, 2)
+    masks = _legal_masks(phases)
+    batch = _batch(phases, masks)
+    output = _outputs(4)
+    seeds = (101, 202, 303, 404)
+
+    original = evaluate_row_seeded_policy(
+        output,
+        batch,
+        row_seeds=seeds,
+    )
+    permutation = torch.tensor((2, 0, 3, 1))
+    permuted = evaluate_row_seeded_policy(
+        PolicyValueOutput(
+            bid_logits=output.bid_logits[permutation],
+            reveal_logits=output.reveal_logits[permutation],
+            value=output.value[permutation],
+        ),
+        NeuralBatch(
+            global_ids=batch.global_ids[permutation],
+            global_numeric=batch.global_numeric[permutation],
+            objective_bits=batch.objective_bits[permutation],
+            seat_numeric=batch.seat_numeric[permutation],
+            seat_valid=batch.seat_valid[permutation],
+            private_hand_ids=batch.private_hand_ids[permutation],
+            hand_valid=batch.hand_valid[permutation],
+            history_ids=batch.history_ids[permutation],
+            history_numeric=batch.history_numeric[permutation],
+            history_valid=batch.history_valid[permutation],
+            action_mask=batch.action_mask[permutation],
+        ),
+        row_seeds=tuple(seeds[index] for index in permutation.tolist()),
+    )
+
+    inverse = torch.argsort(permutation)
+    assert torch.equal(original.actions, permuted.actions[inverse])
+    torch.testing.assert_close(
+        original.log_probability,
+        permuted.log_probability[inverse],
+    )
+    torch.testing.assert_close(original.value, permuted.value[inverse])
+
+
+@pytest.mark.parametrize(
+    "row_seeds, message",
+    [
+        ((1,), "one seed per row"),
+        ((1, True), "unsigned 63-bit"),
+        ((1, -1), "unsigned 63-bit"),
+        ((1, 2**63), "unsigned 63-bit"),
+    ],
+)
+def test_row_seeded_sampling_validates_each_seed(
+    row_seeds: tuple[int, ...],
+    message: str,
+) -> None:
+    phases = (1, 2)
+
+    with pytest.raises(PolicyError, match=message):
+        evaluate_row_seeded_policy(
+            _outputs(2),
+            _batch(phases, _legal_masks(phases)),
+            row_seeds=row_seeds,
+        )
 
 
 def test_stochastic_selection_passes_generator_to_torch_multinomial(

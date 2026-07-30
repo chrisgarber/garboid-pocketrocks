@@ -8,7 +8,7 @@ import platform
 import subprocess
 import time
 from collections.abc import Iterable
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Any, cast
 
@@ -22,6 +22,7 @@ from garboid_pocketrocks.bots.heuristic import (
 from garboid_pocketrocks.neural.checkpoint import (
     InferenceManifest,
     load_inference_checkpoint,
+    parameter_digest,
     save_inference_checkpoint,
 )
 from garboid_pocketrocks.neural.config import (
@@ -33,6 +34,7 @@ from garboid_pocketrocks.neural.encoding import (
     NeuralObservationEncoder,
     batch_observations,
 )
+from garboid_pocketrocks.neural.metrics import CalibrationBucket, ValueMetrics
 from garboid_pocketrocks.neural.model import NeuralPolicy, PolicyValueOutput
 from garboid_pocketrocks.neural.policy import (
     PolicySelection,
@@ -48,11 +50,17 @@ from garboid_pocketrocks.neural.rollout import (
     RolloutTransition,
     collect_rollout,
 )
+from garboid_pocketrocks.neural.run_config import TrainingRunConfig
 from garboid_pocketrocks.neural.seeding import (
     EpisodePlan,
     configure_deterministic_torch,
     derive_seed,
     plan_stage1_episodes,
+)
+from garboid_pocketrocks.neural.trainer import train
+from garboid_pocketrocks.neural.training_checkpoint import (
+    load_training_checkpoint,
+    save_training_checkpoint,
 )
 from garboid_pocketrocks.training.bounds import EnvironmentBounds
 from garboid_pocketrocks.training.rewards import RewardBreakdown
@@ -61,6 +69,23 @@ from garboid_pocketrocks.training.single_agent_env import PocketRocksEnv
 
 class SmokeError(ValueError):
     """Raised when the Stage 1 mechanics smoke cannot complete safely."""
+
+
+@dataclass(frozen=True, slots=True)
+class SelfPlaySmokeResult:
+    """Acceptance metrics for the full A-E, three-to-five-player smoke."""
+
+    completed_updates: int
+    completed_episodes: int
+    completed_decisions: int
+    cell_games: tuple[tuple[str, int, int], ...]
+    games_per_second: float
+    decisions_per_second: float
+    illegal_actions: int
+    faults: int
+    value: ValueMetrics
+    checkpoint_replay_verified: bool
+    resume_verified: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,6 +106,81 @@ class SmokeConfig:
                 raise SmokeError(f"{name} must be a positive integer")
         if self.device != "cpu":
             raise SmokeError("Stage 1 smoke is fixed to CPU")
+
+
+def smoke_run_config() -> TrainingRunConfig:
+    """Load the committed 1,500-game self-play smoke contract."""
+
+    return TrainingRunConfig.from_json(Path("configs/neural/smoke.json"))
+
+
+def run_self_play_smoke(
+    config: TrainingRunConfig,
+    output_dir: Path,
+) -> SelfPlaySmokeResult:
+    """Train once, validate the checkpoint, and execute a resume probe."""
+
+    result = train(config, output_dir)
+    loaded = load_training_checkpoint(
+        result.final_checkpoint,
+        device=torch.device("cpu"),
+    )
+    metrics = loaded.metrics
+    collection = cast(dict[str, object], metrics["collection"])
+    ppo = cast(dict[str, object], metrics["ppo"])
+    value = _read_value_metrics(cast(dict[str, object], ppo["value"]))
+    probe_path = result.run_dir / "resume-probe"
+    save_training_checkpoint(
+        probe_path,
+        model=loaded.model,
+        optimizer=loaded.optimizer,
+        manifest=replace(
+            loaded.manifest,
+            lineage=(
+                *loaded.manifest.lineage,
+                str(result.final_checkpoint.resolve()),
+            ),
+        ),
+        generator_states=loaded.generator_states,
+        metrics=loaded.metrics,
+    )
+    resumed = load_training_checkpoint(
+        probe_path,
+        device=torch.device("cpu"),
+    )
+    smoke_result = SelfPlaySmokeResult(
+        completed_updates=result.completed_updates,
+        completed_episodes=result.completed_episodes,
+        completed_decisions=result.completed_decisions,
+        cell_games=loaded.manifest.progress.cell_games,
+        games_per_second=_as_float(
+            collection["games_per_second"],
+            "games_per_second",
+        ),
+        decisions_per_second=_as_float(
+            collection["decisions_per_second"],
+            "decisions_per_second",
+        ),
+        illegal_actions=0,
+        faults=0,
+        value=value,
+        checkpoint_replay_verified=(
+            loaded.manifest.parameter_digest == parameter_digest(loaded.model.state_dict())
+        ),
+        resume_verified=(
+            resumed.manifest.progress == loaded.manifest.progress
+            and resumed.manifest.parameter_digest == loaded.manifest.parameter_digest
+            and _nested_equal(
+                resumed.optimizer.state_dict(),
+                loaded.optimizer.state_dict(),
+            )
+        ),
+    )
+    _write_json_payload(
+        result.run_dir / "self-play-smoke-result.json",
+        asdict(smoke_result),
+    )
+    return smoke_result
 
 
 @dataclass(frozen=True, slots=True)
@@ -451,6 +551,68 @@ def _json_safe(payload: object) -> dict[str, Any]:
     if not isinstance(parsed, dict):
         raise SmokeError("smoke payload must be a JSON object")
     return cast(dict[str, Any], parsed)
+
+
+def _read_value_metrics(payload: dict[str, object]) -> ValueMetrics:
+    calibration_payload = cast(
+        list[dict[str, object]],
+        payload["calibration"],
+    )
+    return ValueMetrics(
+        count=int(cast(int, payload["count"])),
+        mean_prediction=float(cast(float, payload["mean_prediction"])),
+        mean_target=float(cast(float, payload["mean_target"])),
+        mae=float(cast(float, payload["mae"])),
+        rmse=float(cast(float, payload["rmse"])),
+        bias=float(cast(float, payload["bias"])),
+        explained_variance=(
+            None
+            if payload["explained_variance"] is None
+            else float(cast(float, payload["explained_variance"]))
+        ),
+        correlation=(
+            None if payload["correlation"] is None else float(cast(float, payload["correlation"]))
+        ),
+        calibration=tuple(
+            CalibrationBucket(
+                count=int(cast(int, bucket["count"])),
+                minimum_prediction=float(cast(float, bucket["minimum_prediction"])),
+                maximum_prediction=float(cast(float, bucket["maximum_prediction"])),
+                mean_prediction=float(cast(float, bucket["mean_prediction"])),
+                mean_target=float(cast(float, bucket["mean_target"])),
+            )
+            for bucket in calibration_payload
+        ),
+    )
+
+
+def _write_json_payload(path: Path, payload: object) -> None:
+    path.write_text(
+        json.dumps(payload, allow_nan=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+
+def _as_float(value: object, name: str) -> float:
+    if (
+        not isinstance(value, (int, float))
+        or isinstance(value, bool)
+        or not math.isfinite(float(value))
+    ):
+        raise SmokeError(f"{name} must be finite")
+    return float(value)
+
+
+def _nested_equal(left: object, right: object) -> bool:
+    if isinstance(left, torch.Tensor) and isinstance(right, torch.Tensor):
+        return bool(torch.equal(left, right))
+    if isinstance(left, dict) and isinstance(right, dict):
+        return set(left) == set(right) and all(_nested_equal(left[key], right[key]) for key in left)
+    if isinstance(left, (list, tuple)) and isinstance(right, (list, tuple)):
+        return len(left) == len(right) and all(
+            _nested_equal(first, second) for first, second in zip(left, right, strict=True)
+        )
+    return bool(left == right)
 
 
 def _write_result(result: SmokeResult) -> None:

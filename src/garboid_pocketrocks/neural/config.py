@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Literal
 
 from garboid_pocketrocks.knowledge import canonical_knowledge
+
+ModelProfile = Literal["small", "medium", "large"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -121,4 +124,61 @@ def stage1_model_config() -> NeuralModelConfig:
         gru_hidden_size=64,
         snapshot_hidden_size=128,
         trunk_hidden_size=128,
+    )
+
+
+def training_model_config(profile: ModelProfile) -> NeuralModelConfig:
+    """Return a checkpoint-stable capacity profile for self-play training."""
+
+    if profile == "small":
+        return stage1_model_config()
+    if profile == "medium":
+        return NeuralModelConfig(
+            categorical_embedding_size=16,
+            suit_embedding_size=8,
+            seat_hidden_size=64,
+            event_embedding_size=128,
+            gru_hidden_size=128,
+            snapshot_hidden_size=256,
+            trunk_hidden_size=256,
+        )
+    if profile == "large":
+        return NeuralModelConfig(
+            categorical_embedding_size=32,
+            suit_embedding_size=16,
+            seat_hidden_size=128,
+            event_embedding_size=256,
+            gru_hidden_size=256,
+            snapshot_hidden_size=512,
+            trunk_hidden_size=512,
+        )
+    raise ValueError(f"unknown model profile {profile!r}")
+
+
+def training_encoder_config() -> NeuralEncoderConfig:
+    """Return the finite live-chart, three-to-five-player training contract."""
+
+    player_counts = (3, 4, 5)
+    variants = tuple(
+        canonical_knowledge(player_count, value_chart=chart)
+        for chart in "ABCDE"
+        for player_count in player_counts
+    )
+    max_history_events = max(
+        1
+        + (2 * sum(knowledge.action_counts))
+        + (knowledge.player_count * knowledge.private_cards_per_player)
+        for knowledge in variants
+    )
+    return NeuralEncoderConfig(
+        schema_version=1,
+        supported_ruleset_names=tuple(f"live-{chart}" for chart in "ABCDE"),
+        supported_player_counts=player_counts,
+        max_bid=100,
+        max_hand_size=5,
+        max_history_events=max_history_events,
+        max_cash=100,
+        max_abs_chart=20,
+        max_resource_cards=max(sum(knowledge.resource_counts) for knowledge in variants),
+        max_action_cards=max(sum(knowledge.action_counts) for knowledge in variants),
     )

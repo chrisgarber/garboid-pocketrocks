@@ -9,6 +9,24 @@ pytest.importorskip("torch")
 from garboid_pocketrocks.neural.cli import main  # noqa: E402
 
 
+def test_cli_exposes_all_training_commands(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert main(["--help"]) == 0
+
+    output = capsys.readouterr().out
+    for command in ("smoke", "train", "resume", "evaluate", "inspect"):
+        assert command in output
+
+
+def test_resume_help_accepts_a_long_run_config(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert main(["resume", "--help"]) == 0
+
+    assert "--config" in capsys.readouterr().out
+
+
 def test_low_volume_smoke_cli_writes_reloadable_checkpoint(tmp_path: Path) -> None:
     output_dir = tmp_path / "run"
 

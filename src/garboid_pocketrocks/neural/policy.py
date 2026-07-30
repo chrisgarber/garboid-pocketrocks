@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 import torch
@@ -41,6 +42,67 @@ def evaluate_masked_policy(
 ) -> PolicySelection:
     """Project the active phase head, mask illegality, and select an action."""
 
+    masked, log_probabilities, probabilities = _distribution(output, batch)
+    if deterministic:
+        actions = torch.argmax(masked, dim=-1)
+    else:
+        actions = torch.multinomial(
+            probabilities,
+            1,
+            generator=generator,
+        ).squeeze(1)
+    return _selection(
+        output,
+        masked,
+        log_probabilities,
+        probabilities,
+        actions,
+    )
+
+
+def evaluate_row_seeded_policy(
+    output: PolicyValueOutput,
+    batch: NeuralBatch,
+    *,
+    row_seeds: Sequence[int],
+) -> PolicySelection:
+    """Sample every row from its own CPU seed, independent of batch packing."""
+
+    batch_size = output.value.shape[0] if output.value.ndim == 1 else 0
+    if len(row_seeds) != batch_size:
+        raise PolicyError("row-seeded sampling requires one seed per row")
+    if any(
+        not isinstance(seed, int) or isinstance(seed, bool) or not 0 <= seed < 2**63
+        for seed in row_seeds
+    ):
+        raise PolicyError("row seeds must be unsigned 63-bit integers")
+
+    masked, log_probabilities, probabilities = _distribution(output, batch)
+    probabilities_cpu = probabilities.detach().cpu()
+    actions_cpu = torch.stack(
+        tuple(
+            torch.multinomial(
+                probabilities_cpu[row],
+                1,
+                generator=torch.Generator(device="cpu").manual_seed(seed),
+            )
+            for row, seed in enumerate(row_seeds)
+        )
+    ).squeeze(1)
+    actions = actions_cpu.to(probabilities.device)
+    return _selection(
+        output,
+        masked,
+        log_probabilities,
+        probabilities,
+        actions,
+    )
+
+
+def _distribution(
+    output: PolicyValueOutput,
+    batch: NeuralBatch,
+) -> tuple[Tensor, Tensor, Tensor]:
     _validate(output, batch)
     batch_size = output.value.shape[0]
     bounds = EnvironmentBounds(
@@ -67,15 +129,16 @@ def evaluate_masked_policy(
     masked = universal.masked_fill(~batch.action_mask, -torch.inf)
     log_probabilities = torch.log_softmax(masked, dim=-1)
     probabilities = torch.softmax(masked, dim=-1)
+    return masked, log_probabilities, probabilities
 
-    if deterministic:
-        actions = torch.argmax(masked, dim=-1)
-    else:
-        actions = torch.multinomial(
-            probabilities,
-            1,
-            generator=generator,
-        ).squeeze(1)
+
+def _selection(
+    output: PolicyValueOutput,
+    masked: Tensor,
+    log_probabilities: Tensor,
+    probabilities: Tensor,
+    actions: Tensor,
+) -> PolicySelection:
     selected_log_probability = log_probabilities.gather(
         1,
         actions.unsqueeze(1),

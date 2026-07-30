@@ -1,0 +1,15 @@
+{
+  "device": "cpu",
+  "games_per_cell": 100,
+  "max_updates": 1,
+  "parallel": {
+    "active_games_per_worker": 128,
+    "max_inference_batch": 1024,
+    "max_queue_delay_ms": 1.0,
+    "workers": 8
+  },
+  "ppo": {
+    "epochs": 1
+  },
+  "root_seed": 42
+}

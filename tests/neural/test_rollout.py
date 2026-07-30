@@ -20,6 +20,7 @@ from garboid_pocketrocks.neural.rollout import (  # noqa: E402
 )
 from garboid_pocketrocks.neural.seeding import (  # noqa: E402
     configure_deterministic_torch,
+    configure_torch_runtime,
     derive_seed,
     plan_stage1_episodes,
 )
@@ -89,6 +90,14 @@ def test_deterministic_setup_reseeds_all_runtimes_in_one_process() -> None:
     assert torch.are_deterministic_algorithms_enabled()
     assert torch.get_num_threads() == 1
     assert torch.get_num_interop_threads() == 1
+
+
+def test_accelerator_runtime_can_disable_strict_deterministic_algorithms() -> None:
+    configure_torch_runtime(17, deterministic_algorithms=False)
+
+    assert not torch.are_deterministic_algorithms_enabled()
+
+    configure_deterministic_torch(17)
 
 
 def test_rollout_collects_only_immutable_legal_learner_transitions() -> None:

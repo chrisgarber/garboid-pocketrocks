@@ -2,17 +2,23 @@
 
 from __future__ import annotations
 
+import hashlib
 import math
 from dataclasses import dataclass
 
+import numpy as np
 import torch
 from torch import Tensor
 
 from garboid_pocketrocks.neural.advantages import compute_gae
-from garboid_pocketrocks.neural.encoding import batch_observations
+from garboid_pocketrocks.neural.metrics import (
+    ValueMetrics,
+    ValueMetricSlice,
+    stratified_value_metrics,
+)
 from garboid_pocketrocks.neural.model import NeuralPolicy
 from garboid_pocketrocks.neural.policy import evaluate_masked_policy
-from garboid_pocketrocks.neural.rollout import RolloutBatch, RolloutTransition
+from garboid_pocketrocks.neural.rollout import PackedRollout, RolloutBatch
 
 _ADVANTAGE_EPSILON = 1e-8
 
@@ -59,8 +65,8 @@ class PPOConfig:
             raise PPOError("maximum gradient norm must be positive")
         if self.learning_rate <= 0.0:
             raise PPOError("learning rate must be positive")
-        if self.epochs != 1:
-            raise PPOError("Stage 1 requires exactly one PPO epoch")
+        if not isinstance(self.epochs, int) or isinstance(self.epochs, bool) or self.epochs <= 0:
+            raise PPOError("epochs must be a positive integer")
         if (
             not isinstance(self.minibatch_size, int)
             or isinstance(self.minibatch_size, bool)
@@ -97,11 +103,15 @@ class PPOUpdateMetrics:
     entropies: tuple[float, ...]
     pre_clip_gradient_norms: tuple[float, ...]
     post_clip_gradient_norms: tuple[float, ...]
+    approximate_kl: float
+    clip_fraction: float
+    value: ValueMetrics
+    value_slices: tuple[ValueMetricSlice, ...]
 
 
 @dataclass(frozen=True, slots=True)
 class _TrainingTargets:
-    transitions: tuple[RolloutTransition, ...]
+    packed: PackedRollout
     advantages: Tensor
     returns: Tensor
 
@@ -168,7 +178,7 @@ def ppo_loss(
 
 
 class PPOTrainer:
-    """Own one persistent Adam optimizer and apply one epoch per update."""
+    """Own one persistent Adam optimizer on the model's learner device."""
 
     def __init__(
         self,
@@ -179,9 +189,8 @@ class PPOTrainer:
             device = next(model.parameters()).device
         except StopIteration as error:
             raise PPOError("PPO model has no parameters") from error
-        if device.type != "cpu":
-            raise PPOError("Stage 1 PPO is fixed to CPU")
         self.model = model
+        self.device = device
         self.config = config
         self.optimizer = torch.optim.Adam(
             model.parameters(),
@@ -195,7 +204,7 @@ class PPOTrainer:
         *,
         update_seed: int,
     ) -> PPOUpdateMetrics:
-        """Recompute stored histories and update the policy for exactly one epoch."""
+        """Pack a frozen rollout and apply deterministic PPO epochs."""
 
         if (
             not isinstance(update_seed, int)
@@ -205,9 +214,8 @@ class PPOTrainer:
             raise PPOError("update seed must be an unsigned 63-bit integer")
         _ensure_model_finite(self.model)
         targets = _training_targets(rollout, self.config)
-        transition_count = len(targets.transitions)
-        generator = torch.Generator(device="cpu").manual_seed(update_seed)
-        shuffled = torch.randperm(transition_count, generator=generator)
+        packed = targets.packed
+        transition_count = len(packed)
 
         total_loss_sum = 0.0
         policy_loss_sum = 0.0
@@ -219,76 +227,102 @@ class PPOTrainer:
         pre_clip_norms: list[float] = []
         post_clip_norms: list[float] = []
         optimizer_steps = 0
+        approximate_kl_sum = 0.0
+        clip_count = 0
         self.model.train()
 
-        for start in range(0, transition_count, self.config.minibatch_size):
-            index_tensor = shuffled[start : start + self.config.minibatch_size]
-            indices = tuple(int(index) for index in index_tensor.tolist())
-            minibatch_transitions = tuple(targets.transitions[index] for index in indices)
-            observations = tuple(transition.observation for transition in minibatch_transitions)
-            batch = batch_observations(observations, torch.device("cpu"))
-            output = self.model(batch)
-            selection = evaluate_masked_policy(
-                output,
-                batch,
-                generator=None,
-                deterministic=True,
+        for epoch_index in range(self.config.epochs):
+            generator = torch.Generator(device="cpu").manual_seed(
+                _derive_local_seed(update_seed, "epoch", epoch_index)
             )
-            actions = torch.tensor(
-                [transition.action for transition in minibatch_transitions],
-                dtype=torch.int64,
-            )
-            if not batch.action_mask.gather(1, actions.unsqueeze(1)).all().item():
-                raise PPOError("rollout contains an action illegal under its stored mask")
-            log_probabilities = torch.log_softmax(selection.masked_logits, dim=-1)
-            new_log_probability = log_probabilities.gather(
-                1,
-                actions.unsqueeze(1),
-            ).squeeze(1)
-            old_log_probability = torch.tensor(
-                [transition.old_log_probability for transition in minibatch_transitions],
-                dtype=output.value.dtype,
-            )
-            advantage = targets.advantages[index_tensor]
-            return_target = targets.returns[index_tensor]
-            loss = ppo_loss(
-                new_log_probability,
-                output.value,
-                old_log_probability,
-                return_target,
-                advantage,
-                selection.entropy,
-                config=self.config,
-            )
+            shuffled = torch.randperm(transition_count, generator=generator)
+            for start in range(0, transition_count, self.config.minibatch_size):
+                index_tensor = shuffled[start : start + self.config.minibatch_size]
+                indices = np.asarray(index_tensor.tolist(), dtype=np.int64)
+                batch = packed.batch(indices, self.device)
+                output = self.model(batch)
+                selection = evaluate_masked_policy(
+                    output,
+                    batch,
+                    generator=None,
+                    deterministic=True,
+                )
+                actions = torch.as_tensor(
+                    packed.actions[indices],
+                    dtype=torch.int64,
+                    device=self.device,
+                )
+                if not batch.action_mask.gather(1, actions.unsqueeze(1)).all().item():
+                    raise PPOError("rollout contains an action illegal under its stored mask")
+                log_probabilities = torch.log_softmax(
+                    selection.masked_logits,
+                    dim=-1,
+                )
+                new_log_probability = log_probabilities.gather(
+                    1,
+                    actions.unsqueeze(1),
+                ).squeeze(1)
+                old_log_probability = torch.as_tensor(
+                    packed.old_log_probabilities[indices],
+                    dtype=output.value.dtype,
+                    device=self.device,
+                )
+                advantage = targets.advantages[index_tensor].to(self.device)
+                return_target = targets.returns[index_tensor].to(self.device)
+                loss = ppo_loss(
+                    new_log_probability,
+                    output.value,
+                    old_log_probability,
+                    return_target,
+                    advantage,
+                    selection.entropy,
+                    config=self.config,
+                )
 
-            self.optimizer.zero_grad(set_to_none=True)
-            loss.total.backward()  # type: ignore[no-untyped-call]
-            _ensure_gradients_finite(self.model)
-            pre_clip = torch.nn.utils.clip_grad_norm_(
-                self.model.parameters(),
-                self.config.max_gradient_norm,
-                error_if_nonfinite=True,
-            )
-            post_clip = _gradient_norm(self.model)
-            if not torch.isfinite(pre_clip).item() or not math.isfinite(post_clip):
-                raise PPOError("gradient clipping produced a nonfinite norm")
-            self.optimizer.step()
-            _ensure_model_finite(self.model)
-            _ensure_optimizer_finite(self.optimizer)
+                self.optimizer.zero_grad(set_to_none=True)
+                loss.total.backward()  # type: ignore[no-untyped-call]
+                _ensure_gradients_finite(self.model)
+                pre_clip = torch.nn.utils.clip_grad_norm_(
+                    self.model.parameters(),
+                    self.config.max_gradient_norm,
+                    error_if_nonfinite=True,
+                )
+                post_clip = _gradient_norm(self.model)
+                if not torch.isfinite(pre_clip).item() or not math.isfinite(post_clip):
+                    raise PPOError("gradient clipping produced a nonfinite norm")
+                self.optimizer.step()
+                _ensure_model_finite(self.model)
+                _ensure_optimizer_finite(self.optimizer)
 
-            size = len(indices)
-            total_loss_sum += float(loss.total.detach().item()) * size
-            policy_loss_sum += float(loss.policy.detach().item()) * size
-            value_loss_sum += float(loss.value.detach().item()) * size
-            entropy_sum += float(loss.entropy.detach().item()) * size
-            ratios.extend(_tensor_values(loss.ratio))
-            values.extend(_tensor_values(output.value))
-            entropies.extend(_tensor_values(selection.entropy))
-            pre_clip_norms.append(float(pre_clip.detach().item()))
-            post_clip_norms.append(post_clip)
-            optimizer_steps += 1
+                size = len(indices)
+                total_loss_sum += float(loss.total.detach().item()) * size
+                policy_loss_sum += float(loss.policy.detach().item()) * size
+                value_loss_sum += float(loss.value.detach().item()) * size
+                entropy_sum += float(loss.entropy.detach().item()) * size
+                approximate_kl_sum += float(
+                    (old_log_probability - new_log_probability).detach().sum().item()
+                )
+                clip_count += int(
+                    (torch.abs(loss.ratio.detach() - 1.0) > self.config.clip_ratio).sum().item()
+                )
+                ratios.extend(_tensor_values(loss.ratio))
+                values.extend(_tensor_values(output.value))
+                entropies.extend(_tensor_values(selection.entropy))
+                pre_clip_norms.append(float(pre_clip.detach().item()))
+                post_clip_norms.append(post_clip)
+                optimizer_steps += 1
 
-        denominator = float(transition_count)
+        denominator = float(transition_count * self.config.epochs)
+        phases = ("early", "middle", "late")
+        value_slices = stratified_value_metrics(
+            torch.from_numpy(packed.old_values.copy()),
+            targets.returns,
+            ruleset_names=tuple(
+                f"live-{chr(ord('A') + int(index))}" for index in packed.chart_indices
+            ),
+            player_counts=tuple(int(count) for count in packed.player_counts),
+            phases=tuple(phases[int(index)] for index in packed.phase_buckets),
+        )
         return PPOUpdateMetrics(
             epochs=self.config.epochs,
             optimizer_steps=optimizer_steps,
@@ -303,6 +337,10 @@ class PPOTrainer:
             entropies=tuple(entropies),
             pre_clip_gradient_norms=tuple(pre_clip_norms),
             post_clip_gradient_norms=tuple(post_clip_norms),
+            approximate_kl=approximate_kl_sum / denominator,
+            clip_fraction=clip_count / denominator,
+            value=value_slices[0].metrics,
+            value_slices=value_slices,
         )
 
 
@@ -310,43 +348,22 @@ def _training_targets(
     rollout: RolloutBatch,
     config: PPOConfig,
 ) -> _TrainingTargets:
-    if not rollout.episodes:
-        raise PPOError("PPO update requires at least one episode")
-    transitions: list[RolloutTransition] = []
+    try:
+        packed = PackedRollout.from_batch(rollout)
+    except ValueError as error:
+        raise PPOError(str(error)) from error
     advantages: list[Tensor] = []
     returns: list[Tensor] = []
-    for episode in rollout.episodes:
-        if (
-            not episode.transitions
-            or not episode.terminated
-            or episode.truncated
-            or not episode.transitions[-1].terminated
-            or any(transition.truncated for transition in episode.transitions)
-        ):
-            raise PPOError("Stage 1 PPO requires complete terminal episodes")
-        episode_transitions = episode.transitions
+    for start, end in packed.trajectory_ranges:
         estimate = compute_gae(
-            torch.tensor(
-                [transition.reward for transition in episode_transitions],
-                dtype=torch.float32,
-            ),
-            torch.tensor(
-                [transition.old_value for transition in episode_transitions],
-                dtype=torch.float32,
-            ),
-            torch.tensor(
-                [transition.terminated for transition in episode_transitions],
-                dtype=torch.bool,
-            ),
-            torch.tensor(
-                [transition.truncated for transition in episode_transitions],
-                dtype=torch.bool,
-            ),
+            torch.from_numpy(packed.rewards[start:end].copy()),
+            torch.from_numpy(packed.old_values[start:end].copy()),
+            torch.from_numpy(packed.terminated[start:end].copy()),
+            torch.from_numpy(packed.truncated[start:end].copy()),
             bootstrap_value=torch.tensor(0.0, dtype=torch.float32),
             gamma=config.gamma,
             gae_lambda=config.gae_lambda,
         )
-        transitions.extend(episode_transitions)
         advantages.append(estimate.advantages)
         returns.append(estimate.returns)
 
@@ -361,10 +378,18 @@ def _training_targets(
     ):
         raise PPOError("advantage preparation produced nonfinite targets")
     return _TrainingTargets(
-        transitions=tuple(transitions),
+        packed=packed,
         advantages=normalized_advantages,
         returns=concatenated_returns,
     )
+
+
+def _derive_local_seed(root_seed: int, namespace: str, index: int) -> int:
+    canonical = f"{root_seed}:{namespace}:{index}".encode()
+    return int.from_bytes(
+        hashlib.blake2b(canonical, digest_size=8).digest(),
+        "big",
+    ) & ((1 << 63) - 1)
 
 
 def _tensor_values(tensor: Tensor) -> tuple[float, ...]:

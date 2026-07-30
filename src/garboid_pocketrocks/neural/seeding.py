@@ -63,6 +63,19 @@ def derive_seed(root_seed: int, namespace: str, *indices: int) -> int:
 def configure_deterministic_torch(root_seed: int) -> RuntimeSeeds:
     """Seed Python, NumPy, and Torch and configure deterministic CPU execution."""
 
+    return configure_torch_runtime(
+        root_seed,
+        deterministic_algorithms=True,
+    )
+
+
+def configure_torch_runtime(
+    root_seed: int,
+    *,
+    deterministic_algorithms: bool,
+) -> RuntimeSeeds:
+    """Seed all runtimes and select strict or accelerator-compatible kernels."""
+
     global _THREADS_CONFIGURED
 
     seeds = RuntimeSeeds(
@@ -73,7 +86,7 @@ def configure_deterministic_torch(root_seed: int) -> RuntimeSeeds:
     random.seed(seeds.python)
     np.random.seed(seeds.numpy % _NUMPY_SEED_MODULUS)
     torch.manual_seed(seeds.torch)
-    torch.use_deterministic_algorithms(True)
+    torch.use_deterministic_algorithms(deterministic_algorithms)
     if not _THREADS_CONFIGURED:
         torch.set_num_threads(1)
         torch.set_num_interop_threads(1)
