@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Literal
 
 from garboid_pocketrocks.knowledge import canonical_knowledge
+
+ModelProfile = Literal["small", "medium", "large"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -122,6 +125,34 @@ def stage1_model_config() -> NeuralModelConfig:
         snapshot_hidden_size=128,
         trunk_hidden_size=128,
     )
+
+
+def training_model_config(profile: ModelProfile) -> NeuralModelConfig:
+    """Return a checkpoint-stable capacity profile for self-play training."""
+
+    if profile == "small":
+        return stage1_model_config()
+    if profile == "medium":
+        return NeuralModelConfig(
+            categorical_embedding_size=16,
+            suit_embedding_size=8,
+            seat_hidden_size=64,
+            event_embedding_size=128,
+            gru_hidden_size=128,
+            snapshot_hidden_size=256,
+            trunk_hidden_size=256,
+        )
+    if profile == "large":
+        return NeuralModelConfig(
+            categorical_embedding_size=32,
+            suit_embedding_size=16,
+            seat_hidden_size=128,
+            event_embedding_size=256,
+            gru_hidden_size=256,
+            snapshot_hidden_size=512,
+            trunk_hidden_size=512,
+        )
+    raise ValueError(f"unknown model profile {profile!r}")
 
 
 def training_encoder_config() -> NeuralEncoderConfig:

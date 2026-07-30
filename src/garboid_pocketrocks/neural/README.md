@@ -1,205 +1,333 @@
-# Neural Bot
+# Neural self-play bot
 
-This package contains the Stage 1 neural policy and PPO training proof for
-PocketRocks. It trains one learner against frozen heuristic opponents using
-only information available to a live SDK bot.
+This package trains a recurrent actor-critic entirely through PocketRocks
+self-play. The implemented training envelope covers every live value chart
+(`live-A` through `live-E`) with three, four, and five players. Every seat uses
+the same frozen policy snapshot during collection, and every seat trajectory is
+then used by PPO.
 
-Stage 1 proves that public-history encoding, legal action selection, reward
-calculation, PPO updates, deterministic execution, and checkpoint replay work
-end to end. It is not yet a competition-strength bot or a resumable,
-large-scale training system.
+This is a training system, not yet a registered live `NeuralBot`. It proves
+legal SDK-compatible inference, balanced self-play, PPO updates, value
+diagnostics, throughput calibration, and update-boundary checkpoint/resume.
+It does not yet establish competition strength.
 
-## Architecture
+## Install
 
-The model is a small recurrent actor-critic with approximately 125,620
-parameters:
-
-```text
-Current public snapshot ──> Snapshot encoder ──┐
-Relative player state ─────> Shared seat MLP ──┼─> Shared trunk ─┬─> Bid policy
-Complete public history ───> Event MLP + GRU ──┘                 ├─> Reveal policy
-                                                                └─> State value
-```
-
-### Snapshot
-
-The current snapshot contains the decision phase, player count, current
-action and resources, relative priority seat, value chart, public ruleset
-configuration, active objectives, and the learner's private hand.
-
-Categorical fields use small embeddings. The resulting 141 features pass
-through:
-
-```text
-Linear(141, 128) -> Tanh
-```
-
-### Relative player state
-
-Each of five possible player slots contains 41 public features: cash, won
-resources, revealed information, and objective ownership. The learner is
-always rotated to relative seat zero.
-
-Every valid seat uses the same encoder:
-
-```text
-Linear(41, 32) -> Tanh
-```
-
-The five outputs are masked and flattened into 160 features.
-
-### Public history
-
-Each public event contains an event kind, action, resources, relative actor,
-revealed suit, and relevant numeric data such as setup values or resolved
-bids. An event becomes 78 features and is encoded by:
-
-```text
-Linear(78, 64) -> Tanh
-GRU(input_size=64, hidden_size=64, num_layers=1)
-```
-
-The live-A Stage 1 envelope supports up to 76 public events. Every inference
-replays the complete cumulative history from a zero GRU state. The model does
-not retain mutable per-game state, making inference safe when one SDK process
-handles multiple games.
-
-### Shared trunk and heads
-
-The network concatenates 128 snapshot features, 160 player features, and the
-64-feature history summary:
-
-```text
-Linear(352, 128) -> Tanh
-Linear(128, 128) -> Tanh
-```
-
-It then produces:
-
-- 101 bid logits: pass plus bids from 1 through 100;
-- 6 reveal logits: pass plus five hand positions;
-- 1 scalar expected return.
-
-The active policy head is projected into the universal 106-action encoding.
-Context-illegal actions receive negative-infinity logits and therefore exactly
-zero probability. Training samples with a dedicated seeded
-`torch.Generator`; evaluation uses deterministic lowest-index argmax.
-
-## Information boundary
-
-Both actor and value heads use the same deployable information:
-
-- the current SDK `DecisionContext`;
-- public `RulesetKnowledge`;
-- cumulative public setup, turn, resolved-bid, and reveal events;
-- the learner's current private hand;
-- the current legal-action mask.
-
-They never receive opponent hands, shuffled deck order, unresolved sealed
-bids, simulator RNG state, or an omniscient critic state.
-
-All seat-indexed features and resolved bids are learner-relative. Suit,
-objective, and private-hand indices retain their SDK meanings.
-
-## Training update
-
-One Stage 1 PPO update:
-
-1. freezes the current policy for collection;
-2. plays 16 complete live-A, three-player games;
-3. rotates the learner seat against balanced and passive heuristic bots;
-4. stores learner decisions, complete public histories, masks, rewards, old
-   log probabilities, and old values;
-5. computes gamma-one GAE independently for every game;
-6. normalizes advantages over the rollout;
-7. replays every stored history under the current model;
-8. performs one clipped PPO epoch with a persistent Adam optimizer.
-
-The default reward combines:
-
-- normalized changes in public financial potential;
-- claimed objective payouts;
-- terminal resource value;
-- a terminal first-place bonus, shared by tied winners.
-
-Event-shaping and placement bonuses default to zero. Gamma is `1.0` because
-learner decisions do not represent uniform game time: an auction winner
-receives an extra reveal decision that should not discount later rewards.
-
-At the current 16-game batch size, rollout generation is roughly 90% of the
-update time and PPO optimization is roughly 10%.
-
-## Running the deterministic smoke
-
-Install the optional CPU neural dependencies:
+From the repository root:
 
 ```bash
 uv sync --locked --extra neural
 ```
 
-Run two updates of 16 games:
+All commands below also run from the repository root. Output directories must
+be new or empty.
+
+## Model and information boundary
+
+`NeuralPolicy` is stateless across calls. It encodes the complete padded public
+history from a new zero GRU state on every inference, so interleaved SDK games
+cannot leak recurrent state into one another.
+
+```text
+current public/private snapshot ──> snapshot MLP ───────┐
+five learner-relative seats ──────> shared seat MLP ────┼─> two-layer trunk
+complete public history ──────────> event MLP + GRU ────┘        ├─> bid logits
+                                                               ├─> reveal logits
+                                                               └─> scalar value
+```
+
+The snapshot includes the decision phase, player count, current action and
+resources, learner-relative priority seat, public ruleset/chart data, active
+and possible objectives, and the acting seat's private hand. Each of five seat
+slots contains 41 public features for cash, won resources, revealed
+information, and objective ownership; the acting seat is rotated to relative
+seat zero. History events contain setup, turn-opened, resolved-bid, and public
+reveal data, with actors and resolved bids rotated into the same relative-seat
+frame.
+
+Both policy and value heads see exactly the information available to a
+deployable SDK bot:
+
+- the current SDK `DecisionContext`;
+- public `RulesetKnowledge` and cumulative public history;
+- the acting seat's current private hand;
+- the legal-action mask.
+
+They do not receive opponent hands, deck order, unresolved sealed bids,
+simulator RNG state, or an omniscient critic state.
+
+The current checkpoint-stable capacity profiles are:
+
+| Profile | Snapshot / seat / event / GRU / trunk widths | Parameters |
+| --- | --- | ---: |
+| `small` | 128 / 32 / 64 / 64 / 128 | 125,620 |
+| `medium` | 256 / 64 / 128 / 128 / 256 | 443,132 |
+| `large` | 512 / 128 / 256 / 256 / 512 | 1,654,156 |
+
+Completed checkpoints receive lossless local IDs in the form
+`vector_ppo_<profile>_v1_g<completed-games>`, for example
+`vector_ppo_large_v1_g1000000`. Network size and training age are therefore
+visible in tournament/reporting identities without rounding the game count.
+
+The trunk feeds three heads:
+
+- 101 bid logits: universal pass plus bids 1 through 100;
+- 6 reveal logits: universal pass plus five hand positions;
+- one scalar expected return.
+
+The active phase head is projected into the 106-action universal action space.
+Context-illegal actions are masked to negative infinity and therefore have
+exactly zero probability. Collection samples each decision from a stable,
+row-specific seed; greedy evaluation chooses the lowest-index maximum through
+`argmax`.
+
+The training encoder supports a maximum five-card hand and 77 public events,
+which covers the finite A-E, three-to-five-player live envelope. The older
+Stage 1 helpers remain available for the legacy live-A/three-player smoke.
+
+## What one training update does
+
+`plan_mirror_episodes` builds a balanced matrix of 15 cells: five charts times
+three player counts. `games_per_cell=N` therefore collects `15 * N` complete
+games per update. In every currently orchestrated game, all seats use a frozen
+copy of the current policy and all seats are trainable.
+
+Collection uses the SDK's NumPy `BatchSimEngine`. Plans are grouped into
+homogeneous player-count batches while each engine row retains its own chart
+and deterministic engine seed. Bid and reveal requests are sorted, encoded in
+batches, and split only at `max_inference_batch`. Per-decision sampling seeds
+make chosen actions independent of worker completion order and batch packing.
+
+The collector records each trainable transition's observation, mask, sampled
+action, old log probability, old value, decomposed reward, terminal flags, and
+chart/player/phase metadata. The default reward is:
+
+- normalized change in public financial potential;
+- terminal conversion from public potential to final money;
+- a `1.0` first-place bonus shared among tied winners.
+
+Optional placement and event shaping bonuses default to zero.
+
+PPO then:
+
+1. packs all complete seat trajectories into immutable NumPy arrays;
+2. computes GAE independently per seat trajectory with `gamma=1.0`,
+   `lambda=0.95`, and zero terminal bootstrap;
+3. forms value targets as `advantage + old value`;
+4. normalizes advantages over the complete rollout;
+5. shuffles deterministically once per epoch and trains in minibatches;
+6. applies clipped policy loss, half squared-error value loss, entropy bonus,
+   and gradient clipping with a persistent Adam optimizer.
+
+`gamma=1.0` is intentional: decisions are not uniformly spaced because an
+auction winner can receive an additional reveal decision. The value head is a
+deployable-information critic trained to estimate the resulting future return,
+not hidden game state.
+
+## Batching, actors, and device calibration
+
+The resolved collection path depends on device and worker count:
+
+- one worker: one process runs SDK vector batches and batched inference on the
+  selected CPU, CUDA, or MPS device;
+- CPU with multiple workers: spawned vector actors each receive a frozen model
+  copy, run `BatchSimEngine` batches, and perform local CPU inference;
+- accelerator with multiple workers: spawned game workers send inference
+  requests to one centrally batched accelerator policy.
+
+The committed automatic calibration currently benchmarks bounded candidates:
+one or eight CPU vector actors, plus one-vector-actor CUDA/MPS candidates when
+available. It measures a complete balanced collection and the configured PPO
+epoch count, then selects the highest decisions/second result.
+`benchmark.json` records every successful result and the selected candidate.
+Set both `device` and
+`parallel.workers` explicitly to skip calibration.
+
+`learner_threads` controls Torch learner threads. CPU vector actors force one
+Torch intra-op and inter-op thread each to avoid oversubscription.
+
+## Determinism and committed run profiles
+
+The self-play smoke keeps `deterministic_algorithms=true` (the configuration
+default). Engine seeds, per-seat decision seeds, model initialization, and PPO
+epoch shuffles are derived from the root seed. Pin CPU and one worker when an
+exact reproducibility check matters:
 
 ```bash
 uv run --extra neural garboid-train smoke \
+  --device cpu \
+  --workers 1 \
   --output-dir artifacts/neural-smoke
 ```
 
-The output directory must be new or empty. The smoke verifies:
+The default smoke pins the measured eight-actor CPU path and runs one PPO
+update with 100 games in each cell: 1,500 games total. It verifies full cell
+coverage, legal/fault-free collection, finite value metrics, checkpoint digest
+replay, and reloadable optimizer/progress state. It writes
+`self-play-smoke-result.json` in addition to the normal run artifacts. Use
+`--games-per-cell 1 --workers 1` for a 15-game developer probe.
 
-- every game terminates;
-- every sampled action is legal;
-- illegal-action probability is exactly zero;
-- outputs, losses, advantages, and gradients are finite;
-- model parameters change after every update;
-- identical seeded runs produce identical deterministic metrics and parameter
-  digests;
-- a saved checkpoint reproduces fixture logits, value, and greedy action.
+The approximately ten-minute and up-to-eight-hour profiles deliberately set
+`deterministic_algorithms=false`, allowing accelerator-compatible kernels.
+Both use hardware calibration when `device` or `workers` is `auto`:
 
-The smoke validates mechanics and determinism, not playing strength.
+```bash
+# Current medium-profile, approximately ten-minute plan
+uv run --extra neural garboid-train train \
+  --config configs/neural/initial-10m.json \
+  --output-dir artifacts/neural-10m
 
-## Checkpoints
-
-Stage 1 writes an inference-only bundle:
-
-```text
-checkpoint/
-  manifest.json
-  model.pt
+# Current large-profile, up-to-eight-hour plan; starts a separate lineage
+uv run --extra neural garboid-train train \
+  --config configs/neural/long-8h.json \
+  --output-dir artifacts/neural-8h
 ```
 
-The manifest records model and encoder configuration, supported rulesets and
-player counts, dependency versions, action-space identity, completion counts,
-and file/parameter digests. Loading is fail-closed for incompatible schemas,
-tensor names, shapes, dtypes, bounds, checksums, or non-finite weights.
+Wall-clock limits are checked only between complete PPO updates. A final update
+is never interrupted and can overshoot the nominal limit. The two profiles use
+different model shapes (`medium` versus `large`), so the large run cannot
+resume the medium checkpoint.
 
-Stage 1 checkpoints omit optimizer and RNG state and therefore cannot resume
-training.
+To compare model capacity and device behavior without starting a durable run,
+use the real-rollout profile benchmark:
 
-## Package map
+```bash
+uv run --extra neural python \
+  scripts/training/benchmark_neural_profiles.py \
+  --profiles small medium large \
+  --devices cpu mps \
+  --games-per-cell 20
+```
 
-- `config.py`: checkpointed encoder, model, and Stage 1 dimensions.
-- `encoding.py`: learner-relative observations and tensor batches.
-- `model.py`: snapshot, seat, history, trunk, policy, and value network.
-- `policy.py`: phase projection, legal masking, sampling, and greedy actions.
-- `advantages.py`: gamma-one generalized advantage estimation.
-- `seeding.py`: stable namespaced seeds and deterministic Torch setup.
-- `rollout.py`: fixed-opponent learner trajectory collection.
-- `ppo.py`: clipped PPO loss and persistent optimizer.
-- `checkpoint.py`: inference checkpoint validation and serialization.
-- `smoke.py`: deterministic end-to-end training proof.
-- `cli.py`: the `garboid-train smoke` command.
+It prints one JSON record per profile/device pair with parameter count,
+collection games/decisions per second, and one-epoch PPO time.
 
-## Current limitations
+### Run status
 
-Stage 1 is restricted to live-A, three players, a maximum bid of 100, and a
-five-card hand envelope. It does not yet include:
+The current code path is implemented and a 1,500-game small-profile smoke
+artifact exists in `artifacts/neural-self-play-smoke`: one update, 1,500 games,
+113,948 decisions, zero illegal actions/faults, and successful checkpoint and
+resume probes. That artifact was produced by an earlier repository commit, so
+it is evidence for the implemented path rather than a fresh verification of
+the current working tree.
 
-- resumable training artifacts;
-- held-out evaluation or confidence intervals;
-- charts B through E or varied rulesets;
-- a checkpoint opponent league;
-- behavior-cloning initialization;
-- a registered live `NeuralBot` wrapper.
+An earlier approximately ten-minute artifact also exists in
+`artifacts/neural-initial-10m`: 99 updates and 11,880 games. It used the former
+small model and former 8,192-decision target. It is not a run of the current
+`medium` `initial-10m.json`.
 
-The end-state design and staged roadmap are documented in
-[`docs/superpowers/specs/2026-07-28-neural-self-play-design.md`](../../../docs/superpowers/specs/2026-07-28-neural-self-play-design.md).
+The current medium ten-minute plan and current large eight-hour plan have not
+been started in the checked-in artifacts. No long-run strength claim is made.
+
+## Checkpoint, resume, inspect, and evaluate commands
+
+Every completed update atomically replaces:
+
+```text
+RUN/checkpoints/latest/
+  manifest.json
+  model.pt
+  optimizer.pt
+  rng.pt
+  metrics.json
+```
+
+The bundle includes the encoder/model/run configurations, repository commit,
+progress and per-cell counts, lineage, model and optimizer state, saved Torch
+RNG state, parameter digest, and checksums for every payload. Loading is
+fail-closed on extra/missing files, schema or tensor incompatibility,
+non-finite state, or checksum/digest mismatch.
+
+Inspect progress and the support contract:
+
+```bash
+uv run --extra neural garboid-train inspect \
+  --checkpoint artifacts/neural-10m/checkpoints/latest \
+  --format json
+```
+
+Resume at the next update boundary into a new output directory:
+
+```bash
+uv run --extra neural garboid-train resume \
+  --checkpoint artifacts/neural-10m/checkpoints/latest \
+  --output-dir artifacts/neural-10m-resumed \
+  --max-additional-updates 10
+```
+
+Omit `--max-additional-updates` to use the checkpointed run budget. A
+`--config` override may change compatible run controls, but it may not change
+the root seed or model profile.
+
+The CLI exposes an `evaluate` command:
+
+```bash
+uv run --extra neural garboid-train evaluate \
+  --checkpoint artifacts/neural-10m/checkpoints/latest \
+  --config configs/neural/initial-10m.json \
+  --output artifacts/neural-10m/evaluation.json
+```
+
+At present this command only validates/inspects the checkpoint and writes that
+metadata plus the evaluation-config path. It does **not** play evaluation
+games or produce a strength report.
+
+## Metrics and run files
+
+A normal run directory contains:
+
+```text
+RUN/
+  resolved-config.json
+  benchmark.json
+  metrics.jsonl
+  checkpoints/latest/...
+```
+
+- `resolved-config.json` is the complete post-calibration configuration.
+- `benchmark.json` contains calibration candidates and the selected device /
+  actor settings (or an empty result list when settings were explicit).
+- `metrics.jsonl` contains one JSON object per completed update.
+- `checkpoints/latest/metrics.json` duplicates the most recent update metrics
+  inside the checksummed checkpoint.
+
+Each update record includes duration and games-per-cell; collection totals,
+cell coverage, elapsed/inference/queue/IPC/worker time, games/second,
+decisions/second, and inference batch sizes; and PPO losses, entropy,
+approximate KL, clip fraction, gradient norms, optimizer-step counts, and
+transition counts.
+
+Value diagnostics compare rollout-time predictions with realized GAE return
+targets. They include mean prediction/target, MAE, RMSE, bias, explained
+variance, correlation, and ten size-balanced calibration buckets. The same
+metrics are emitted globally and by chart, player count, and early/middle/late
+game phase. `None` is used where variance or correlation is undefined; JSON
+never receives NaN sentinels.
+
+## Implemented versus scaffolded
+
+Implemented in the trainer:
+
+- balanced A-E / 3-5-player all-seat mirror self-play;
+- SDK `BatchSimEngine` vector collection;
+- frozen rollout snapshots and row-seeded legal action sampling;
+- single-process and multi-actor CPU collection;
+- CPU/CUDA/MPS discovery and throughput calibration;
+- packed PPO, value diagnostics, atomic latest checkpoints, resume, and
+  inspection.
+
+Present as configuration fields or helper modules, but not yet connected to
+the training loop:
+
+- paired strength evaluation, confidence intervals, and promotion;
+- heuristic/champion evaluation at start, interval, or end;
+- checkpoint-league mixing (`league_fraction` is currently ignored);
+- interval checkpoints and retention (`checkpoint_interval_seconds` and
+  `keep_periodic_checkpoints` are currently ignored);
+- periodic evaluation (`evaluation_interval_seconds`, `evaluate_at_start`, and
+  `evaluate_at_end` are currently ignored);
+- a CLI strength evaluator (the current `evaluate` command is metadata-only);
+- a registered deployable SDK `NeuralBot`.
+
+The orchestration currently writes `checkpoints/latest` after every update and
+always calls `plan_mirror_episodes`; checkpoint league fields remain empty.

@@ -8,6 +8,7 @@ import pytest
 
 pytest.importorskip("torch")
 
+from garboid_pocketrocks.knowledge import canonical_knowledge  # noqa: E402
 from garboid_pocketrocks.neural.config import training_encoder_config  # noqa: E402
 from garboid_pocketrocks.neural.planning import (  # noqa: E402
     SeatPolicy,
@@ -18,7 +19,6 @@ from garboid_pocketrocks.neural.run_config import (  # noqa: E402
     ParallelConfig,
     TrainingRunConfig,
 )
-from garboid_pocketrocks.knowledge import canonical_knowledge  # noqa: E402
 
 
 def test_training_encoder_covers_every_live_chart_and_player_count() -> None:
@@ -140,6 +140,8 @@ def test_mirror_plan_rejects_invalid_inputs(
 def test_run_config_round_trips_exact_json(tmp_path: Path) -> None:
     config = TrainingRunConfig(
         device="cpu",
+        deterministic_algorithms=False,
+        model_profile="large",
         learner_threads=4,
         games_per_cell=3,
         max_updates=2,
@@ -173,6 +175,8 @@ def test_run_config_round_trips_exact_json(tmp_path: Path) -> None:
         ),
         ({"games_per_cell": True}, "games_per_cell"),
         ({"device": "tpu"}, "device"),
+        ({"deterministic_algorithms": "yes"}, "deterministic_algorithms"),
+        ({"model_profile": "enormous"}, "model_profile"),
         ({"learner_threads": 0}, "learner_threads"),
         ({"league_fraction": 1.0}, "league_fraction"),
         ({"parallel": {"workers": 0}}, "workers"),

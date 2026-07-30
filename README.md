@@ -363,35 +363,73 @@ Terminal resource value supplies the remaining normalized final-money change.
 A configurable win bonus is divided among tied winners. Reward components are
 returned separately for auditing.
 
-## Stage 1 neural PPO smoke
+## Neural PPO self-play
 
-Torch remains an optional dependency. Install the locked neural environment
-and run the deterministic mechanics smoke with:
+Torch remains an optional dependency:
 
 ```bash
 uv sync --locked --extra neural
+```
+
+The self-play trainer uses the SDK `BatchSimEngine` across all 15 live
+chart/player-count cells: charts A through E with three, four, and five
+players. Every seat uses the frozen collection snapshot, while PPO updates the
+trainable model only after the balanced rollout is complete. The default smoke
+uses the measured eight-actor CPU configuration and runs one update with 100
+games per cell, exactly 1,500 complete games:
+
+```bash
 uv run --extra neural garboid-train smoke \
   --output-dir artifacts/neural-smoke
 ```
 
-The default runs exactly two PPO updates with 16 complete live-A, three-player
-games per update on CPU. The learner seat rotates while the other seats use
-the frozen balanced and passive heuristic bots. It verifies deterministic
-planning, public-history encoding, legal-action masking, gamma-one GAE, one
-epoch of clipped PPO, gradient clipping, and checkpoint replay. It is a
-mechanics test, not evidence of playing strength.
+For a measured development run of about ten minutes:
 
-The output contains `smoke-result.json` and an inference-only checkpoint:
-
-```text
-checkpoint/
-  manifest.json
-  model.pt
+```bash
+uv run --extra neural garboid-train train \
+  --config configs/neural/initial-10m.json \
+  --output-dir artifacts/neural-10m
 ```
 
-Stage 1 checkpoints intentionally omit optimizer and random-number-generator
-state, so runs cannot be resumed. Stage 1 also has no opponent league, varied
-ruleset curriculum, or registered live neural bot wrapper.
+After inspecting that result, the planned large-profile lineage is bounded to
+at most eight hours:
+
+```bash
+uv run --extra neural garboid-train train \
+  --config configs/neural/long-8h.json \
+  --output-dir artifacts/neural-8h
+```
+
+Each output directory must be new or empty. The smoke and longer profiles use
+accelerator calibration when `device` or worker count is `auto`: representative
+complete collection-plus-PPO paths are measured, then the fastest successful
+candidate is selected. The checkpoint-stable `small`, `medium`, and `large`
+profiles contain 125,620, 443,132, and 1,654,156 parameters respectively.
+CPU wins current end-to-end profile probes, although MPS halves the large
+profile's PPO time; calibration therefore remains preferable to assuming that
+an accelerator wins. The medium and large configs start separate lineages
+because model shape cannot change on resume. No eight-hour run is implied by
+these commands.
+
+Checkpoint bot IDs include both capacity and exact training age in games, such
+as `vector_ppo_medium_v1_g1500`.
+
+Durable checkpoints under `checkpoints/latest` include model, optimizer, RNG,
+progress, configuration, integrity digests, and the most recent metrics, so
+training can resume at an update boundary. `metrics.jsonl` records collection
+throughput plus PPO and value-head diagnostics. Value calibration reports MAE,
+RMSE, signed bias, explained variance, correlation, and size-balanced
+predicted-versus-realized return buckets, both globally and sliced by live
+chart, player count, and decision phase.
+
+The smoke verifies balanced cell coverage, legal actions, finite PPO/value
+metrics, checkpoint integrity, and resume loading. It is a systems check, not
+evidence of playing strength. See the
+[vector self-play benchmark](docs/benchmarks/2026-07-30-neural-self-play-vector.md)
+for current CPU, MPS, and raw SDK-engine measurements.
+
+The final local smoke completed at 158.76 games/s and 11,702 decisions/s. Its
+checkpoint identity is `vector_ppo_small_v1_g1500`.
 
 ## Quality checks
 

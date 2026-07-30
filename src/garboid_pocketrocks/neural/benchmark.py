@@ -2,26 +2,34 @@
 
 from __future__ import annotations
 
-import os
 import time
 from collections.abc import Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 
 import torch
 
 from garboid_pocketrocks.neural.config import (
-    stage1_model_config,
     training_encoder_config,
+    training_model_config,
 )
-from garboid_pocketrocks.neural.devices import available_devices, resolve_device
+from garboid_pocketrocks.neural.devices import (
+    available_devices,
+    resolve_device,
+    synchronize_device,
+)
 from garboid_pocketrocks.neural.model import NeuralPolicy
-from garboid_pocketrocks.neural.parallel import collect_self_play_parallel
 from garboid_pocketrocks.neural.planning import (
     SelfPlayEpisodePlan,
     plan_mirror_episodes,
 )
 from garboid_pocketrocks.neural.ppo import PPOTrainer
 from garboid_pocketrocks.neural.run_config import TrainingRunConfig
+from garboid_pocketrocks.neural.vector_collector import (
+    collect_self_play_vectorized,
+)
+from garboid_pocketrocks.neural.vector_parallel import (
+    collect_self_play_vectorized_parallel,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,7 +58,7 @@ class BenchmarkResult:
 def calibration_plans(
     *,
     root_seed: int,
-    games_per_cell: int = 2,
+    games_per_cell: int = 64,
 ) -> tuple[SelfPlayEpisodePlan, ...]:
     return plan_mirror_episodes(
         root_seed=root_seed,
@@ -58,6 +66,49 @@ def calibration_plans(
         games_per_cell=games_per_cell,
         policy_identity="current",
     )
+
+
+def calibration_candidates(
+    devices: Sequence[str],
+) -> tuple[BenchmarkCandidate, ...]:
+    """Return the bounded vector-engine/device calibration matrix."""
+
+    candidates: list[BenchmarkCandidate] = []
+    for device in devices:
+        if device == "cpu":
+            candidates.extend(
+                (
+                    BenchmarkCandidate(
+                        device="cpu",
+                        workers=1,
+                        active_games_per_worker=128,
+                        max_inference_batch=1024,
+                    ),
+                    BenchmarkCandidate(
+                        device="cpu",
+                        workers=8,
+                        active_games_per_worker=64,
+                        max_inference_batch=1024,
+                    ),
+                    BenchmarkCandidate(
+                        device="cpu",
+                        workers=8,
+                        active_games_per_worker=128,
+                        max_inference_batch=1024,
+                    ),
+                )
+            )
+        else:
+            candidates.extend(
+                BenchmarkCandidate(
+                    device=device,
+                    workers=1,
+                    active_games_per_worker=engine_batch_size,
+                    max_inference_batch=1024,
+                )
+                for engine_batch_size in (64, 128)
+            )
+    return tuple(candidates)
 
 
 def choose_candidate(
@@ -88,43 +139,55 @@ def calibrate(
         if config.device == "auto"
         else (resolve_device(config.device).type,)
     )
-    worker_values = tuple(
-        sorted({1, 2, 4, min(os.cpu_count() or 1, 8)})
-    )
-    candidates = tuple(
-        BenchmarkCandidate(device, workers, active, batch)
-        for device in devices
-        for workers in worker_values
-        for active in (2, 4)
-        for batch in (64, 256)
-    )
+    candidates = calibration_candidates(devices)
     results: list[BenchmarkResult] = []
+    ppo_seconds_by_device: dict[str, float] = {}
     encoder_config = training_encoder_config()
     for candidate in candidates:
         device = resolve_device(candidate.device)
         torch.manual_seed(config.root_seed)
         model = NeuralPolicy(
             encoder_config,
-            stage1_model_config(),
+            training_model_config(config.model_profile),
         ).to(device)
         try:
-            rollout, collection = collect_self_play_parallel(
-                {"current": model},
-                plans,
-                encoder_config=encoder_config,
-                reward_config=config.reward,
-                device=device,
-                workers=candidate.workers,
-                active_games_per_worker=candidate.active_games_per_worker,
-                max_inference_batch=candidate.max_inference_batch,
-                max_queue_delay_ms=config.parallel.max_queue_delay_ms,
-            )
-            ppo_started = time.perf_counter()
-            PPOTrainer(
-                model,
-                replace(config.ppo, epochs=1),
-            ).update(rollout, update_seed=config.root_seed)
-            ppo_seconds = time.perf_counter() - ppo_started
+            if candidate.workers == 1:
+                rollout, collection = collect_self_play_vectorized(
+                    {"current": model},
+                    plans,
+                    encoder_config=encoder_config,
+                    reward_config=config.reward,
+                    device=device,
+                    engine_batch_size=candidate.active_games_per_worker,
+                    max_inference_batch=candidate.max_inference_batch,
+                )
+            else:
+                rollout, collection = (
+                    collect_self_play_vectorized_parallel(
+                        {"current": model},
+                        plans,
+                        encoder_config=encoder_config,
+                        reward_config=config.reward,
+                        workers=candidate.workers,
+                        engine_batch_size=(
+                            candidate.active_games_per_worker
+                        ),
+                        max_inference_batch=(
+                            candidate.max_inference_batch
+                        ),
+                    )
+                )
+            ppo_seconds = ppo_seconds_by_device.get(candidate.device)
+            if ppo_seconds is None:
+                synchronize_device(device)
+                ppo_started = time.perf_counter()
+                PPOTrainer(
+                    model,
+                    config.ppo,
+                ).update(rollout, update_seed=config.root_seed)
+                synchronize_device(device)
+                ppo_seconds = time.perf_counter() - ppo_started
+                ppo_seconds_by_device[candidate.device] = ppo_seconds
         except (RuntimeError, ValueError):
             continue
         total = collection.elapsed_seconds + ppo_seconds

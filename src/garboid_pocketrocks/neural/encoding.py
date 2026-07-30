@@ -115,6 +115,16 @@ class NeuralObservationEncoder:
         """Validate and encode one learner decision without hidden game state."""
 
         self._validate(context, knowledge, history)
+        return self._encode_trusted(context, knowledge, history)
+
+    def _encode_trusted(
+        self,
+        context: DecisionContext,
+        knowledge: RulesetKnowledge,
+        history: PublicHistory,
+    ) -> NeuralObservation:
+        """Encode state already validated by an internal SDK simulation path."""
+
         action_mask = self._action_mask(context)
         player_count = context.player_count
         learner_seat = context.bot_seat

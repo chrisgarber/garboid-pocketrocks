@@ -45,6 +45,7 @@ def test_low_volume_train_resume_and_inspect(tmp_path: Path) -> None:
     assert first.completed_updates == 1
     assert first.completed_episodes == 15
     assert inspected["completed_episodes"] == 15
+    assert inspected["bot_id"] == "vector_ppo_small_v1_g15"
     assert resumed.completed_updates == 2
     assert resumed.completed_episodes == 30
     assert inspect_checkpoint(resumed.final_checkpoint)["learner_threads"] == 2
@@ -61,9 +62,15 @@ def test_committed_profiles_have_exact_wall_envelopes() -> None:
 
     assert smoke.games_per_cell == 100
     assert smoke.max_updates == 1
+    assert smoke.device == "cpu"
+    assert smoke.parallel.workers == 8
     assert initial.max_wall_seconds == 600.0
+    assert initial.model_profile == "medium"
+    assert initial.target_decisions_per_update == 131_072
     assert initial.checkpoint_interval_seconds == 120.0
     assert long.max_wall_seconds == 28_800.0
+    assert long.model_profile == "large"
+    assert long.target_decisions_per_update == 131_072
     assert long.checkpoint_interval_seconds == 900.0
     assert long.evaluation_interval_seconds == 1_800.0
     assert long.learner_threads == 4

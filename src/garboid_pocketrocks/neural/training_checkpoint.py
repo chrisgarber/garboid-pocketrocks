@@ -25,6 +25,7 @@ from garboid_pocketrocks.neural.checkpoint import (
     save_inference_checkpoint,
 )
 from garboid_pocketrocks.neural.config import (
+    ModelProfile,
     NeuralEncoderConfig,
     NeuralModelConfig,
 )
@@ -407,8 +408,12 @@ def _read_manifest(path: Path) -> TrainingCheckpointManifest:
 def _run_config(value: object) -> TrainingRunConfig:
     payload = _object(value, "run_config")
     expected = set(TrainingRunConfig().to_json_dict())
-    legacy_expected = expected - {"learner_threads"}
-    if set(payload) not in (expected, legacy_expected):
+    legacy_optional = {
+        "learner_threads",
+        "deterministic_algorithms",
+        "model_profile",
+    }
+    if not expected - legacy_optional <= set(payload) <= expected:
         raise TrainingCheckpointError("run_config fields do not match schema")
     parallel = _object(payload["parallel"], "parallel")
     ppo = _object(payload["ppo"], "ppo")
@@ -416,6 +421,13 @@ def _run_config(value: object) -> TrainingRunConfig:
     return TrainingRunConfig(
         root_seed=_integer(payload["root_seed"], "root_seed"),
         device=_device(payload["device"]),
+        deterministic_algorithms=_boolean(
+            payload.get("deterministic_algorithms", True),
+            "deterministic_algorithms",
+        ),
+        model_profile=_model_profile(
+            payload.get("model_profile", "small"),
+        ),
         learner_threads=_integer(
             payload.get("learner_threads", 1),
             "learner_threads",
@@ -638,6 +650,12 @@ def _boolean(value: object, name: str) -> bool:
 def _device(value: object) -> DeviceName:
     if value not in ("auto", "cpu", "cuda", "mps"):
         raise TrainingCheckpointError("device is invalid")
+    return value
+
+
+def _model_profile(value: object) -> ModelProfile:
+    if value not in ("small", "medium", "large"):
+        raise TrainingCheckpointError("model profile is invalid")
     return value
 
 

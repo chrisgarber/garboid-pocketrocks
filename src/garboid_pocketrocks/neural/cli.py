@@ -109,7 +109,7 @@ def _smoke(arguments: argparse.Namespace) -> int:
     resolved = replace(
         self_play_config,
         root_seed=arguments.seed,
-        device=arguments.device or "auto",
+        device=arguments.device or self_play_config.device,
         games_per_cell=arguments.games_per_cell
         or self_play_config.games_per_cell,
         parallel=replace(self_play_config.parallel, workers=workers),

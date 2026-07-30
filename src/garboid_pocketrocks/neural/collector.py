@@ -234,10 +234,16 @@ def _validate_collection(
             model_device = next(model.parameters()).device
         except StopIteration as error:
             raise CollectorError(f"policy {identity!r} has no parameters") from error
-        if model_device != device:
+        if not _devices_match(model_device, device):
             raise CollectorError(
                 f"policy {identity!r} is on {model_device}, expected {device}"
             )
+
+
+def _devices_match(left: torch.device, right: torch.device) -> bool:
+    """Treat an omitted accelerator index as the default device zero."""
+
+    return left.type == right.type and (left.index or 0) == (right.index or 0)
 
 
 def _freeze_policies(

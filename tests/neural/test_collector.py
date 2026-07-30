@@ -8,6 +8,7 @@ torch = pytest.importorskip("torch")
 
 from garboid_pocketrocks.neural.collector import (  # noqa: E402
     CollectorError,
+    _devices_match,
     collect_self_play,
 )
 from garboid_pocketrocks.neural.config import (  # noqa: E402
@@ -183,3 +184,9 @@ def test_collector_rejects_missing_and_incompatible_policies() -> None:
             active_games=1,
             max_inference_batch=8,
         )
+
+
+def test_unindexed_accelerator_device_matches_default_device_zero() -> None:
+    assert _devices_match(torch.device("mps"), torch.device("mps:0"))
+    assert _devices_match(torch.device("cuda"), torch.device("cuda:0"))
+    assert not _devices_match(torch.device("cuda:1"), torch.device("cuda:0"))

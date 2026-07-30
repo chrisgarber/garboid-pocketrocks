@@ -8,6 +8,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Literal, cast
 
+from garboid_pocketrocks.neural.config import ModelProfile
 from garboid_pocketrocks.neural.ppo import PPOConfig
 from garboid_pocketrocks.training.rewards import RewardConfig
 
@@ -20,8 +21,8 @@ class ParallelConfig:
     """Resolved or calibratable parallel collection settings."""
 
     workers: WorkerSetting = "auto"
-    active_games_per_worker: int = 8
-    max_inference_batch: int = 256
+    active_games_per_worker: int = 128
+    max_inference_batch: int = 1024
     max_queue_delay_ms: float = 1.0
 
     def __post_init__(self) -> None:
@@ -41,6 +42,8 @@ class TrainingRunConfig:
 
     root_seed: int = 42
     device: DeviceName = "auto"
+    deterministic_algorithms: bool = True
+    model_profile: ModelProfile = "small"
     learner_threads: int = 1
     games_per_cell: int | None = 100
     max_updates: int | None = None
@@ -61,6 +64,10 @@ class TrainingRunConfig:
         _require_int("root_seed", self.root_seed)
         if self.device not in ("auto", "cpu", "cuda", "mps"):
             raise ValueError("device must be auto, cpu, cuda, or mps")
+        if not isinstance(self.deterministic_algorithms, bool):
+            raise ValueError("deterministic_algorithms must be a boolean")
+        if self.model_profile not in ("small", "medium", "large"):
+            raise ValueError("model_profile must be small, medium, or large")
         _require_positive_int("learner_threads", self.learner_threads)
         if (self.games_per_cell is None) == (
             self.target_decisions_per_update is None
@@ -129,6 +136,8 @@ class TrainingRunConfig:
             {
                 "root_seed",
                 "device",
+                "deterministic_algorithms",
+                "model_profile",
                 "learner_threads",
                 "games_per_cell",
                 "max_updates",
@@ -154,6 +163,16 @@ class TrainingRunConfig:
                 "root_seed",
             ),
             device=_device_value(payload.get("device", defaults.device)),
+            deterministic_algorithms=_bool_value(
+                payload.get(
+                    "deterministic_algorithms",
+                    defaults.deterministic_algorithms,
+                ),
+                "deterministic_algorithms",
+            ),
+            model_profile=_model_profile_value(
+                payload.get("model_profile", defaults.model_profile)
+            ),
             learner_threads=_int_value(
                 payload.get("learner_threads", defaults.learner_threads),
                 "learner_threads",
@@ -413,6 +432,12 @@ def _read_reward(value: object) -> RewardConfig:
 def _device_value(value: object) -> DeviceName:
     if value not in ("auto", "cpu", "cuda", "mps"):
         raise ValueError("device must be auto, cpu, cuda, or mps")
+    return value
+
+
+def _model_profile_value(value: object) -> ModelProfile:
+    if value not in ("small", "medium", "large"):
+        raise ValueError("model_profile must be small, medium, or large")
     return value
 
 

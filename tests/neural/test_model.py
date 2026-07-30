@@ -10,6 +10,8 @@ torch = pytest.importorskip("torch")
 from garboid_pocketrocks.neural.config import (  # noqa: E402
     stage1_encoder_config,
     stage1_model_config,
+    training_encoder_config,
+    training_model_config,
 )
 from garboid_pocketrocks.neural.encoding import NeuralBatch  # noqa: E402
 from garboid_pocketrocks.neural.model import (  # noqa: E402
@@ -149,3 +151,19 @@ def test_forward_has_no_hidden_state_interface() -> None:
         "reveal_logits",
         "value",
     }
+
+
+def test_training_model_profiles_have_increasing_parameter_counts() -> None:
+    counts = [
+        sum(
+            parameter.numel()
+            for parameter in NeuralPolicy(
+                training_encoder_config(),
+                training_model_config(profile),
+            ).parameters()
+        )
+        for profile in ("small", "medium", "large")
+    ]
+
+    assert counts == sorted(counts)
+    assert len(set(counts)) == 3

@@ -28,6 +28,7 @@ from garboid_pocketrocks.neural.config import (  # noqa: E402
     NeuralModelConfig,
     stage1_encoder_config,
     stage1_model_config,
+    training_model_config,
 )
 from garboid_pocketrocks.neural.encoding import (  # noqa: E402
     NeuralEncodingError,
@@ -549,3 +550,15 @@ def test_batch_observations_stacks_every_field_on_requested_device() -> None:
     assert batch.action_mask.dtype == torch.bool
     assert batch.global_ids.device == torch.device("cpu")
     assert torch.equal(batch.global_ids[0], torch.as_tensor(observation.global_ids))
+
+
+def test_training_model_profiles_increase_capacity() -> None:
+    small = training_model_config("small")
+    medium = training_model_config("medium")
+    large = training_model_config("large")
+
+    assert small == stage1_model_config()
+    assert small.trunk_hidden_size < medium.trunk_hidden_size
+    assert medium.trunk_hidden_size < large.trunk_hidden_size
+    with pytest.raises(ValueError, match="model profile"):
+        training_model_config("enormous")  # type: ignore[arg-type]

@@ -19,15 +19,13 @@ from garboid_pocketrocks.neural.benchmark import (
     calibrate,
     calibration_plans,
 )
-from garboid_pocketrocks.neural.collector import (
-    CollectorMetrics,
-    collect_self_play,
-)
+from garboid_pocketrocks.neural.collector import CollectorMetrics
 from garboid_pocketrocks.neural.config import (
-    stage1_model_config,
     training_encoder_config,
+    training_model_config,
 )
 from garboid_pocketrocks.neural.devices import resolve_device
+from garboid_pocketrocks.neural.identity import trained_neural_bot_id
 from garboid_pocketrocks.neural.model import NeuralPolicy
 from garboid_pocketrocks.neural.parallel import collect_self_play_parallel
 from garboid_pocketrocks.neural.planning import (
@@ -42,7 +40,7 @@ from garboid_pocketrocks.neural.run_config import (
     TrainingRunConfig,
 )
 from garboid_pocketrocks.neural.seeding import (
-    configure_deterministic_torch,
+    configure_torch_runtime,
     derive_seed,
 )
 from garboid_pocketrocks.neural.training_checkpoint import (
@@ -51,6 +49,13 @@ from garboid_pocketrocks.neural.training_checkpoint import (
     load_training_checkpoint,
     save_training_checkpoint,
 )
+from garboid_pocketrocks.neural.vector_collector import (
+    collect_self_play_vectorized,
+)
+from garboid_pocketrocks.neural.vector_parallel import (
+    collect_self_play_vectorized_parallel,
+)
+from garboid_pocketrocks.neural.vector_pool import VectorActorPool
 
 
 class TrainerError(ValueError):
@@ -74,7 +79,10 @@ def train(
     """Start a new self-play lineage and stop only at an update boundary."""
 
     run_dir = _prepare_run_dir(output_dir)
-    configure_deterministic_torch(config.root_seed)
+    configure_torch_runtime(
+        config.root_seed,
+        deterministic_algorithms=config.deterministic_algorithms,
+    )
     torch.set_num_threads(config.learner_threads)
     candidate, benchmarks = _resolve_candidate(config)
     resolved = _resolved_config(config, candidate)
@@ -90,7 +98,7 @@ def train(
     torch.manual_seed(derive_seed(config.root_seed, "model"))
     model = NeuralPolicy(
         training_encoder_config(),
-        stage1_model_config(),
+        training_model_config(config.model_profile),
     ).to(device)
     trainer = PPOTrainer(model, resolved.ppo)
     selected_result = next(
@@ -135,10 +143,16 @@ def resume(
         checkpoint,
         device=torch.device("cpu"),
     )
-    source_config = loaded.manifest.run_config
-    config = config_override or source_config
-    if config.root_seed != source_config.root_seed:
+    checkpoint_config = loaded.manifest.run_config
+    config = config_override or checkpoint_config
+    if config.root_seed != checkpoint_config.root_seed:
         raise TrainerError("resume config cannot change the root seed")
+    if training_model_config(config.model_profile) != loaded.model.model_config:
+        raise TrainerError("resume config cannot change the model profile")
+    configure_torch_runtime(
+        config.root_seed,
+        deterministic_algorithms=config.deterministic_algorithms,
+    )
     benchmarks: tuple[BenchmarkResult, ...] = ()
     if config.device == "auto" or config.parallel.workers == "auto":
         candidate, benchmarks = _resolve_candidate(config)
@@ -196,6 +210,11 @@ def inspect_checkpoint(checkpoint: Path) -> dict[str, object]:
     )
     manifest = loaded.manifest
     return {
+        "bot_id": manifest.champion_identity
+        or trained_neural_bot_id(
+            manifest.run_config.model_profile,
+            manifest.progress.completed_episodes,
+        ),
         "repository_commit": manifest.repository_commit,
         "next_update_index": manifest.progress.next_update_index,
         "completed_updates": manifest.progress.next_update_index,
@@ -203,6 +222,7 @@ def inspect_checkpoint(checkpoint: Path) -> dict[str, object]:
         "completed_decisions": manifest.progress.completed_decisions,
         "cell_games": manifest.progress.cell_games,
         "device": manifest.run_config.device,
+        "model_profile": manifest.run_config.model_profile,
         "learner_threads": manifest.run_config.learner_threads,
         "supported_ruleset_names": manifest.encoder_config.supported_ruleset_names,
         "supported_player_counts": manifest.encoder_config.supported_player_counts,
@@ -221,6 +241,49 @@ def _run_updates(
     lineage: tuple[str, ...],
     max_updates_this_run: int | None,
     games_per_cell: int,
+) -> TrainingRunResult:
+    vector_pool: VectorActorPool | None = None
+    workers = config.parallel.workers
+    if (
+        next(model.parameters()).device.type == "cpu"
+        and isinstance(workers, int)
+        and workers > 1
+    ):
+        vector_pool = VectorActorPool(
+            encoder_config=model.encoder_config,
+            reward_config=config.reward,
+            workers=workers,
+            engine_batch_size=config.parallel.active_games_per_worker,
+            max_inference_batch=config.parallel.max_inference_batch,
+        )
+    try:
+        return _run_updates_with_pool(
+            config,
+            run_dir,
+            model=model,
+            trainer=trainer,
+            initial_progress=initial_progress,
+            lineage=lineage,
+            max_updates_this_run=max_updates_this_run,
+            games_per_cell=games_per_cell,
+            vector_pool=vector_pool,
+        )
+    finally:
+        if vector_pool is not None:
+            vector_pool.close()
+
+
+def _run_updates_with_pool(
+    config: TrainingRunConfig,
+    run_dir: Path,
+    *,
+    model: NeuralPolicy,
+    trainer: PPOTrainer,
+    initial_progress: TrainingProgress,
+    lineage: tuple[str, ...],
+    max_updates_this_run: int | None,
+    games_per_cell: int,
+    vector_pool: VectorActorPool | None,
 ) -> TrainingRunResult:
     started = time.perf_counter()
     update_index = initial_progress.next_update_index
@@ -258,7 +321,12 @@ def _run_updates(
         ).to(trainer.device)
         snapshot.load_state_dict(model.state_dict())
         snapshot.eval()
-        collection = _collect(config, snapshot, plans)
+        collection = _collect(
+            config,
+            snapshot,
+            plans,
+            vector_pool=vector_pool,
+        )
         ppo = trainer.update(
             collection[0],
             update_seed=derive_seed(
@@ -303,7 +371,10 @@ def _run_updates(
                 run_config=config,
                 progress=progress,
                 lineage=lineage,
-                champion_identity=None,
+                champion_identity=trained_neural_bot_id(
+                    config.model_profile,
+                    completed_episodes,
+                ),
                 league_identities=(),
             ),
             generator_states={"torch": torch.get_rng_state()},
@@ -326,22 +397,36 @@ def _collect(
     config: TrainingRunConfig,
     model: NeuralPolicy,
     plans: tuple[SelfPlayEpisodePlan, ...],
+    *,
+    vector_pool: VectorActorPool | None = None,
 ) -> tuple[RolloutBatch, CollectorMetrics]:
     # Kept in one function so all training updates share the same selection rule.
     device = next(model.parameters()).device
     workers = config.parallel.workers
+    if vector_pool is not None:
+        return vector_pool.collect({"current": model}, plans)
     if workers == 1:
-        return collect_self_play(
+        return collect_self_play_vectorized(
             {"current": model},
             plans,
             encoder_config=model.encoder_config,
             reward_config=config.reward,
             device=device,
-            active_games=config.parallel.active_games_per_worker,
+            engine_batch_size=config.parallel.active_games_per_worker,
             max_inference_batch=config.parallel.max_inference_batch,
         )
     if workers == "auto":
         raise TrainerError("training workers must be resolved before collection")
+    if device.type == "cpu":
+        return collect_self_play_vectorized_parallel(
+            {"current": model},
+            plans,
+            encoder_config=model.encoder_config,
+            reward_config=config.reward,
+            workers=workers,
+            engine_batch_size=config.parallel.active_games_per_worker,
+            max_inference_batch=config.parallel.max_inference_batch,
+        )
     return collect_self_play_parallel(
         {"current": model},
         plans,
