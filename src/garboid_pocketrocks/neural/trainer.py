@@ -75,6 +75,7 @@ def train(
 
     run_dir = _prepare_run_dir(output_dir)
     configure_deterministic_torch(config.root_seed)
+    torch.set_num_threads(config.learner_threads)
     candidate, benchmarks = _resolve_candidate(config)
     resolved = _resolved_config(config, candidate)
     _write_json(run_dir / "resolved-config.json", resolved.to_json_dict())
@@ -125,6 +126,7 @@ def resume(
     output_dir: Path,
     *,
     max_additional_updates: int | None = None,
+    config_override: TrainingRunConfig | None = None,
 ) -> TrainingRunResult:
     """Resume exact model and optimizer state into a new run directory."""
 
@@ -133,14 +135,25 @@ def resume(
         checkpoint,
         device=torch.device("cpu"),
     )
-    config = loaded.manifest.run_config
+    source_config = loaded.manifest.run_config
+    config = config_override or source_config
+    if config.root_seed != source_config.root_seed:
+        raise TrainerError("resume config cannot change the root seed")
+    benchmarks: tuple[BenchmarkResult, ...] = ()
+    if config.device == "auto" or config.parallel.workers == "auto":
+        candidate, benchmarks = _resolve_candidate(config)
+        config = _resolved_config(config, candidate)
+    torch.set_num_threads(config.learner_threads)
     device = resolve_device(config.device)
     if device.type != "cpu":
         loaded = load_training_checkpoint(checkpoint, device=device)
     _write_json(run_dir / "resolved-config.json", config.to_json_dict())
     _write_json(
         run_dir / "benchmark.json",
-        {"resumed_from": str(checkpoint.resolve())},
+        {
+            "resumed_from": str(checkpoint.resolve()),
+            "results": [asdict(result) for result in benchmarks],
+        },
     )
     trainer = PPOTrainer(loaded.model, config.ppo)
     trainer.optimizer = loaded.optimizer
@@ -190,6 +203,7 @@ def inspect_checkpoint(checkpoint: Path) -> dict[str, object]:
         "completed_decisions": manifest.progress.completed_decisions,
         "cell_games": manifest.progress.cell_games,
         "device": manifest.run_config.device,
+        "learner_threads": manifest.run_config.learner_threads,
         "supported_ruleset_names": manifest.encoder_config.supported_ruleset_names,
         "supported_player_counts": manifest.encoder_config.supported_player_counts,
         "parameter_digest": manifest.parameter_digest,

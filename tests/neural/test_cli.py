@@ -19,6 +19,14 @@ def test_cli_exposes_all_training_commands(
         assert command in output
 
 
+def test_resume_help_accepts_a_long_run_config(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert main(["resume", "--help"]) == 0
+
+    assert "--config" in capsys.readouterr().out
+
+
 def test_low_volume_smoke_cli_writes_reloadable_checkpoint(tmp_path: Path) -> None:
     output_dir = tmp_path / "run"
 

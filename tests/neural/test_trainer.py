@@ -35,6 +35,11 @@ def test_low_volume_train_resume_and_inspect(tmp_path: Path) -> None:
         first.final_checkpoint,
         tmp_path / "resumed",
         max_additional_updates=1,
+        config_override=replace(
+            config,
+            learner_threads=2,
+            max_updates=None,
+        ),
     )
 
     assert first.completed_updates == 1
@@ -42,6 +47,7 @@ def test_low_volume_train_resume_and_inspect(tmp_path: Path) -> None:
     assert inspected["completed_episodes"] == 15
     assert resumed.completed_updates == 2
     assert resumed.completed_episodes == 30
+    assert inspect_checkpoint(resumed.final_checkpoint)["learner_threads"] == 2
     assert (first.run_dir / "metrics.jsonl").is_file()
     assert (first.run_dir / "resolved-config.json").is_file()
 
@@ -60,6 +66,7 @@ def test_committed_profiles_have_exact_wall_envelopes() -> None:
     assert long.max_wall_seconds == 28_800.0
     assert long.checkpoint_interval_seconds == 900.0
     assert long.evaluation_interval_seconds == 1_800.0
+    assert long.learner_threads == 4
 
 
 def test_target_decisions_use_measured_decisions_per_game() -> None:

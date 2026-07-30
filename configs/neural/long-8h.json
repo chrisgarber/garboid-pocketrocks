@@ -6,6 +6,7 @@
   "evaluation_interval_seconds": 1800.0,
   "games_per_cell": null,
   "league_fraction": 0.2,
+  "learner_threads": 4,
   "max_wall_seconds": 28800.0,
   "parallel": {
     "active_games_per_worker": 8,

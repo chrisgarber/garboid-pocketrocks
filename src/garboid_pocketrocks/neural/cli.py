@@ -50,6 +50,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                 arguments.checkpoint,
                 arguments.output_dir,
                 max_additional_updates=arguments.max_additional_updates,
+                config_override=(
+                    None
+                    if arguments.config is None
+                    else TrainingRunConfig.from_json(arguments.config)
+                ),
             )
             print(
                 f"resumed through update {result.completed_updates}; "
@@ -152,6 +157,7 @@ def _parser() -> argparse.ArgumentParser:
     resume_parser = commands.add_parser("resume", help="resume a training checkpoint")
     resume_parser.add_argument("--checkpoint", type=Path, required=True)
     resume_parser.add_argument("--output-dir", type=Path, required=True)
+    resume_parser.add_argument("--config", type=Path)
     resume_parser.add_argument(
         "--max-additional-updates",
         type=_positive_int,

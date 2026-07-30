@@ -41,6 +41,7 @@ class TrainingRunConfig:
 
     root_seed: int = 42
     device: DeviceName = "auto"
+    learner_threads: int = 1
     games_per_cell: int | None = 100
     max_updates: int | None = None
     max_wall_seconds: float | None = None
@@ -60,6 +61,7 @@ class TrainingRunConfig:
         _require_int("root_seed", self.root_seed)
         if self.device not in ("auto", "cpu", "cuda", "mps"):
             raise ValueError("device must be auto, cpu, cuda, or mps")
+        _require_positive_int("learner_threads", self.learner_threads)
         if (self.games_per_cell is None) == (
             self.target_decisions_per_update is None
         ):
@@ -127,6 +129,7 @@ class TrainingRunConfig:
             {
                 "root_seed",
                 "device",
+                "learner_threads",
                 "games_per_cell",
                 "max_updates",
                 "max_wall_seconds",
@@ -151,6 +154,10 @@ class TrainingRunConfig:
                 "root_seed",
             ),
             device=_device_value(payload.get("device", defaults.device)),
+            learner_threads=_int_value(
+                payload.get("learner_threads", defaults.learner_threads),
+                "learner_threads",
+            ),
             games_per_cell=_optional_int_value(
                 payload.get("games_per_cell", defaults.games_per_cell),
                 "games_per_cell",

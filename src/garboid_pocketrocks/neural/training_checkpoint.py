@@ -407,13 +407,19 @@ def _read_manifest(path: Path) -> TrainingCheckpointManifest:
 def _run_config(value: object) -> TrainingRunConfig:
     payload = _object(value, "run_config")
     expected = set(TrainingRunConfig().to_json_dict())
-    _exact(payload, expected, "run_config")
+    legacy_expected = expected - {"learner_threads"}
+    if set(payload) not in (expected, legacy_expected):
+        raise TrainingCheckpointError("run_config fields do not match schema")
     parallel = _object(payload["parallel"], "parallel")
     ppo = _object(payload["ppo"], "ppo")
     reward = _object(payload["reward"], "reward")
     return TrainingRunConfig(
         root_seed=_integer(payload["root_seed"], "root_seed"),
         device=_device(payload["device"]),
+        learner_threads=_integer(
+            payload.get("learner_threads", 1),
+            "learner_threads",
+        ),
         games_per_cell=_optional_integer(payload["games_per_cell"], "games_per_cell"),
         max_updates=_optional_integer(payload["max_updates"], "max_updates"),
         max_wall_seconds=_optional_number(

@@ -137,6 +137,7 @@ def test_mirror_plan_rejects_invalid_inputs(
 def test_run_config_round_trips_exact_json(tmp_path: Path) -> None:
     config = TrainingRunConfig(
         device="cpu",
+        learner_threads=4,
         games_per_cell=3,
         max_updates=2,
         parallel=ParallelConfig(
@@ -169,6 +170,7 @@ def test_run_config_round_trips_exact_json(tmp_path: Path) -> None:
         ),
         ({"games_per_cell": True}, "games_per_cell"),
         ({"device": "tpu"}, "device"),
+        ({"learner_threads": 0}, "learner_threads"),
         ({"league_fraction": 1.0}, "league_fraction"),
         ({"parallel": {"workers": 0}}, "workers"),
         ({"parallel": {"extra": 1}}, "unknown"),
