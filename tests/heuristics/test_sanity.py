@@ -7,6 +7,7 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 from pocketrocks import ActionId, BotDecision, DecisionContext
+from pocketrocks.sim.constants import VALUE_CHARTS
 
 from garboid_pocketrocks.heuristics.profiles import (
     AGGRESSIVE_PROFILE,
@@ -18,7 +19,8 @@ from garboid_pocketrocks.heuristics.valuation import (
     BidEvaluation,
     HeuristicValuator,
 )
-from garboid_pocketrocks.rules import VALUE_CHARTS, live_ruleset
+from garboid_pocketrocks.knowledge import canonical_knowledge
+from garboid_pocketrocks.rules import live_ruleset
 from garboid_pocketrocks.simulator.context import build_decision_batch
 from garboid_pocketrocks.simulator.engine import GameEngine
 from garboid_pocketrocks.simulator.model import Phase
@@ -68,7 +70,7 @@ def _play_and_check_every_bidding_context(
     seed: int,
 ) -> None:
     ruleset = live_ruleset(chart)
-    knowledge = ruleset.knowledge(player_count)
+    knowledge = canonical_knowledge(player_count, value_chart=chart)
     transition = GameEngine.start(ruleset, player_count=player_count, seed=seed)
     bidding_context_count = 0
 
@@ -111,7 +113,7 @@ def test_unobservable_deck_order_cannot_change_a_public_context_valuation(
     profile: HeuristicProfile,
 ) -> None:
     ruleset = live_ruleset("E")
-    knowledge = ruleset.knowledge(4)
+    knowledge = canonical_knowledge(4, value_chart="E")
     state = GameEngine.start(ruleset, player_count=4, seed=104_729).state
     altered_state = replace(state, resource_deck=tuple(reversed(state.resource_deck)))
 
@@ -135,7 +137,7 @@ def test_moving_an_own_card_from_hand_to_public_reveal_preserves_resource_belief
     profile: HeuristicProfile,
 ) -> None:
     ruleset = live_ruleset(chart)
-    knowledge = ruleset.knowledge(player_count)
+    knowledge = canonical_knowledge(player_count, value_chart=chart)
     transition = GameEngine.start(
         ruleset,
         player_count=player_count,

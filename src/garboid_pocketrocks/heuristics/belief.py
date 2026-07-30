@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pocketrocks import ActionId, DecisionContext, Suit
 
 from garboid_pocketrocks.heuristics.errors import HeuristicInputError
-from garboid_pocketrocks.rules import RulesetKnowledge
+from garboid_pocketrocks.knowledge import RulesetKnowledge
 
 _SUIT_COUNT = len(Suit)
 _CHART_BUCKET_COUNT = 6

@@ -9,6 +9,7 @@ from garboid_pocketrocks.adapters.public_history import (
     PublicHistoryCompatibilityError,
     PublicInformationRevealed,
     PublicTurnOpened,
+    public_history_from_sdk_events,
     public_history_from_sdk_frame,
 )
 from garboid_pocketrocks.adapters.simulator_history import (
@@ -27,5 +28,6 @@ __all__ = [
     "PublicTurnOpened",
     "SimulatorHistoryError",
     "SimulatorPublicHistoryAdapter",
+    "public_history_from_sdk_events",
     "public_history_from_sdk_frame",
 ]

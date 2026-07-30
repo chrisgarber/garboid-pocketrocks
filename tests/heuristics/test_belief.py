@@ -9,10 +9,12 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 from pocketrocks import ActionId, BotDecision, DecisionContext, Suit
+from pocketrocks.sim.constants import VALUE_CHARTS
 
 from garboid_pocketrocks.heuristics.belief import build_belief
 from garboid_pocketrocks.heuristics.errors import HeuristicInputError
-from garboid_pocketrocks.rules import VALUE_CHARTS, RulesetKnowledge, live_ruleset
+from garboid_pocketrocks.knowledge import RulesetKnowledge, canonical_knowledge
+from garboid_pocketrocks.rules import live_ruleset
 from garboid_pocketrocks.simulator.engine import GameEngine
 
 from .helpers import make_context, make_knowledge
@@ -346,7 +348,7 @@ def test_engine_generated_contexts_preserve_exact_belief_properties(
     decision_seed: int,
 ) -> None:
     ruleset = live_ruleset(chart_name)
-    knowledge = ruleset.knowledge(player_count)
+    knowledge = canonical_knowledge(player_count, value_chart=chart_name)
     transition = GameEngine.start(ruleset, player_count=player_count, seed=game_seed)
     decision_rng = random.Random(decision_seed)
     total_biddable = sum(knowledge.resource_counts) - (

@@ -13,7 +13,7 @@ from garboid_pocketrocks.heuristics.reveals import (
     choose_reveal,
 )
 from garboid_pocketrocks.heuristics.valuation import HeuristicValuator
-from garboid_pocketrocks.rules import RulesetKnowledge
+from garboid_pocketrocks.knowledge import RulesetKnowledge
 
 from .helpers import make_context, make_knowledge
 

@@ -11,7 +11,7 @@ from garboid_pocketrocks.heuristics.errors import HeuristicInputError
 from garboid_pocketrocks.heuristics.objectives import evaluate_objectives
 from garboid_pocketrocks.heuristics.profiles import HeuristicProfile
 from garboid_pocketrocks.heuristics.reveals import choose_reveal
-from garboid_pocketrocks.rules import RulesetKnowledge
+from garboid_pocketrocks.knowledge import RulesetKnowledge
 
 _AUCTIONS = (ActionId.AUCTION1, ActionId.AUCTION2)
 _SUIT_COUNT = 5

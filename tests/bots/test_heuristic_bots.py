@@ -6,6 +6,7 @@ from dataclasses import replace
 
 import pytest
 from pocketrocks import OBJECTIVES, ActionId, BotDecision, DecisionContext, Suit
+from pocketrocks.sim.constants import VALUE_CHARTS
 
 from garboid_pocketrocks.bots import (
     AggressiveHeuristicBot,
@@ -42,7 +43,12 @@ from garboid_pocketrocks.heuristics.profiles import (
     HEURISTIC_V2,
 )
 from garboid_pocketrocks.heuristics.valuation import HeuristicValuator
-from garboid_pocketrocks.rules import LIVE_RULESET, VALUE_CHARTS, RulesetKnowledge
+from garboid_pocketrocks.knowledge import (
+    RulesetKnowledge,
+    canonical_knowledge,
+    knowledge_for_context,
+)
+from garboid_pocketrocks.rules import LIVE_RULESET
 from garboid_pocketrocks.simulator.monte_carlo import (
     MonteCarloConfig,
     MonteCarloRunner,
@@ -290,9 +296,9 @@ def test_live_wrapper_reconciles_contextual_public_rules(
         legal_max_amount=30,
         revealable_count=5,
     )
-    contextual_knowledge = replace(
-        LIVE_RULESET.knowledge(context.player_count),
-        value_chart=chart,
+    contextual_knowledge = canonical_knowledge(
+        context.player_count,
+        value_chart=chart_name,
     )
     expected = brain_class().choose_decision(context, contextual_knowledge)
     bot = bot_class(
@@ -308,14 +314,7 @@ def test_live_wrapper_reconciles_contextual_public_rules(
     assert actual == expected
 
 
-def test_contextual_knowledge_keeps_configured_hidden_and_deck_priors() -> None:
-    configured_ruleset = replace(
-        LIVE_RULESET,
-        name="custom-priors",
-        resource_counts=(7, 7, 7, 7, 7),
-        action_counts=(13, 9, 3, 2, 3, 2),
-        objective_pool=(1, 2, 3, 4, 5),
-    )
+def test_contextual_knowledge_uses_sdk_canonical_hidden_and_deck_priors() -> None:
     context = replace(
         make_context(
             action_id=ActionId.AUCTION2,
@@ -343,22 +342,21 @@ def test_contextual_knowledge_keeps_configured_hidden_and_deck_priors() -> None:
         api_key="test-key",
         server_url="ws://example.test",
         reconnect=False,
-        ruleset=configured_ruleset,
     )
 
     knowledge = bot._knowledge_for_context(context)
 
-    assert knowledge.name == "custom-priors"
+    assert knowledge == knowledge_for_context(context)
+    assert knowledge.name == "live-E"
     assert knowledge.player_count == 4
     assert knowledge.starting_cash == 27
     assert knowledge.private_cards_per_player == 4
     assert knowledge.value_chart == VALUE_CHARTS["E"]
     assert knowledge.active_objective_count == 2
     assert knowledge.objectives_enabled
-    assert knowledge.resource_counts == configured_ruleset.resource_counts
-    assert knowledge.action_counts == configured_ruleset.action_counts
-    assert knowledge.objective_pool == configured_ruleset.objective_pool
-    assert not set(context.objective_ids) <= set(knowledge.objective_pool)
+    assert knowledge.resource_counts == (6, 6, 6, 6, 6)
+    assert knowledge.action_counts == (12, 8, 3, 2, 3, 2)
+    assert knowledge.objective_pool == tuple(sorted(OBJECTIVES))
 
     disabled_knowledge = bot._knowledge_for_context(replace(context, objective_ids=()))
     assert disabled_knowledge.active_objective_count == 0
