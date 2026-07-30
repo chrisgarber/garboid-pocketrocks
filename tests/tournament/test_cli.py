@@ -35,9 +35,7 @@ def test_bot_filters_include_then_exclude_registered_names() -> None:
 
 def test_bot_filters_use_curated_defaults_when_include_is_omitted() -> None:
     defaults = tuple(
-        spec
-        for name, spec in BOT_SPECS_BY_NAME.items()
-        if name == "random" or "-v" in name
+        spec for name, spec in BOT_SPECS_BY_NAME.items() if name == "random" or "-v" in name
     )
 
     selected = _resolve_bot_specs(

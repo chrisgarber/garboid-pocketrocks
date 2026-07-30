@@ -73,9 +73,7 @@ def run_batch_matches(jobs: Sequence[BatchGameJob]) -> tuple[MatchResult, ...]:
     brains: list[list[BotBrain | None]] = []
     faults: list[list[BotFault]] = [[] for _ in jobs]
     knowledge: list[RulesetKnowledge] = []
-    decisions: list[list[tuple[int, tuple[tuple[int, BotDecision], ...]]]] = [
-        [] for _ in jobs
-    ]
+    decisions: list[list[tuple[int, tuple[tuple[int, BotDecision], ...]]]] = [[] for _ in jobs]
     turns: list[list[TurnRecord]] = [[] for _ in jobs]
     step_indices = [0] * len(jobs)
 

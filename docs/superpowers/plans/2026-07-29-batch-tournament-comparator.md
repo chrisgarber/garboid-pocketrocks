@@ -92,9 +92,8 @@ For each choice set calculate:
 ```python
 log_weights = choice_set.feature_matrix @ parameters
 probabilities = np.exp(log_weights - logsumexp(log_weights))
-value += (
-    choice_set.total_weight * float(logsumexp(log_weights))
-    - float(choice_set.chosen_weights @ log_weights)
+value += choice_set.total_weight * float(logsumexp(log_weights)) - float(
+    choice_set.chosen_weights @ log_weights
 )
 gradient += (
     choice_set.total_weight * (probabilities @ choice_set.feature_matrix)
@@ -341,12 +340,15 @@ Plan at least 60 tournament jobs and assert:
 ```python
 scalar = MonteCarloRunner.run_jobs(config, jobs, workers=1, batch_size=None)
 for batch_size in (1, 7, 32):
-    assert MonteCarloRunner.run_jobs(
-        config,
-        jobs,
-        workers=1,
-        batch_size=batch_size,
-    ) == scalar
+    assert (
+        MonteCarloRunner.run_jobs(
+            config,
+            jobs,
+            workers=1,
+            batch_size=batch_size,
+        )
+        == scalar
+    )
 ```
 
 Also verify `capture_replays=True` returns exact scalar replays even when a

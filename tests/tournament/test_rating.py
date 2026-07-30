@@ -48,11 +48,7 @@ def _reference_negative_log_likelihood(
             )
             log_weights = np.asarray(
                 [
-                    (
-                        0.0
-                        if len(subset) == 1
-                        else float(parameters[tie_offset + len(subset) - 2])
-                    )
+                    (0.0 if len(subset) == 1 else float(parameters[tie_offset + len(subset) - 2]))
                     + sum(log_worth(index) for index in subset) / len(subset)
                     for subset in candidates
                 ],

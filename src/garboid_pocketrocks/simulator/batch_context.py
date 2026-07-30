@@ -44,9 +44,7 @@ def build_batch_context(
         starting_cash=STARTING_CASH[engine.player_count],
         value_chart=tuple(int(value) for value in engine.value_charts[row]),
         objective_ids=tuple(
-            int(objective_id)
-            for objective_id in engine.objective_ids[row]
-            if objective_id > 0
+            int(objective_id) for objective_id in engine.objective_ids[row] if objective_id > 0
         ),
         current_action_id=action_id,
         current_resource_ids=resource_ids,

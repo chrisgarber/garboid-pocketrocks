@@ -256,9 +256,8 @@ def _negative_log_likelihood(
         log_weights = choice_set.feature_matrix @ parameters
         log_normalizer = float(logsumexp(log_weights))
         probabilities = np.exp(log_weights - log_normalizer)
-        value += (
-            choice_set.total_weight * log_normalizer
-            - float(choice_set.chosen_weights @ log_weights)
+        value += choice_set.total_weight * log_normalizer - float(
+            choice_set.chosen_weights @ log_weights
         )
         gradient += (
             choice_set.total_weight * (probabilities @ choice_set.feature_matrix)

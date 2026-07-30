@@ -119,9 +119,7 @@ def test_run_jobs_executes_a_valid_explicit_plan() -> None:
 
 def test_batched_run_jobs_matches_scalar_for_mixed_sdk_variants() -> None:
     config = MonteCarloConfig(
-        bot_specs=tuple(
-            _random_spec(f"random-{index}", f"random-{index}") for index in range(5)
-        ),
+        bot_specs=tuple(_random_spec(f"random-{index}", f"random-{index}") for index in range(5)),
         games=30,
         player_counts=(3, 4, 5),
         value_charts=("A", "E"),
