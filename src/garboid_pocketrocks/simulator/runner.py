@@ -8,7 +8,8 @@ from enum import StrEnum
 from pocketrocks import BotDecision, DecisionContext
 from pocketrocks.sim import TurnRecord
 
-from garboid_pocketrocks.bots.base import BotBrain, BotSpec
+from garboid_pocketrocks.adapters.public_history import public_history_from_sdk_events
+from garboid_pocketrocks.bots.base import BotBrain, BotSpec, HistoryAwareBotBrain
 from garboid_pocketrocks.knowledge import canonical_knowledge
 from garboid_pocketrocks.simulator.replay import MatchReplay
 from garboid_pocketrocks.simulator.session import SdkGameSession, SessionResult
@@ -84,13 +85,21 @@ class MatchRunner:
         step_index = 0
         while not session.terminated:
             decisions_by_seat: dict[int, BotDecision] = {}
+            history = public_history_from_sdk_events(session.events)
             for seat, context in session.pending.contexts:
                 brain = brains[seat]
                 if brain is None:
                     decision = _fallback(context)
                 else:
                     try:
-                        decision = brain.choose_decision(context, knowledge)
+                        if isinstance(brain, HistoryAwareBotBrain):
+                            decision = brain.choose_decision_with_history(
+                                context,
+                                knowledge,
+                                history,
+                            )
+                        else:
+                            decision = brain.choose_decision(context, knowledge)
                         context.validate(decision)
                     except Exception as error:
                         if fault_mode is FaultMode.RAISE:
