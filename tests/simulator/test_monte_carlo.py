@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+from dataclasses import replace
 
 import pytest
 from pocketrocks import BotDecision, DecisionContext
@@ -51,6 +52,39 @@ def test_worker_count_does_not_change_monte_carlo_result() -> None:
         config,
         workers=2,
     )
+
+
+def test_run_jobs_executes_a_valid_explicit_plan() -> None:
+    config = _small_random_config()
+    jobs = MonteCarloRunner.plan(config)
+
+    assert MonteCarloRunner.run_jobs(config, jobs) == MonteCarloRunner.run(config)
+
+
+def test_run_jobs_rejects_wrong_job_count() -> None:
+    config = _small_random_config()
+    jobs = MonteCarloRunner.plan(config)
+
+    with pytest.raises(ValueError, match="job count"):
+        MonteCarloRunner.run_jobs(config, jobs[:-1])
+
+
+def test_run_jobs_rejects_noncontiguous_game_indices() -> None:
+    config = _small_random_config()
+    jobs = MonteCarloRunner.plan(config)
+    invalid = (replace(jobs[0], game_index=99), *jobs[1:])
+
+    with pytest.raises(ValueError, match="game indices"):
+        MonteCarloRunner.run_jobs(config, invalid)
+
+
+def test_run_jobs_rejects_a_different_root_seed() -> None:
+    config = _small_random_config()
+    jobs = MonteCarloRunner.plan(config)
+    invalid = (replace(jobs[0], root_seed=999), *jobs[1:])
+
+    with pytest.raises(ValueError, match="root seed"):
+        MonteCarloRunner.run_jobs(config, invalid)
 
 
 def test_game_planning_is_reproducible_and_root_seeded() -> None:

@@ -4,7 +4,7 @@ import json
 import subprocess
 from pathlib import Path
 
-from garboid_pocketrocks.bots import BotSpec, RandomBot
+from garboid_pocketrocks.bots import BOT_SPECS_BY_NAME, BotSpec, RandomBot
 from garboid_pocketrocks.rules import LIVE_RULESET
 from garboid_pocketrocks.simulator.cli import _BOT_REGISTRY, _bot_names, _table
 from garboid_pocketrocks.simulator.monte_carlo import (
@@ -13,6 +13,12 @@ from garboid_pocketrocks.simulator.monte_carlo import (
 )
 from garboid_pocketrocks.simulator.replay import load_replay, replay_match
 from garboid_pocketrocks.simulator.sampling import FixedRulesetSampler
+
+
+def test_simulator_cli_uses_shared_registry() -> None:
+    from garboid_pocketrocks.simulator import cli
+
+    assert cli._BOT_REGISTRY == BOT_SPECS_BY_NAME
 
 
 def _run_cli(*arguments: str) -> subprocess.CompletedProcess[str]:

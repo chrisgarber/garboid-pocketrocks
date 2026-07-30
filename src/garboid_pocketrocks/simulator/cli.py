@@ -6,19 +6,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
-from garboid_pocketrocks.bots import (
-    AggressiveHeuristicBot,
-    AggressiveHeuristicV1Brain,
-    AggressiveHeuristicV2Brain,
-    BalancedHeuristicBot,
-    BalancedHeuristicV1Brain,
-    BalancedHeuristicV2Brain,
-    BotSpec,
-    PassiveHeuristicBot,
-    PassiveHeuristicV1Brain,
-    PassiveHeuristicV2Brain,
-    RandomBot,
-)
+from garboid_pocketrocks.bots import BOT_SPECS_BY_NAME
 from garboid_pocketrocks.rules import live_ruleset
 from garboid_pocketrocks.simulator.monte_carlo import (
     MonteCarloConfig,
@@ -28,18 +16,7 @@ from garboid_pocketrocks.simulator.monte_carlo import (
 from garboid_pocketrocks.simulator.replay import save_replay
 from garboid_pocketrocks.simulator.sampling import FixedRulesetSampler
 
-_BOT_REGISTRY = {
-    RandomBot.BOT_NAME: BotSpec.from_bot_class(RandomBot),
-    AggressiveHeuristicBot.BOT_NAME: BotSpec.from_bot_class(AggressiveHeuristicBot),
-    BalancedHeuristicBot.BOT_NAME: BotSpec.from_bot_class(BalancedHeuristicBot),
-    PassiveHeuristicBot.BOT_NAME: BotSpec.from_bot_class(PassiveHeuristicBot),
-    "aggressive-v1": BotSpec.for_simulation("aggressive-v1", AggressiveHeuristicV1Brain),
-    "balanced-v1": BotSpec.for_simulation("balanced-v1", BalancedHeuristicV1Brain),
-    "passive-v1": BotSpec.for_simulation("passive-v1", PassiveHeuristicV1Brain),
-    "aggressive-v2": BotSpec.for_simulation("aggressive-v2", AggressiveHeuristicV2Brain),
-    "balanced-v2": BotSpec.for_simulation("balanced-v2", BalancedHeuristicV2Brain),
-    "passive-v2": BotSpec.for_simulation("passive-v2", PassiveHeuristicV2Brain),
-}
+_BOT_REGISTRY = BOT_SPECS_BY_NAME
 
 
 def _positive_int(value: str) -> int:
