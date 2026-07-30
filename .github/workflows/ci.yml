@@ -59,4 +59,4 @@ jobs:
         run: uv run --extra neural pytest tests/neural -m "not neural_smoke" -q
 
       - name: Run deterministic PPO smoke
-        run: uv run --extra neural pytest tests/neural/test_smoke.py::test_two_by_sixteen_smoke_is_deterministic -q
+        run: uv run --extra neural pytest -n 0 tests/neural/test_smoke.py::test_two_by_sixteen_smoke_is_deterministic -q
