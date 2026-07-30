@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import math
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, cast
 
@@ -21,10 +22,14 @@ from garboid_pocketrocks.neural.encoding import (  # noqa: E402
     NeuralObservationEncoder,
     batch_observations,
 )
+from garboid_pocketrocks.neural.run_config import ParallelConfig  # noqa: E402
 from garboid_pocketrocks.neural.smoke import (  # noqa: E402
+    SelfPlaySmokeResult,
     SmokeConfig,
     _canonical_fixture_batch,
+    run_self_play_smoke,
     run_smoke,
+    smoke_run_config,
 )
 from garboid_pocketrocks.rules import LIVE_RULESET  # noqa: E402
 from garboid_pocketrocks.simulator.sampling import FixedRulesetSampler  # noqa: E402
@@ -77,6 +82,36 @@ def test_canonical_checkpoint_fixture_is_a_reachable_environment_decision() -> N
         strict=True,
     ):
         assert torch.equal(fixture_tensor, reachable_tensor)
+
+
+@pytest.mark.neural_smoke
+def test_full_curriculum_smoke_contract_at_one_game_per_cell(
+    tmp_path: Path,
+) -> None:
+    result: SelfPlaySmokeResult = run_self_play_smoke(
+        replace(
+            smoke_run_config(),
+            games_per_cell=1,
+            device="cpu",
+            parallel=ParallelConfig(
+                workers=2,
+                active_games_per_worker=4,
+                max_inference_batch=64,
+            ),
+        ),
+        tmp_path / "self-play",
+    )
+
+    assert result.completed_episodes == 15
+    assert result.completed_updates == 1
+    assert result.illegal_actions == 0
+    assert result.faults == 0
+    assert result.checkpoint_replay_verified
+    assert result.resume_verified
+    assert {games for _, _, games in result.cell_games} == {1}
+    assert result.games_per_second > 0.0
+    assert result.decisions_per_second > 0.0
+    assert result.value.count > 0
 
 
 @pytest.mark.neural_smoke
