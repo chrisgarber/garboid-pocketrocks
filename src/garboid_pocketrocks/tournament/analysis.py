@@ -13,7 +13,7 @@ from garboid_pocketrocks.simulator.monte_carlo import (
     GameSummary,
     MonteCarloResult,
 )
-from garboid_pocketrocks.simulator.sampling import derive_seed
+from garboid_pocketrocks.simulator.seeding import derive_seed
 from garboid_pocketrocks.tournament.rating import (
     PlackettLuceFit,
     TournamentRatingError,

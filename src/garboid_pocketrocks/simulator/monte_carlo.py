@@ -369,16 +369,17 @@ def _validate_jobs(
     if any(job.root_seed != config.root_seed for job in jobs):
         raise ValueError("every job root seed must match the configuration")
 
-    supported_rulesets = {ruleset.name: ruleset for ruleset in config.ruleset_sampler.support()}
+    supported_variants = {
+        (value_chart, objectives_enabled)
+        for value_chart in config.value_charts
+        for objectives_enabled in config.objectives_enabled
+    }
     configured_bot_ids = {spec.bot_id for spec in config.bot_specs}
     for job in jobs:
         if job.player_count not in config.player_counts:
             raise ValueError(f"job {job.game_index} uses an unconfigured player count")
-        if (
-            job.ruleset.name not in supported_rulesets
-            or supported_rulesets[job.ruleset.name] != job.ruleset
-        ):
-            raise ValueError(f"job {job.game_index} uses an unsupported ruleset")
+        if (job.value_chart, job.objectives_enabled) not in supported_variants:
+            raise ValueError(f"job {job.game_index} uses an unsupported SDK variant")
         if len(job.lineup) != job.player_count:
             raise ValueError(f"job {job.game_index} lineup length does not match player count")
         if any(spec.bot_id not in configured_bot_ids for spec in job.lineup):
