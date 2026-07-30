@@ -29,6 +29,7 @@ def _small_random_config(
     games: int = 6,
     seed: int = 101,
     capture_replays: bool = False,
+    capture_decision_traces: bool = False,
 ) -> MonteCarloConfig:
     return MonteCarloConfig(
         bot_specs=tuple(_random_spec(f"random-{index}", f"random-{index}") for index in range(3)),
@@ -37,6 +38,7 @@ def _small_random_config(
         value_charts=("A",),
         root_seed=seed,
         capture_replays=capture_replays,
+        capture_decision_traces=capture_decision_traces,
     )
 
 
@@ -172,6 +174,82 @@ def test_replay_capture_keeps_scalar_results_when_batching_is_requested() -> Non
     ) == MonteCarloRunner.run_jobs(config, jobs, workers=1)
 
 
+def test_trace_capture_is_opt_in_and_preserves_ordinary_aggregation() -> None:
+    omitted = MonteCarloRunner.run(_small_random_config(games=3, seed=77))
+    captured = MonteCarloRunner.run(
+        _small_random_config(
+            games=3,
+            seed=77,
+            capture_decision_traces=True,
+        )
+    )
+
+    assert omitted.decision_traces == ()
+    assert captured.decision_traces
+    assert captured.game_summaries == omitted.game_summaries
+    assert captured.bot_statistics == omitted.bot_statistics
+    assert captured.replays == omitted.replays
+    assert tuple(
+        (trace.game_index, trace.step_index, trace.seat) for trace in captured.decision_traces
+    ) == tuple(
+        sorted(
+            (trace.game_index, trace.step_index, trace.seat) for trace in captured.decision_traces
+        )
+    )
+
+
+def test_trace_capture_keeps_batch_execution_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = _small_random_config(games=3, capture_decision_traces=True)
+    jobs = MonteCarloRunner.plan(config)
+    original = monte_carlo._execute_batch_jobs
+    batch_sizes: list[int] = []
+
+    def recording_executor(
+        chunk: tuple[monte_carlo.GameJob, ...],
+    ) -> tuple[monte_carlo._CompletedGame, ...]:
+        batch_sizes.append(len(chunk))
+        return original(chunk)
+
+    monkeypatch.setattr(monte_carlo, "_execute_batch_jobs", recording_executor)
+
+    result = MonteCarloRunner.run_jobs(config, jobs, workers=1, batch_size=2)
+
+    assert result.decision_traces
+    assert batch_sizes == [2, 1]
+
+
+def test_trace_rows_match_scalar_batch_sizes_and_worker_counts() -> None:
+    config = _small_random_config(
+        games=4,
+        seed=77,
+        capture_decision_traces=True,
+    )
+    jobs = MonteCarloRunner.plan(config)
+    scalar = MonteCarloRunner.run_jobs(config, jobs, workers=1)
+
+    for batch_size in (1, 3, 8):
+        assert (
+            MonteCarloRunner.run_jobs(
+                config,
+                jobs,
+                workers=1,
+                batch_size=batch_size,
+            ).decision_traces
+            == scalar.decision_traces
+        )
+    assert (
+        MonteCarloRunner.run_jobs(
+            config,
+            jobs,
+            workers=2,
+            batch_size=3,
+        ).decision_traces
+        == scalar.decision_traces
+    )
+
+
 def test_run_jobs_rejects_nonpositive_batch_size() -> None:
     config = _small_random_config(games=1)
     jobs = MonteCarloRunner.plan(config)
@@ -203,6 +281,15 @@ def test_run_jobs_rejects_a_different_root_seed() -> None:
     invalid = (replace(jobs[0], root_seed=999), *jobs[1:])
 
     with pytest.raises(ValueError, match="root seed"):
+        MonteCarloRunner.run_jobs(config, invalid)
+
+
+def test_run_jobs_rejects_a_different_trace_capture_mode() -> None:
+    config = _small_random_config(games=1, capture_decision_traces=True)
+    jobs = MonteCarloRunner.plan(config)
+    invalid = (replace(jobs[0], capture_decision_traces=False),)
+
+    with pytest.raises(ValueError, match="trace capture"):
         MonteCarloRunner.run_jobs(config, invalid)
 
 

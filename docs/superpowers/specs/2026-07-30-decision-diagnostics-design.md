@@ -90,7 +90,7 @@ nonfinite values are rejected before output.
 `DecisionTrace` is one self-contained JSONL row. It contains:
 
 - schema version;
-- game index, root seed, engine seed, chart, and player count;
+- opaque game index, chart, and player count;
 - ordered lineup entries with seat, bot name, and bot ID;
 - step index, turn index, acting seat, bot name, and bot ID;
 - the allowlisted public decision context;
@@ -99,8 +99,12 @@ nonfinite values are rejected before output.
 - selected action;
 - optional typed policy explanation;
 - selection source, either `policy` or `fault_fallback`;
-- eventual public score components, final money, rank, and whether first
-  place was tied.
+- eventual final money, rank, and whether first place was tied.
+
+Seeds are intentionally absent. A simulator seed plus the public game
+configuration can reconstruct private hands, deck order, and future actions,
+so including it would turn an apparently public trace into a compact hidden
+state leak.
 
 Bid actions are ordered as pass followed by positive bids. Reveal actions are
 ordered by reveal index. A zero bid is represented as pass, matching the
@@ -208,4 +212,3 @@ Tests are written before implementation and cover:
 - finite canonical JSON, deterministic CSV, HTML escaping, and transaction
   rollback;
 - CLI behavior with and without `--decision-reports`.
-

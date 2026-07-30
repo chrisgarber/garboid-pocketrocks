@@ -11,6 +11,10 @@ from pocketrocks import BotDecision, DecisionContext
 
 from garboid_pocketrocks.adapters.public_history import PublicHistory
 from garboid_pocketrocks.bots.base import BotSpec
+from garboid_pocketrocks.diagnostics.trace import (
+    ExplainedBotDecision,
+    NeuralPolicyExplanation,
+)
 from garboid_pocketrocks.knowledge import RulesetKnowledge
 
 if TYPE_CHECKING:
@@ -87,6 +91,16 @@ class _FrozenNeuralBrain:
         ruleset: RulesetKnowledge,
         history: PublicHistory,
     ) -> BotDecision:
+        return self.choose_explained_decision(context, ruleset, history).decision
+
+    def choose_explained_decision(
+        self,
+        context: DecisionContext,
+        ruleset: RulesetKnowledge,
+        history: PublicHistory,
+    ) -> ExplainedBotDecision:
+        """Choose once and retain finite diagnostics from that masked selection."""
+
         import torch
 
         from garboid_pocketrocks.neural.encoding import batch_observations
@@ -102,7 +116,20 @@ class _FrozenNeuralBrain:
                 generator=None,
                 deterministic=True,
             )
-        return self._runtime.codec.decode(int(selection.actions[0].item()))
+        action_index = int(selection.actions[0].item())
+        legal_action_probabilities = tuple(
+            float(probability.item())
+            for probability in selection.probabilities[0][batch.action_mask[0]]
+        )
+        return ExplainedBotDecision(
+            decision=self._runtime.codec.decode(action_index),
+            explanation=NeuralPolicyExplanation(
+                predicted_value=float(selection.value[0].item()),
+                selected_probability=float(selection.probabilities[0, action_index].item()),
+                entropy=float(selection.entropy[0].item()),
+                legal_action_probabilities=legal_action_probabilities,
+            ),
+        )
 
 
 class VectorPpoSmallV1G1500Brain(_FrozenNeuralBrain):

@@ -47,6 +47,8 @@ JSONL, CSV, pytest, mypy, Ruff.
   `HeuristicBidExplanation`, `NeuralPolicyExplanation`,
   `ExplainedBotDecision`, `PendingDecisionTrace`, `PublicDecisionOutcome`,
   and `DecisionTrace`.
+- Keep only the opaque game index in trace identity; omit root and engine
+  seeds because they can reconstruct hidden state.
 - Build the public context with an explicit field-by-field allowlist.
 - Enumerate legal bid and reveal actions in canonical order and normalize a
   zero bid to pass.
@@ -111,6 +113,8 @@ uv run --extra neural pytest -n 0 tests/neural/test_smoke_tournament_bot.py -q
   Monte Carlo configuration.
 - Build pending traces immediately around `execute_brain_decision`.
 - Finalize each trace only after the public session result exists.
+- Limit the eventual outcome to final money, rank, and tied-first status so
+  every recorded field can be reconciled to the authoritative game summary.
 - Add ordered traces to `MatchResult` and `MonteCarloResult`.
 - Preserve batch execution when traces are enabled.
 - Prove tracing on/off yields identical replay decisions, turns, faults,
@@ -226,4 +230,3 @@ uv run pytest -n 0 tests/tournament/test_runner.py \
   deterministic output, naming, and issue acceptance criteria.
 - Commit, push, and create a draft PR stacked on
   `codex/issue-7-neural-baseline` with `Closes #10`.
-

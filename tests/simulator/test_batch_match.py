@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -35,6 +36,7 @@ def _job(
     objectives_enabled: bool = True,
     lineup: tuple[BotSpec, ...] | None = None,
     fault_mode: FaultMode = FaultMode.RAISE,
+    capture_decision_traces: bool = False,
 ) -> GameJob:
     return GameJob(
         game_index=game_index,
@@ -45,6 +47,7 @@ def _job(
         objectives_enabled=objectives_enabled,
         lineup=lineup if lineup is not None else _random_lineup(player_count),
         fault_mode=fault_mode,
+        capture_decision_traces=capture_decision_traces,
     )
 
 
@@ -56,6 +59,8 @@ def _run_scalar(job: GameJob) -> MatchResult:
         value_chart=job.value_chart,
         objectives_enabled=job.objectives_enabled,
         fault_mode=job.fault_mode,
+        game_index=job.game_index,
+        capture_decision_traces=job.capture_decision_traces,
     )
 
 
@@ -131,6 +136,44 @@ class _HistoryRecordingBrain:
 def _history_recording_brain(seed: int | None) -> _HistoryRecordingBrain:
     del seed
     return _HistoryRecordingBrain()
+
+
+_FAILING_EXPLANATION_CALLS = 0
+
+
+class _AlwaysPassBrain:
+    def choose_decision(
+        self,
+        context: DecisionContext,
+        ruleset: RulesetKnowledge,
+    ) -> BotDecision:
+        del ruleset
+        if context.decision_kind == "selectInfoToReveal":
+            return BotDecision.select_info_to_reveal(0)
+        return BotDecision.submit_bid(0)
+
+
+class _FailingExplanationBrain(_AlwaysPassBrain):
+    def choose_explained_decision(
+        self,
+        context: DecisionContext,
+        ruleset: RulesetKnowledge,
+        history: PublicHistory,
+    ) -> object:
+        del context, ruleset, history
+        global _FAILING_EXPLANATION_CALLS
+        _FAILING_EXPLANATION_CALLS += 1
+        raise RuntimeError("explanation path must remain opt-in")
+
+
+def _always_pass_brain(seed: int | None) -> _AlwaysPassBrain:
+    del seed
+    return _AlwaysPassBrain()
+
+
+def _failing_explanation_brain(seed: int | None) -> _FailingExplanationBrain:
+    del seed
+    return _FailingExplanationBrain()
 
 
 def test_history_aware_brains_receive_the_same_scalar_and_batch_history() -> None:
@@ -263,3 +306,56 @@ def test_batch_job_validation_is_unchanged() -> None:
     invalid_lineup = _random_lineup(3)[:2]
     with pytest.raises(ValueError, match="lineup length"):
         run_batch_matches((_job(player_count=3, lineup=invalid_lineup),))
+
+
+def test_batch_traces_match_scalar_and_do_not_change_ordinary_results() -> None:
+    traced_job = _job(
+        game_index=4,
+        seed=31,
+        value_chart="C",
+        capture_decision_traces=True,
+    )
+
+    scalar = _run_scalar(traced_job)
+    (batch,) = run_batch_matches((traced_job,))
+    (omitted,) = run_batch_matches((replace(traced_job, capture_decision_traces=False),))
+
+    assert batch.decision_traces == scalar.decision_traces
+    assert batch.decision_traces
+    assert replace(batch, decision_traces=()) == omitted
+
+
+def test_trace_rows_do_not_depend_on_batch_chunk_shape() -> None:
+    jobs = tuple(
+        _job(
+            game_index=index,
+            seed=seed,
+            capture_decision_traces=True,
+        )
+        for index, seed in enumerate((17, 31, 91))
+    )
+
+    combined = run_batch_matches(jobs)
+    singletons = tuple(run_batch_matches((job,))[0] for job in jobs)
+
+    assert tuple(match.decision_traces for match in combined) == tuple(
+        match.decision_traces for match in singletons
+    )
+
+
+def test_batch_tracing_off_never_invokes_the_explanation_protocol() -> None:
+    global _FAILING_EXPLANATION_CALLS
+    _FAILING_EXPLANATION_CALLS = 0
+    ordinary_spec = BotSpec("opt-in", "opt-in", _always_pass_brain)
+    explanation_spec = BotSpec("opt-in", "opt-in", _failing_explanation_brain)
+    ordinary = _job(seed=31, lineup=(ordinary_spec, *_random_lineup(3)[1:]))
+    explanation_aware = replace(
+        ordinary,
+        lineup=(explanation_spec, *ordinary.lineup[1:]),
+    )
+
+    (expected,) = run_batch_matches((ordinary,))
+    (actual,) = run_batch_matches((explanation_aware,))
+
+    assert _FAILING_EXPLANATION_CALLS == 0
+    assert actual == expected

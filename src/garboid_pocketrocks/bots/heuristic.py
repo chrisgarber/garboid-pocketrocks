@@ -2,7 +2,12 @@ from __future__ import annotations
 
 from pocketrocks import BotDecision, DecisionContext
 
+from garboid_pocketrocks.adapters.public_history import PublicHistory
 from garboid_pocketrocks.bots.base import BotSpec, PocketRocksFastBot
+from garboid_pocketrocks.diagnostics.trace import (
+    ExplainedBotDecision,
+    HeuristicBidExplanation,
+)
 from garboid_pocketrocks.heuristics.errors import HeuristicInputError
 from garboid_pocketrocks.heuristics.profiles import (
     HEURISTIC_V1,
@@ -24,15 +29,43 @@ class HeuristicBotBrain:
         context: DecisionContext,
         ruleset: RulesetKnowledge,
     ) -> BotDecision:
+        return self.choose_explained_decision(context, ruleset, ()).decision
+
+    def choose_explained_decision(
+        self,
+        context: DecisionContext,
+        ruleset: RulesetKnowledge,
+        history: PublicHistory,
+    ) -> ExplainedBotDecision:
+        """Choose once and retain the valuation that produced a heuristic bid."""
+
+        del history
         try:
             if context.decision_kind == "selectInfoToReveal":
-                return BotDecision.select_info_to_reveal(
-                    self.valuator.choose_reveal(context, ruleset)
+                return ExplainedBotDecision(
+                    decision=BotDecision.select_info_to_reveal(
+                        self.valuator.choose_reveal(context, ruleset)
+                    )
                 )
-            bid = self.valuator.evaluate_bid(context, ruleset).chosen_bid
-            return BotDecision.pass_turn() if bid == 0 else BotDecision.submit_bid(bid)
+            evaluation = self.valuator.evaluate_bid(context, ruleset)
+            bid = evaluation.chosen_bid
+            point = evaluation.points[bid]
+            return ExplainedBotDecision(
+                decision=BotDecision.pass_turn() if bid == 0 else BotDecision.submit_bid(bid),
+                explanation=HeuristicBidExplanation(
+                    resource_value=point.breakdown.resource,
+                    objective_completion_value=point.breakdown.objective_completion,
+                    objective_progress_value=point.breakdown.objective_progress,
+                    terminal_cash_value=point.breakdown.terminal_cash,
+                    liquidity_value=point.breakdown.liquidity,
+                    future_cash_value=point.breakdown.future_cash,
+                    total_value=point.breakdown.total,
+                    reservation_bid=evaluation.reservation_bid,
+                    chosen_bid=bid,
+                ),
+            )
         except HeuristicInputError:
-            return BotDecision.pass_turn()
+            return ExplainedBotDecision(decision=BotDecision.pass_turn())
 
 
 class AggressiveHeuristicV1Brain(HeuristicBotBrain):

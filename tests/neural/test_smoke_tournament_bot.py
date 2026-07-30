@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import pickle
 
 import pytest
@@ -10,6 +11,11 @@ from garboid_pocketrocks.adapters.public_history import (  # noqa: E402
     public_history_from_sdk_events,
 )
 from garboid_pocketrocks.bots import BotSpec, RandomBot  # noqa: E402
+from garboid_pocketrocks.diagnostics.trace import (  # noqa: E402
+    NeuralPolicyExplanation,
+    RecordedAction,
+    legal_actions_for_context,
+)
 from garboid_pocketrocks.knowledge import canonical_knowledge  # noqa: E402
 from garboid_pocketrocks.neural.checkpoint import load_inference_checkpoint  # noqa: E402
 from garboid_pocketrocks.neural.tournament_bot import (  # noqa: E402
@@ -86,6 +92,51 @@ def test_frozen_neural_brains_return_deterministic_legal_decisions(
 
     assert first == second
     context.validate(first)
+
+
+def test_frozen_neural_explanation_reuses_the_selected_masked_output() -> None:
+    session = SdkGameSession.start(
+        player_count=3,
+        seed=19,
+        value_chart="B",
+        objectives_enabled=True,
+        player_names=("neural", "random-1", "random-2"),
+    )
+    context = session.pending.contexts[0][1]
+    history = public_history_from_sdk_events(session.events)
+    knowledge = canonical_knowledge(3, value_chart="B")
+    brain = VectorPpoSmallV1G1500Brain(seed=7)
+    model_calls: list[None] = []
+    hook = brain._runtime.model.register_forward_hook(lambda *_arguments: model_calls.append(None))
+
+    try:
+        explained = brain.choose_explained_decision(context, knowledge, history)
+    finally:
+        hook.remove()
+
+    context.validate(explained.decision)
+    assert len(model_calls) == 1
+    assert isinstance(explained.explanation, NeuralPolicyExplanation)
+    assert all(
+        math.isfinite(value)
+        for value in (
+            explained.explanation.predicted_value,
+            explained.explanation.selected_probability,
+            explained.explanation.entropy,
+        )
+    )
+    assert 0.0 <= explained.explanation.selected_probability <= 1.0
+    assert explained.explanation.entropy >= 0.0
+    assert len(explained.explanation.legal_action_probabilities) == len(
+        legal_actions_for_context(context)
+    )
+    assert math.fsum(explained.explanation.legal_action_probabilities) == pytest.approx(1.0)
+    selected_index = legal_actions_for_context(context).index(
+        RecordedAction.from_decision(explained.decision)
+    )
+    assert explained.explanation.legal_action_probabilities[selected_index] == pytest.approx(
+        explained.explanation.selected_probability
+    )
 
 
 def test_smoke_spec_is_pickle_safe_and_completes_a_match() -> None:
