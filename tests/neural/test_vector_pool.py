@@ -20,6 +20,8 @@ from garboid_pocketrocks.neural.vector_collector import (  # noqa: E402
 from garboid_pocketrocks.neural.vector_pool import (  # noqa: E402
     VectorActorPool,
     VectorPoolError,
+    _validate_worker_result,
+    _WorkerResult,
 )
 from garboid_pocketrocks.training.rewards import RewardConfig  # noqa: E402
 
@@ -66,6 +68,100 @@ def _stable_metrics(
         metrics.inference_batch_p50,
         metrics.inference_batch_p95,
     )
+
+
+def _worker_metrics(
+    decisions: int,
+    inference_batch_sizes: tuple[int, ...],
+) -> CollectorMetrics:
+    return CollectorMetrics(
+        games=1,
+        decisions=decisions,
+        elapsed_seconds=1.0,
+        inference_seconds=0.5,
+        inference_batches=len(inference_batch_sizes),
+        inference_batch_sizes=inference_batch_sizes,
+        cell_games=(),
+    )
+
+
+def test_pool_worker_aggregation_is_canonical_by_worker_id() -> None:
+    torch.manual_seed(79)
+    config = training_encoder_config()
+    model = NeuralPolicy(config, training_model_config("small"))
+    plans = plan_mirror_episodes(
+        root_seed=79,
+        update_index=0,
+        games_per_cell=1,
+        policy_identity="current",
+    )[:2]
+    rollout, _ = collect_self_play_vectorized(
+        {"current": model},
+        plans,
+        encoder_config=config,
+        reward_config=RewardConfig(),
+        device=torch.device("cpu"),
+        engine_batch_size=1,
+        max_inference_batch=16,
+    )
+    episode_zero, episode_one = rollout.episodes
+    worker_zero = _WorkerResult(
+        request_id=4,
+        worker_id=0,
+        episodes=(episode_zero,),
+        metrics=_worker_metrics(
+            len(episode_zero.trajectories),
+            (1, 2),
+        ),
+    )
+    worker_one = _WorkerResult(
+        request_id=4,
+        worker_id=1,
+        episodes=(episode_one,),
+        metrics=_worker_metrics(
+            len(episode_one.trajectories),
+            (9,),
+        ),
+    )
+    canonical, canonical_metrics = VectorActorPool._combine_results(
+        (worker_zero, worker_one),
+        elapsed_seconds=2.0,
+        queue_wait_seconds=0.2,
+        ipc_seconds=0.1,
+    )
+    reversed_rollout, reversed_metrics = VectorActorPool._combine_results(
+        (worker_one, worker_zero),
+        elapsed_seconds=2.0,
+        queue_wait_seconds=0.2,
+        ipc_seconds=0.1,
+    )
+
+    assert tuple(episode.plan.episode_index for episode in canonical.episodes) == (
+        0,
+        1,
+    )
+    assert tuple(episode.plan.episode_index for episode in reversed_rollout.episodes) == (
+        0,
+        1,
+    )
+    assert reversed_metrics == canonical_metrics
+    assert reversed_metrics.inference_batch_sizes == (1, 2, 9)
+
+
+def test_pool_rejects_stale_worker_results() -> None:
+    result = _WorkerResult(
+        request_id=8,
+        worker_id=0,
+        episodes=(),
+        metrics=_worker_metrics(0, ()),
+    )
+
+    with pytest.raises(VectorPoolError, match="stale"):
+        _validate_worker_result(
+            result,
+            worker_id=0,
+            request_id=9,
+        )
 
 
 def test_pool_reuses_actors_across_exact_policy_updates() -> None:
@@ -152,6 +248,34 @@ def test_pool_rejects_collection_after_close() -> None:
         pool.collect({"current": model}, plans)
 
 
+def test_pool_remains_usable_after_pre_dispatch_validation_failure() -> None:
+    config = training_encoder_config()
+    model = NeuralPolicy(config, training_model_config("small"))
+    plans = plan_mirror_episodes(
+        root_seed=23,
+        update_index=0,
+        games_per_cell=1,
+        policy_identity="current",
+    )[:1]
+
+    with VectorActorPool(
+        encoder_config=config,
+        reward_config=RewardConfig(),
+        workers=1,
+        engine_batch_size=1,
+        max_inference_batch=16,
+    ) as pool:
+        worker_pids = pool.worker_pids
+        with pytest.raises(ValueError, match="missing"):
+            pool.collect({}, plans)
+
+        assert not pool.closed
+        rollout, metrics = pool.collect({"current": model}, plans)
+        assert pool.worker_pids == worker_pids
+        assert metrics.games == 1
+        assert rollout.episodes[0].plan == plans[0]
+
+
 def test_pool_propagates_worker_snapshot_failures(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -169,8 +293,10 @@ def test_pool_propagates_worker_snapshot_failures(
         reward_config=RewardConfig(),
         workers=1,
     )
+    worker_pids = pool.worker_pids
 
     with pytest.raises(VectorPoolError, match=r"vector actor 0 failed"):
         pool.collect({"current": model}, plans)
 
     assert pool.closed
+    assert all(not _process_exists(pid) for pid in worker_pids)
