@@ -1,0 +1,3190 @@
+{
+  "cases": [
+    {
+      "case_id": "development-v1:A:3:seat-0:repeat-0",
+      "chart": "A",
+      "engine_seed": 5875160452534625608,
+      "focal_seat": 0,
+      "opponent_names_by_seat": [
+        null,
+        "passive-v1",
+        "random"
+      ],
+      "player_count": 3
+    },
+    {
+      "case_id": "development-v1:A:3:seat-1:repeat-0",
+      "chart": "A",
+      "engine_seed": 8603785495371054975,
+      "focal_seat": 1,
+      "opponent_names_by_seat": [
+        "random",
+        null,
+        "aggressive-v1"
+      ],
+      "player_count": 3
+    },
+    {
+      "case_id": "development-v1:A:3:seat-2:repeat-0",
+      "chart": "A",
+      "engine_seed": 17342268815948190341,
+      "focal_seat": 2,
+      "opponent_names_by_seat": [
+        "aggressive-v1",
+        "balanced-v1",
+        null
+      ],
+      "player_count": 3
+    },
+    {
+      "case_id": "development-v1:A:4:seat-0:repeat-0",
+      "chart": "A",
+      "engine_seed": 14255132538364604517,
+      "focal_seat": 0,
+      "opponent_names_by_seat": [
+        null,
+        "random",
+        "aggressive-v1",
+        "balanced-v1"
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:A:4:seat-1:repeat-0",
+      "chart": "A",
+      "engine_seed": 2796945238219892848,
+      "focal_seat": 1,
+      "opponent_names_by_seat": [
+        "aggressive-v1",
+        null,
+        "balanced-v1",
+        "passive-v1"
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:A:4:seat-2:repeat-0",
+      "chart": "A",
+      "engine_seed": 11445992292787499564,
+      "focal_seat": 2,
+      "opponent_names_by_seat": [
+        "balanced-v1",
+        "passive-v1",
+        null,
+        "random"
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:A:4:seat-3:repeat-0",
+      "chart": "A",
+      "engine_seed": 15028884853909490178,
+      "focal_seat": 3,
+      "opponent_names_by_seat": [
+        "passive-v1",
+        "random",
+        "aggressive-v1",
+        null
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:A:5:seat-0:repeat-0",
+      "chart": "A",
+      "engine_seed": 17145372001810985552,
+      "focal_seat": 0,
+      "opponent_names_by_seat": [
+        null,
+        "aggressive-v1",
+        "balanced-v1",
+        "passive-v1",
+        "random"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:A:5:seat-1:repeat-0",
+      "chart": "A",
+      "engine_seed": 15502334901665332692,
+      "focal_seat": 1,
+      "opponent_names_by_seat": [
+        "balanced-v1",
+        null,
+        "passive-v1",
+        "random",
+        "aggressive-v1"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:A:5:seat-2:repeat-0",
+      "chart": "A",
+      "engine_seed": 18054501650277200537,
+      "focal_seat": 2,
+      "opponent_names_by_seat": [
+        "passive-v1",
+        "random",
+        null,
+        "aggressive-v1",
+        "balanced-v1"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:A:5:seat-3:repeat-0",
+      "chart": "A",
+      "engine_seed": 7210486220308012073,
+      "focal_seat": 3,
+      "opponent_names_by_seat": [
+        "random",
+        "aggressive-v1",
+        "balanced-v1",
+        null,
+        "passive-v1"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:A:5:seat-4:repeat-0",
+      "chart": "A",
+      "engine_seed": 1325704700784461133,
+      "focal_seat": 4,
+      "opponent_names_by_seat": [
+        "aggressive-v1",
+        "balanced-v1",
+        "passive-v1",
+        "random",
+        null
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:B:3:seat-0:repeat-0",
+      "chart": "B",
+      "engine_seed": 11271259493980392873,
+      "focal_seat": 0,
+      "opponent_names_by_seat": [
+        null,
+        "random",
+        "aggressive-v1"
+      ],
+      "player_count": 3
+    },
+    {
+      "case_id": "development-v1:B:3:seat-1:repeat-0",
+      "chart": "B",
+      "engine_seed": 15215921772273702996,
+      "focal_seat": 1,
+      "opponent_names_by_seat": [
+        "aggressive-v1",
+        null,
+        "balanced-v1"
+      ],
+      "player_count": 3
+    },
+    {
+      "case_id": "development-v1:B:3:seat-2:repeat-0",
+      "chart": "B",
+      "engine_seed": 6519392353492897827,
+      "focal_seat": 2,
+      "opponent_names_by_seat": [
+        "balanced-v1",
+        "passive-v1",
+        null
+      ],
+      "player_count": 3
+    },
+    {
+      "case_id": "development-v1:B:4:seat-0:repeat-0",
+      "chart": "B",
+      "engine_seed": 230304812787382332,
+      "focal_seat": 0,
+      "opponent_names_by_seat": [
+        null,
+        "aggressive-v1",
+        "balanced-v1",
+        "passive-v1"
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:B:4:seat-1:repeat-0",
+      "chart": "B",
+      "engine_seed": 4245818274407102176,
+      "focal_seat": 1,
+      "opponent_names_by_seat": [
+        "balanced-v1",
+        null,
+        "passive-v1",
+        "random"
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:B:4:seat-2:repeat-0",
+      "chart": "B",
+      "engine_seed": 15356479284672858293,
+      "focal_seat": 2,
+      "opponent_names_by_seat": [
+        "passive-v1",
+        "random",
+        null,
+        "aggressive-v1"
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:B:4:seat-3:repeat-0",
+      "chart": "B",
+      "engine_seed": 17167456325637468513,
+      "focal_seat": 3,
+      "opponent_names_by_seat": [
+        "random",
+        "aggressive-v1",
+        "balanced-v1",
+        null
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:B:5:seat-0:repeat-0",
+      "chart": "B",
+      "engine_seed": 14409709914674716012,
+      "focal_seat": 0,
+      "opponent_names_by_seat": [
+        null,
+        "balanced-v1",
+        "passive-v1",
+        "random",
+        "aggressive-v1"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:B:5:seat-1:repeat-0",
+      "chart": "B",
+      "engine_seed": 8251717698778165986,
+      "focal_seat": 1,
+      "opponent_names_by_seat": [
+        "passive-v1",
+        null,
+        "random",
+        "aggressive-v1",
+        "balanced-v1"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:B:5:seat-2:repeat-0",
+      "chart": "B",
+      "engine_seed": 4052453112971615564,
+      "focal_seat": 2,
+      "opponent_names_by_seat": [
+        "random",
+        "aggressive-v1",
+        null,
+        "balanced-v1",
+        "passive-v1"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:B:5:seat-3:repeat-0",
+      "chart": "B",
+      "engine_seed": 17363058660035657657,
+      "focal_seat": 3,
+      "opponent_names_by_seat": [
+        "aggressive-v1",
+        "balanced-v1",
+        "passive-v1",
+        null,
+        "random"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:B:5:seat-4:repeat-0",
+      "chart": "B",
+      "engine_seed": 7822533455092363037,
+      "focal_seat": 4,
+      "opponent_names_by_seat": [
+        "balanced-v1",
+        "passive-v1",
+        "random",
+        "aggressive-v1",
+        null
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:C:3:seat-0:repeat-0",
+      "chart": "C",
+      "engine_seed": 14066119658761711008,
+      "focal_seat": 0,
+      "opponent_names_by_seat": [
+        null,
+        "aggressive-v1",
+        "balanced-v1"
+      ],
+      "player_count": 3
+    },
+    {
+      "case_id": "development-v1:C:3:seat-1:repeat-0",
+      "chart": "C",
+      "engine_seed": 11411909217125934978,
+      "focal_seat": 1,
+      "opponent_names_by_seat": [
+        "balanced-v1",
+        null,
+        "passive-v1"
+      ],
+      "player_count": 3
+    },
+    {
+      "case_id": "development-v1:C:3:seat-2:repeat-0",
+      "chart": "C",
+      "engine_seed": 11103864344132831417,
+      "focal_seat": 2,
+      "opponent_names_by_seat": [
+        "passive-v1",
+        "random",
+        null
+      ],
+      "player_count": 3
+    },
+    {
+      "case_id": "development-v1:C:4:seat-0:repeat-0",
+      "chart": "C",
+      "engine_seed": 11093828896552913137,
+      "focal_seat": 0,
+      "opponent_names_by_seat": [
+        null,
+        "balanced-v1",
+        "passive-v1",
+        "random"
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:C:4:seat-1:repeat-0",
+      "chart": "C",
+      "engine_seed": 9399671443140857170,
+      "focal_seat": 1,
+      "opponent_names_by_seat": [
+        "passive-v1",
+        null,
+        "random",
+        "aggressive-v1"
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:C:4:seat-2:repeat-0",
+      "chart": "C",
+      "engine_seed": 3426580685173102337,
+      "focal_seat": 2,
+      "opponent_names_by_seat": [
+        "random",
+        "aggressive-v1",
+        null,
+        "balanced-v1"
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:C:4:seat-3:repeat-0",
+      "chart": "C",
+      "engine_seed": 11501896104760587006,
+      "focal_seat": 3,
+      "opponent_names_by_seat": [
+        "aggressive-v1",
+        "balanced-v1",
+        "passive-v1",
+        null
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:C:5:seat-0:repeat-0",
+      "chart": "C",
+      "engine_seed": 1577419369871892751,
+      "focal_seat": 0,
+      "opponent_names_by_seat": [
+        null,
+        "passive-v1",
+        "random",
+        "aggressive-v1",
+        "balanced-v1"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:C:5:seat-1:repeat-0",
+      "chart": "C",
+      "engine_seed": 15093214831042992781,
+      "focal_seat": 1,
+      "opponent_names_by_seat": [
+        "random",
+        null,
+        "aggressive-v1",
+        "balanced-v1",
+        "passive-v1"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:C:5:seat-2:repeat-0",
+      "chart": "C",
+      "engine_seed": 7575511334001949081,
+      "focal_seat": 2,
+      "opponent_names_by_seat": [
+        "aggressive-v1",
+        "balanced-v1",
+        null,
+        "passive-v1",
+        "random"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:C:5:seat-3:repeat-0",
+      "chart": "C",
+      "engine_seed": 519642598307786193,
+      "focal_seat": 3,
+      "opponent_names_by_seat": [
+        "balanced-v1",
+        "passive-v1",
+        "random",
+        null,
+        "aggressive-v1"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:C:5:seat-4:repeat-0",
+      "chart": "C",
+      "engine_seed": 13147904532794424336,
+      "focal_seat": 4,
+      "opponent_names_by_seat": [
+        "passive-v1",
+        "random",
+        "aggressive-v1",
+        "balanced-v1",
+        null
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:D:3:seat-0:repeat-0",
+      "chart": "D",
+      "engine_seed": 8131262410563880026,
+      "focal_seat": 0,
+      "opponent_names_by_seat": [
+        null,
+        "balanced-v1",
+        "passive-v1"
+      ],
+      "player_count": 3
+    },
+    {
+      "case_id": "development-v1:D:3:seat-1:repeat-0",
+      "chart": "D",
+      "engine_seed": 2597524507750540397,
+      "focal_seat": 1,
+      "opponent_names_by_seat": [
+        "passive-v1",
+        null,
+        "random"
+      ],
+      "player_count": 3
+    },
+    {
+      "case_id": "development-v1:D:3:seat-2:repeat-0",
+      "chart": "D",
+      "engine_seed": 4107482830969506985,
+      "focal_seat": 2,
+      "opponent_names_by_seat": [
+        "random",
+        "aggressive-v1",
+        null
+      ],
+      "player_count": 3
+    },
+    {
+      "case_id": "development-v1:D:4:seat-0:repeat-0",
+      "chart": "D",
+      "engine_seed": 16559847533093363317,
+      "focal_seat": 0,
+      "opponent_names_by_seat": [
+        null,
+        "passive-v1",
+        "random",
+        "aggressive-v1"
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:D:4:seat-1:repeat-0",
+      "chart": "D",
+      "engine_seed": 4165332729693512681,
+      "focal_seat": 1,
+      "opponent_names_by_seat": [
+        "random",
+        null,
+        "aggressive-v1",
+        "balanced-v1"
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:D:4:seat-2:repeat-0",
+      "chart": "D",
+      "engine_seed": 11674820044782169709,
+      "focal_seat": 2,
+      "opponent_names_by_seat": [
+        "aggressive-v1",
+        "balanced-v1",
+        null,
+        "passive-v1"
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:D:4:seat-3:repeat-0",
+      "chart": "D",
+      "engine_seed": 10823892506623765788,
+      "focal_seat": 3,
+      "opponent_names_by_seat": [
+        "balanced-v1",
+        "passive-v1",
+        "random",
+        null
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:D:5:seat-0:repeat-0",
+      "chart": "D",
+      "engine_seed": 13098985203284626342,
+      "focal_seat": 0,
+      "opponent_names_by_seat": [
+        null,
+        "random",
+        "aggressive-v1",
+        "balanced-v1",
+        "passive-v1"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:D:5:seat-1:repeat-0",
+      "chart": "D",
+      "engine_seed": 12587209600564566818,
+      "focal_seat": 1,
+      "opponent_names_by_seat": [
+        "aggressive-v1",
+        null,
+        "balanced-v1",
+        "passive-v1",
+        "random"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:D:5:seat-2:repeat-0",
+      "chart": "D",
+      "engine_seed": 11153546446908137833,
+      "focal_seat": 2,
+      "opponent_names_by_seat": [
+        "balanced-v1",
+        "passive-v1",
+        null,
+        "random",
+        "aggressive-v1"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:D:5:seat-3:repeat-0",
+      "chart": "D",
+      "engine_seed": 2167204590152737262,
+      "focal_seat": 3,
+      "opponent_names_by_seat": [
+        "passive-v1",
+        "random",
+        "aggressive-v1",
+        null,
+        "balanced-v1"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:D:5:seat-4:repeat-0",
+      "chart": "D",
+      "engine_seed": 13872136478976261918,
+      "focal_seat": 4,
+      "opponent_names_by_seat": [
+        "random",
+        "aggressive-v1",
+        "balanced-v1",
+        "passive-v1",
+        null
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:E:3:seat-0:repeat-0",
+      "chart": "E",
+      "engine_seed": 11958417653457881360,
+      "focal_seat": 0,
+      "opponent_names_by_seat": [
+        null,
+        "passive-v1",
+        "random"
+      ],
+      "player_count": 3
+    },
+    {
+      "case_id": "development-v1:E:3:seat-1:repeat-0",
+      "chart": "E",
+      "engine_seed": 11614588309570693609,
+      "focal_seat": 1,
+      "opponent_names_by_seat": [
+        "random",
+        null,
+        "aggressive-v1"
+      ],
+      "player_count": 3
+    },
+    {
+      "case_id": "development-v1:E:3:seat-2:repeat-0",
+      "chart": "E",
+      "engine_seed": 18383440619085791808,
+      "focal_seat": 2,
+      "opponent_names_by_seat": [
+        "aggressive-v1",
+        "balanced-v1",
+        null
+      ],
+      "player_count": 3
+    },
+    {
+      "case_id": "development-v1:E:4:seat-0:repeat-0",
+      "chart": "E",
+      "engine_seed": 15463558325242465875,
+      "focal_seat": 0,
+      "opponent_names_by_seat": [
+        null,
+        "random",
+        "aggressive-v1",
+        "balanced-v1"
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:E:4:seat-1:repeat-0",
+      "chart": "E",
+      "engine_seed": 490140959982243021,
+      "focal_seat": 1,
+      "opponent_names_by_seat": [
+        "aggressive-v1",
+        null,
+        "balanced-v1",
+        "passive-v1"
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:E:4:seat-2:repeat-0",
+      "chart": "E",
+      "engine_seed": 5798265446364193559,
+      "focal_seat": 2,
+      "opponent_names_by_seat": [
+        "balanced-v1",
+        "passive-v1",
+        null,
+        "random"
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:E:4:seat-3:repeat-0",
+      "chart": "E",
+      "engine_seed": 16156096669924784745,
+      "focal_seat": 3,
+      "opponent_names_by_seat": [
+        "passive-v1",
+        "random",
+        "aggressive-v1",
+        null
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:E:5:seat-0:repeat-0",
+      "chart": "E",
+      "engine_seed": 6216957873320257191,
+      "focal_seat": 0,
+      "opponent_names_by_seat": [
+        null,
+        "aggressive-v1",
+        "balanced-v1",
+        "passive-v1",
+        "random"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:E:5:seat-1:repeat-0",
+      "chart": "E",
+      "engine_seed": 7580112836264087997,
+      "focal_seat": 1,
+      "opponent_names_by_seat": [
+        "balanced-v1",
+        null,
+        "passive-v1",
+        "random",
+        "aggressive-v1"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:E:5:seat-2:repeat-0",
+      "chart": "E",
+      "engine_seed": 15218922850835318341,
+      "focal_seat": 2,
+      "opponent_names_by_seat": [
+        "passive-v1",
+        "random",
+        null,
+        "aggressive-v1",
+        "balanced-v1"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:E:5:seat-3:repeat-0",
+      "chart": "E",
+      "engine_seed": 5464745521139662062,
+      "focal_seat": 3,
+      "opponent_names_by_seat": [
+        "random",
+        "aggressive-v1",
+        "balanced-v1",
+        null,
+        "passive-v1"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:E:5:seat-4:repeat-0",
+      "chart": "E",
+      "engine_seed": 18026258224238476276,
+      "focal_seat": 4,
+      "opponent_names_by_seat": [
+        "aggressive-v1",
+        "balanced-v1",
+        "passive-v1",
+        "random",
+        null
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:A:3:seat-0:repeat-1",
+      "chart": "A",
+      "engine_seed": 1148830877655839729,
+      "focal_seat": 0,
+      "opponent_names_by_seat": [
+        null,
+        "random",
+        "aggressive-v1"
+      ],
+      "player_count": 3
+    },
+    {
+      "case_id": "development-v1:A:3:seat-1:repeat-1",
+      "chart": "A",
+      "engine_seed": 3021292300332999782,
+      "focal_seat": 1,
+      "opponent_names_by_seat": [
+        "aggressive-v1",
+        null,
+        "balanced-v1"
+      ],
+      "player_count": 3
+    },
+    {
+      "case_id": "development-v1:A:3:seat-2:repeat-1",
+      "chart": "A",
+      "engine_seed": 1989175704363830177,
+      "focal_seat": 2,
+      "opponent_names_by_seat": [
+        "balanced-v1",
+        "passive-v1",
+        null
+      ],
+      "player_count": 3
+    },
+    {
+      "case_id": "development-v1:A:4:seat-0:repeat-1",
+      "chart": "A",
+      "engine_seed": 1173570349618185084,
+      "focal_seat": 0,
+      "opponent_names_by_seat": [
+        null,
+        "aggressive-v1",
+        "balanced-v1",
+        "passive-v1"
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:A:4:seat-1:repeat-1",
+      "chart": "A",
+      "engine_seed": 13345495954666769463,
+      "focal_seat": 1,
+      "opponent_names_by_seat": [
+        "balanced-v1",
+        null,
+        "passive-v1",
+        "random"
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:A:4:seat-2:repeat-1",
+      "chart": "A",
+      "engine_seed": 12845082389127559889,
+      "focal_seat": 2,
+      "opponent_names_by_seat": [
+        "passive-v1",
+        "random",
+        null,
+        "aggressive-v1"
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:A:4:seat-3:repeat-1",
+      "chart": "A",
+      "engine_seed": 8105848102857557505,
+      "focal_seat": 3,
+      "opponent_names_by_seat": [
+        "random",
+        "aggressive-v1",
+        "balanced-v1",
+        null
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:A:5:seat-0:repeat-1",
+      "chart": "A",
+      "engine_seed": 18228180927248836014,
+      "focal_seat": 0,
+      "opponent_names_by_seat": [
+        null,
+        "balanced-v1",
+        "passive-v1",
+        "random",
+        "aggressive-v1"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:A:5:seat-1:repeat-1",
+      "chart": "A",
+      "engine_seed": 16266161128814424291,
+      "focal_seat": 1,
+      "opponent_names_by_seat": [
+        "passive-v1",
+        null,
+        "random",
+        "aggressive-v1",
+        "balanced-v1"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:A:5:seat-2:repeat-1",
+      "chart": "A",
+      "engine_seed": 16961160468055393800,
+      "focal_seat": 2,
+      "opponent_names_by_seat": [
+        "random",
+        "aggressive-v1",
+        null,
+        "balanced-v1",
+        "passive-v1"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:A:5:seat-3:repeat-1",
+      "chart": "A",
+      "engine_seed": 18226375422311762909,
+      "focal_seat": 3,
+      "opponent_names_by_seat": [
+        "aggressive-v1",
+        "balanced-v1",
+        "passive-v1",
+        null,
+        "random"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:A:5:seat-4:repeat-1",
+      "chart": "A",
+      "engine_seed": 18045875842160116033,
+      "focal_seat": 4,
+      "opponent_names_by_seat": [
+        "balanced-v1",
+        "passive-v1",
+        "random",
+        "aggressive-v1",
+        null
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:B:3:seat-0:repeat-1",
+      "chart": "B",
+      "engine_seed": 18001882309685317451,
+      "focal_seat": 0,
+      "opponent_names_by_seat": [
+        null,
+        "aggressive-v1",
+        "balanced-v1"
+      ],
+      "player_count": 3
+    },
+    {
+      "case_id": "development-v1:B:3:seat-1:repeat-1",
+      "chart": "B",
+      "engine_seed": 16427226143886625637,
+      "focal_seat": 1,
+      "opponent_names_by_seat": [
+        "balanced-v1",
+        null,
+        "passive-v1"
+      ],
+      "player_count": 3
+    },
+    {
+      "case_id": "development-v1:B:3:seat-2:repeat-1",
+      "chart": "B",
+      "engine_seed": 7279088642121537580,
+      "focal_seat": 2,
+      "opponent_names_by_seat": [
+        "passive-v1",
+        "random",
+        null
+      ],
+      "player_count": 3
+    },
+    {
+      "case_id": "development-v1:B:4:seat-0:repeat-1",
+      "chart": "B",
+      "engine_seed": 14241116373967464481,
+      "focal_seat": 0,
+      "opponent_names_by_seat": [
+        null,
+        "balanced-v1",
+        "passive-v1",
+        "random"
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:B:4:seat-1:repeat-1",
+      "chart": "B",
+      "engine_seed": 2907329303093929197,
+      "focal_seat": 1,
+      "opponent_names_by_seat": [
+        "passive-v1",
+        null,
+        "random",
+        "aggressive-v1"
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:B:4:seat-2:repeat-1",
+      "chart": "B",
+      "engine_seed": 8182986155519045102,
+      "focal_seat": 2,
+      "opponent_names_by_seat": [
+        "random",
+        "aggressive-v1",
+        null,
+        "balanced-v1"
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:B:4:seat-3:repeat-1",
+      "chart": "B",
+      "engine_seed": 7908423750504951543,
+      "focal_seat": 3,
+      "opponent_names_by_seat": [
+        "aggressive-v1",
+        "balanced-v1",
+        "passive-v1",
+        null
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:B:5:seat-0:repeat-1",
+      "chart": "B",
+      "engine_seed": 9584508821799035486,
+      "focal_seat": 0,
+      "opponent_names_by_seat": [
+        null,
+        "passive-v1",
+        "random",
+        "aggressive-v1",
+        "balanced-v1"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:B:5:seat-1:repeat-1",
+      "chart": "B",
+      "engine_seed": 3312910454757788508,
+      "focal_seat": 1,
+      "opponent_names_by_seat": [
+        "random",
+        null,
+        "aggressive-v1",
+        "balanced-v1",
+        "passive-v1"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:B:5:seat-2:repeat-1",
+      "chart": "B",
+      "engine_seed": 4852987935545774955,
+      "focal_seat": 2,
+      "opponent_names_by_seat": [
+        "aggressive-v1",
+        "balanced-v1",
+        null,
+        "passive-v1",
+        "random"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:B:5:seat-3:repeat-1",
+      "chart": "B",
+      "engine_seed": 2018766395395055024,
+      "focal_seat": 3,
+      "opponent_names_by_seat": [
+        "balanced-v1",
+        "passive-v1",
+        "random",
+        null,
+        "aggressive-v1"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:B:5:seat-4:repeat-1",
+      "chart": "B",
+      "engine_seed": 16343092357722013611,
+      "focal_seat": 4,
+      "opponent_names_by_seat": [
+        "passive-v1",
+        "random",
+        "aggressive-v1",
+        "balanced-v1",
+        null
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:C:3:seat-0:repeat-1",
+      "chart": "C",
+      "engine_seed": 18293185892858503316,
+      "focal_seat": 0,
+      "opponent_names_by_seat": [
+        null,
+        "balanced-v1",
+        "passive-v1"
+      ],
+      "player_count": 3
+    },
+    {
+      "case_id": "development-v1:C:3:seat-1:repeat-1",
+      "chart": "C",
+      "engine_seed": 17459657491380926769,
+      "focal_seat": 1,
+      "opponent_names_by_seat": [
+        "passive-v1",
+        null,
+        "random"
+      ],
+      "player_count": 3
+    },
+    {
+      "case_id": "development-v1:C:3:seat-2:repeat-1",
+      "chart": "C",
+      "engine_seed": 6561638325131195379,
+      "focal_seat": 2,
+      "opponent_names_by_seat": [
+        "random",
+        "aggressive-v1",
+        null
+      ],
+      "player_count": 3
+    },
+    {
+      "case_id": "development-v1:C:4:seat-0:repeat-1",
+      "chart": "C",
+      "engine_seed": 6596786162017925993,
+      "focal_seat": 0,
+      "opponent_names_by_seat": [
+        null,
+        "passive-v1",
+        "random",
+        "aggressive-v1"
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:C:4:seat-1:repeat-1",
+      "chart": "C",
+      "engine_seed": 17396411945454249453,
+      "focal_seat": 1,
+      "opponent_names_by_seat": [
+        "random",
+        null,
+        "aggressive-v1",
+        "balanced-v1"
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:C:4:seat-2:repeat-1",
+      "chart": "C",
+      "engine_seed": 13434460662286199448,
+      "focal_seat": 2,
+      "opponent_names_by_seat": [
+        "aggressive-v1",
+        "balanced-v1",
+        null,
+        "passive-v1"
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:C:4:seat-3:repeat-1",
+      "chart": "C",
+      "engine_seed": 2401535593566547192,
+      "focal_seat": 3,
+      "opponent_names_by_seat": [
+        "balanced-v1",
+        "passive-v1",
+        "random",
+        null
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:C:5:seat-0:repeat-1",
+      "chart": "C",
+      "engine_seed": 17700395084590481498,
+      "focal_seat": 0,
+      "opponent_names_by_seat": [
+        null,
+        "random",
+        "aggressive-v1",
+        "balanced-v1",
+        "passive-v1"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:C:5:seat-1:repeat-1",
+      "chart": "C",
+      "engine_seed": 8358735978864390803,
+      "focal_seat": 1,
+      "opponent_names_by_seat": [
+        "aggressive-v1",
+        null,
+        "balanced-v1",
+        "passive-v1",
+        "random"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:C:5:seat-2:repeat-1",
+      "chart": "C",
+      "engine_seed": 12685038415907960833,
+      "focal_seat": 2,
+      "opponent_names_by_seat": [
+        "balanced-v1",
+        "passive-v1",
+        null,
+        "random",
+        "aggressive-v1"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:C:5:seat-3:repeat-1",
+      "chart": "C",
+      "engine_seed": 5354858385297739812,
+      "focal_seat": 3,
+      "opponent_names_by_seat": [
+        "passive-v1",
+        "random",
+        "aggressive-v1",
+        null,
+        "balanced-v1"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:C:5:seat-4:repeat-1",
+      "chart": "C",
+      "engine_seed": 15662101915341751148,
+      "focal_seat": 4,
+      "opponent_names_by_seat": [
+        "random",
+        "aggressive-v1",
+        "balanced-v1",
+        "passive-v1",
+        null
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:D:3:seat-0:repeat-1",
+      "chart": "D",
+      "engine_seed": 17447119308653284522,
+      "focal_seat": 0,
+      "opponent_names_by_seat": [
+        null,
+        "passive-v1",
+        "random"
+      ],
+      "player_count": 3
+    },
+    {
+      "case_id": "development-v1:D:3:seat-1:repeat-1",
+      "chart": "D",
+      "engine_seed": 11405671109044173675,
+      "focal_seat": 1,
+      "opponent_names_by_seat": [
+        "random",
+        null,
+        "aggressive-v1"
+      ],
+      "player_count": 3
+    },
+    {
+      "case_id": "development-v1:D:3:seat-2:repeat-1",
+      "chart": "D",
+      "engine_seed": 10944128730532572731,
+      "focal_seat": 2,
+      "opponent_names_by_seat": [
+        "aggressive-v1",
+        "balanced-v1",
+        null
+      ],
+      "player_count": 3
+    },
+    {
+      "case_id": "development-v1:D:4:seat-0:repeat-1",
+      "chart": "D",
+      "engine_seed": 5269044101435706292,
+      "focal_seat": 0,
+      "opponent_names_by_seat": [
+        null,
+        "random",
+        "aggressive-v1",
+        "balanced-v1"
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:D:4:seat-1:repeat-1",
+      "chart": "D",
+      "engine_seed": 9152115537850274281,
+      "focal_seat": 1,
+      "opponent_names_by_seat": [
+        "aggressive-v1",
+        null,
+        "balanced-v1",
+        "passive-v1"
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:D:4:seat-2:repeat-1",
+      "chart": "D",
+      "engine_seed": 16655499729759243458,
+      "focal_seat": 2,
+      "opponent_names_by_seat": [
+        "balanced-v1",
+        "passive-v1",
+        null,
+        "random"
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:D:4:seat-3:repeat-1",
+      "chart": "D",
+      "engine_seed": 3732667262253397100,
+      "focal_seat": 3,
+      "opponent_names_by_seat": [
+        "passive-v1",
+        "random",
+        "aggressive-v1",
+        null
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:D:5:seat-0:repeat-1",
+      "chart": "D",
+      "engine_seed": 13643725869234215553,
+      "focal_seat": 0,
+      "opponent_names_by_seat": [
+        null,
+        "aggressive-v1",
+        "balanced-v1",
+        "passive-v1",
+        "random"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:D:5:seat-1:repeat-1",
+      "chart": "D",
+      "engine_seed": 1701445803031759352,
+      "focal_seat": 1,
+      "opponent_names_by_seat": [
+        "balanced-v1",
+        null,
+        "passive-v1",
+        "random",
+        "aggressive-v1"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:D:5:seat-2:repeat-1",
+      "chart": "D",
+      "engine_seed": 14860342047402289545,
+      "focal_seat": 2,
+      "opponent_names_by_seat": [
+        "passive-v1",
+        "random",
+        null,
+        "aggressive-v1",
+        "balanced-v1"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:D:5:seat-3:repeat-1",
+      "chart": "D",
+      "engine_seed": 17390498770336876283,
+      "focal_seat": 3,
+      "opponent_names_by_seat": [
+        "random",
+        "aggressive-v1",
+        "balanced-v1",
+        null,
+        "passive-v1"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:D:5:seat-4:repeat-1",
+      "chart": "D",
+      "engine_seed": 1686003917047346080,
+      "focal_seat": 4,
+      "opponent_names_by_seat": [
+        "aggressive-v1",
+        "balanced-v1",
+        "passive-v1",
+        "random",
+        null
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:E:3:seat-0:repeat-1",
+      "chart": "E",
+      "engine_seed": 11347111456314056115,
+      "focal_seat": 0,
+      "opponent_names_by_seat": [
+        null,
+        "random",
+        "aggressive-v1"
+      ],
+      "player_count": 3
+    },
+    {
+      "case_id": "development-v1:E:3:seat-1:repeat-1",
+      "chart": "E",
+      "engine_seed": 4310711165347992065,
+      "focal_seat": 1,
+      "opponent_names_by_seat": [
+        "aggressive-v1",
+        null,
+        "balanced-v1"
+      ],
+      "player_count": 3
+    },
+    {
+      "case_id": "development-v1:E:3:seat-2:repeat-1",
+      "chart": "E",
+      "engine_seed": 12897710188544825383,
+      "focal_seat": 2,
+      "opponent_names_by_seat": [
+        "balanced-v1",
+        "passive-v1",
+        null
+      ],
+      "player_count": 3
+    },
+    {
+      "case_id": "development-v1:E:4:seat-0:repeat-1",
+      "chart": "E",
+      "engine_seed": 16266814034537927668,
+      "focal_seat": 0,
+      "opponent_names_by_seat": [
+        null,
+        "aggressive-v1",
+        "balanced-v1",
+        "passive-v1"
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:E:4:seat-1:repeat-1",
+      "chart": "E",
+      "engine_seed": 4897313100871917860,
+      "focal_seat": 1,
+      "opponent_names_by_seat": [
+        "balanced-v1",
+        null,
+        "passive-v1",
+        "random"
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:E:4:seat-2:repeat-1",
+      "chart": "E",
+      "engine_seed": 6970839468972899265,
+      "focal_seat": 2,
+      "opponent_names_by_seat": [
+        "passive-v1",
+        "random",
+        null,
+        "aggressive-v1"
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:E:4:seat-3:repeat-1",
+      "chart": "E",
+      "engine_seed": 6975546525016037418,
+      "focal_seat": 3,
+      "opponent_names_by_seat": [
+        "random",
+        "aggressive-v1",
+        "balanced-v1",
+        null
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:E:5:seat-0:repeat-1",
+      "chart": "E",
+      "engine_seed": 18299664316688588177,
+      "focal_seat": 0,
+      "opponent_names_by_seat": [
+        null,
+        "balanced-v1",
+        "passive-v1",
+        "random",
+        "aggressive-v1"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:E:5:seat-1:repeat-1",
+      "chart": "E",
+      "engine_seed": 15041398526020124015,
+      "focal_seat": 1,
+      "opponent_names_by_seat": [
+        "passive-v1",
+        null,
+        "random",
+        "aggressive-v1",
+        "balanced-v1"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:E:5:seat-2:repeat-1",
+      "chart": "E",
+      "engine_seed": 14968921600040225863,
+      "focal_seat": 2,
+      "opponent_names_by_seat": [
+        "random",
+        "aggressive-v1",
+        null,
+        "balanced-v1",
+        "passive-v1"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:E:5:seat-3:repeat-1",
+      "chart": "E",
+      "engine_seed": 14072847673161758058,
+      "focal_seat": 3,
+      "opponent_names_by_seat": [
+        "aggressive-v1",
+        "balanced-v1",
+        "passive-v1",
+        null,
+        "random"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:E:5:seat-4:repeat-1",
+      "chart": "E",
+      "engine_seed": 5787509475961327747,
+      "focal_seat": 4,
+      "opponent_names_by_seat": [
+        "balanced-v1",
+        "passive-v1",
+        "random",
+        "aggressive-v1",
+        null
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:A:3:seat-0:repeat-2",
+      "chart": "A",
+      "engine_seed": 12726264964109857651,
+      "focal_seat": 0,
+      "opponent_names_by_seat": [
+        null,
+        "aggressive-v1",
+        "balanced-v1"
+      ],
+      "player_count": 3
+    },
+    {
+      "case_id": "development-v1:A:3:seat-1:repeat-2",
+      "chart": "A",
+      "engine_seed": 13902140949061631792,
+      "focal_seat": 1,
+      "opponent_names_by_seat": [
+        "balanced-v1",
+        null,
+        "passive-v1"
+      ],
+      "player_count": 3
+    },
+    {
+      "case_id": "development-v1:A:3:seat-2:repeat-2",
+      "chart": "A",
+      "engine_seed": 12842026421988052880,
+      "focal_seat": 2,
+      "opponent_names_by_seat": [
+        "passive-v1",
+        "random",
+        null
+      ],
+      "player_count": 3
+    },
+    {
+      "case_id": "development-v1:A:4:seat-0:repeat-2",
+      "chart": "A",
+      "engine_seed": 4350165600100411148,
+      "focal_seat": 0,
+      "opponent_names_by_seat": [
+        null,
+        "balanced-v1",
+        "passive-v1",
+        "random"
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:A:4:seat-1:repeat-2",
+      "chart": "A",
+      "engine_seed": 4895085483783983408,
+      "focal_seat": 1,
+      "opponent_names_by_seat": [
+        "passive-v1",
+        null,
+        "random",
+        "aggressive-v1"
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:A:4:seat-2:repeat-2",
+      "chart": "A",
+      "engine_seed": 13726129184061592486,
+      "focal_seat": 2,
+      "opponent_names_by_seat": [
+        "random",
+        "aggressive-v1",
+        null,
+        "balanced-v1"
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:A:4:seat-3:repeat-2",
+      "chart": "A",
+      "engine_seed": 12893154146627298502,
+      "focal_seat": 3,
+      "opponent_names_by_seat": [
+        "aggressive-v1",
+        "balanced-v1",
+        "passive-v1",
+        null
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:A:5:seat-0:repeat-2",
+      "chart": "A",
+      "engine_seed": 11458414608857135248,
+      "focal_seat": 0,
+      "opponent_names_by_seat": [
+        null,
+        "passive-v1",
+        "random",
+        "aggressive-v1",
+        "balanced-v1"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:A:5:seat-1:repeat-2",
+      "chart": "A",
+      "engine_seed": 16294300261687900097,
+      "focal_seat": 1,
+      "opponent_names_by_seat": [
+        "random",
+        null,
+        "aggressive-v1",
+        "balanced-v1",
+        "passive-v1"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:A:5:seat-2:repeat-2",
+      "chart": "A",
+      "engine_seed": 936208753203375271,
+      "focal_seat": 2,
+      "opponent_names_by_seat": [
+        "aggressive-v1",
+        "balanced-v1",
+        null,
+        "passive-v1",
+        "random"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:A:5:seat-3:repeat-2",
+      "chart": "A",
+      "engine_seed": 15961666894519789069,
+      "focal_seat": 3,
+      "opponent_names_by_seat": [
+        "balanced-v1",
+        "passive-v1",
+        "random",
+        null,
+        "aggressive-v1"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:A:5:seat-4:repeat-2",
+      "chart": "A",
+      "engine_seed": 12477904799790875560,
+      "focal_seat": 4,
+      "opponent_names_by_seat": [
+        "passive-v1",
+        "random",
+        "aggressive-v1",
+        "balanced-v1",
+        null
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:B:3:seat-0:repeat-2",
+      "chart": "B",
+      "engine_seed": 3358826739215663516,
+      "focal_seat": 0,
+      "opponent_names_by_seat": [
+        null,
+        "balanced-v1",
+        "passive-v1"
+      ],
+      "player_count": 3
+    },
+    {
+      "case_id": "development-v1:B:3:seat-1:repeat-2",
+      "chart": "B",
+      "engine_seed": 12113353468150450165,
+      "focal_seat": 1,
+      "opponent_names_by_seat": [
+        "passive-v1",
+        null,
+        "random"
+      ],
+      "player_count": 3
+    },
+    {
+      "case_id": "development-v1:B:3:seat-2:repeat-2",
+      "chart": "B",
+      "engine_seed": 14445244340853393214,
+      "focal_seat": 2,
+      "opponent_names_by_seat": [
+        "random",
+        "aggressive-v1",
+        null
+      ],
+      "player_count": 3
+    },
+    {
+      "case_id": "development-v1:B:4:seat-0:repeat-2",
+      "chart": "B",
+      "engine_seed": 636156046992798386,
+      "focal_seat": 0,
+      "opponent_names_by_seat": [
+        null,
+        "passive-v1",
+        "random",
+        "aggressive-v1"
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:B:4:seat-1:repeat-2",
+      "chart": "B",
+      "engine_seed": 11264478580380274768,
+      "focal_seat": 1,
+      "opponent_names_by_seat": [
+        "random",
+        null,
+        "aggressive-v1",
+        "balanced-v1"
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:B:4:seat-2:repeat-2",
+      "chart": "B",
+      "engine_seed": 13832088121828895289,
+      "focal_seat": 2,
+      "opponent_names_by_seat": [
+        "aggressive-v1",
+        "balanced-v1",
+        null,
+        "passive-v1"
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:B:4:seat-3:repeat-2",
+      "chart": "B",
+      "engine_seed": 16641590362990221156,
+      "focal_seat": 3,
+      "opponent_names_by_seat": [
+        "balanced-v1",
+        "passive-v1",
+        "random",
+        null
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:B:5:seat-0:repeat-2",
+      "chart": "B",
+      "engine_seed": 3750780981588518918,
+      "focal_seat": 0,
+      "opponent_names_by_seat": [
+        null,
+        "random",
+        "aggressive-v1",
+        "balanced-v1",
+        "passive-v1"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:B:5:seat-1:repeat-2",
+      "chart": "B",
+      "engine_seed": 16312723059142526712,
+      "focal_seat": 1,
+      "opponent_names_by_seat": [
+        "aggressive-v1",
+        null,
+        "balanced-v1",
+        "passive-v1",
+        "random"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:B:5:seat-2:repeat-2",
+      "chart": "B",
+      "engine_seed": 14362666841060600586,
+      "focal_seat": 2,
+      "opponent_names_by_seat": [
+        "balanced-v1",
+        "passive-v1",
+        null,
+        "random",
+        "aggressive-v1"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:B:5:seat-3:repeat-2",
+      "chart": "B",
+      "engine_seed": 7650221484266642105,
+      "focal_seat": 3,
+      "opponent_names_by_seat": [
+        "passive-v1",
+        "random",
+        "aggressive-v1",
+        null,
+        "balanced-v1"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:B:5:seat-4:repeat-2",
+      "chart": "B",
+      "engine_seed": 14568045169681033541,
+      "focal_seat": 4,
+      "opponent_names_by_seat": [
+        "random",
+        "aggressive-v1",
+        "balanced-v1",
+        "passive-v1",
+        null
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:C:3:seat-0:repeat-2",
+      "chart": "C",
+      "engine_seed": 10810922115490747127,
+      "focal_seat": 0,
+      "opponent_names_by_seat": [
+        null,
+        "passive-v1",
+        "random"
+      ],
+      "player_count": 3
+    },
+    {
+      "case_id": "development-v1:C:3:seat-1:repeat-2",
+      "chart": "C",
+      "engine_seed": 14768498842246245171,
+      "focal_seat": 1,
+      "opponent_names_by_seat": [
+        "random",
+        null,
+        "aggressive-v1"
+      ],
+      "player_count": 3
+    },
+    {
+      "case_id": "development-v1:C:3:seat-2:repeat-2",
+      "chart": "C",
+      "engine_seed": 4660799633261994814,
+      "focal_seat": 2,
+      "opponent_names_by_seat": [
+        "aggressive-v1",
+        "balanced-v1",
+        null
+      ],
+      "player_count": 3
+    },
+    {
+      "case_id": "development-v1:C:4:seat-0:repeat-2",
+      "chart": "C",
+      "engine_seed": 6918946331640775794,
+      "focal_seat": 0,
+      "opponent_names_by_seat": [
+        null,
+        "random",
+        "aggressive-v1",
+        "balanced-v1"
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:C:4:seat-1:repeat-2",
+      "chart": "C",
+      "engine_seed": 12642141522475749467,
+      "focal_seat": 1,
+      "opponent_names_by_seat": [
+        "aggressive-v1",
+        null,
+        "balanced-v1",
+        "passive-v1"
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:C:4:seat-2:repeat-2",
+      "chart": "C",
+      "engine_seed": 7978456552008644428,
+      "focal_seat": 2,
+      "opponent_names_by_seat": [
+        "balanced-v1",
+        "passive-v1",
+        null,
+        "random"
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:C:4:seat-3:repeat-2",
+      "chart": "C",
+      "engine_seed": 15206953962364493011,
+      "focal_seat": 3,
+      "opponent_names_by_seat": [
+        "passive-v1",
+        "random",
+        "aggressive-v1",
+        null
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:C:5:seat-0:repeat-2",
+      "chart": "C",
+      "engine_seed": 3266472157967046147,
+      "focal_seat": 0,
+      "opponent_names_by_seat": [
+        null,
+        "aggressive-v1",
+        "balanced-v1",
+        "passive-v1",
+        "random"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:C:5:seat-1:repeat-2",
+      "chart": "C",
+      "engine_seed": 2337439471440365321,
+      "focal_seat": 1,
+      "opponent_names_by_seat": [
+        "balanced-v1",
+        null,
+        "passive-v1",
+        "random",
+        "aggressive-v1"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:C:5:seat-2:repeat-2",
+      "chart": "C",
+      "engine_seed": 4073529833856724189,
+      "focal_seat": 2,
+      "opponent_names_by_seat": [
+        "passive-v1",
+        "random",
+        null,
+        "aggressive-v1",
+        "balanced-v1"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:C:5:seat-3:repeat-2",
+      "chart": "C",
+      "engine_seed": 13260718476968496110,
+      "focal_seat": 3,
+      "opponent_names_by_seat": [
+        "random",
+        "aggressive-v1",
+        "balanced-v1",
+        null,
+        "passive-v1"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:C:5:seat-4:repeat-2",
+      "chart": "C",
+      "engine_seed": 11824041502030040673,
+      "focal_seat": 4,
+      "opponent_names_by_seat": [
+        "aggressive-v1",
+        "balanced-v1",
+        "passive-v1",
+        "random",
+        null
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:D:3:seat-0:repeat-2",
+      "chart": "D",
+      "engine_seed": 15140065878681356336,
+      "focal_seat": 0,
+      "opponent_names_by_seat": [
+        null,
+        "random",
+        "aggressive-v1"
+      ],
+      "player_count": 3
+    },
+    {
+      "case_id": "development-v1:D:3:seat-1:repeat-2",
+      "chart": "D",
+      "engine_seed": 17430161437429373470,
+      "focal_seat": 1,
+      "opponent_names_by_seat": [
+        "aggressive-v1",
+        null,
+        "balanced-v1"
+      ],
+      "player_count": 3
+    },
+    {
+      "case_id": "development-v1:D:3:seat-2:repeat-2",
+      "chart": "D",
+      "engine_seed": 8336305888317910838,
+      "focal_seat": 2,
+      "opponent_names_by_seat": [
+        "balanced-v1",
+        "passive-v1",
+        null
+      ],
+      "player_count": 3
+    },
+    {
+      "case_id": "development-v1:D:4:seat-0:repeat-2",
+      "chart": "D",
+      "engine_seed": 15839948665700847809,
+      "focal_seat": 0,
+      "opponent_names_by_seat": [
+        null,
+        "aggressive-v1",
+        "balanced-v1",
+        "passive-v1"
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:D:4:seat-1:repeat-2",
+      "chart": "D",
+      "engine_seed": 14306158188591053795,
+      "focal_seat": 1,
+      "opponent_names_by_seat": [
+        "balanced-v1",
+        null,
+        "passive-v1",
+        "random"
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:D:4:seat-2:repeat-2",
+      "chart": "D",
+      "engine_seed": 12574302271042122164,
+      "focal_seat": 2,
+      "opponent_names_by_seat": [
+        "passive-v1",
+        "random",
+        null,
+        "aggressive-v1"
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:D:4:seat-3:repeat-2",
+      "chart": "D",
+      "engine_seed": 11835994463108833430,
+      "focal_seat": 3,
+      "opponent_names_by_seat": [
+        "random",
+        "aggressive-v1",
+        "balanced-v1",
+        null
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:D:5:seat-0:repeat-2",
+      "chart": "D",
+      "engine_seed": 11024665280551100203,
+      "focal_seat": 0,
+      "opponent_names_by_seat": [
+        null,
+        "balanced-v1",
+        "passive-v1",
+        "random",
+        "aggressive-v1"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:D:5:seat-1:repeat-2",
+      "chart": "D",
+      "engine_seed": 17633831297524439199,
+      "focal_seat": 1,
+      "opponent_names_by_seat": [
+        "passive-v1",
+        null,
+        "random",
+        "aggressive-v1",
+        "balanced-v1"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:D:5:seat-2:repeat-2",
+      "chart": "D",
+      "engine_seed": 3118040786676088420,
+      "focal_seat": 2,
+      "opponent_names_by_seat": [
+        "random",
+        "aggressive-v1",
+        null,
+        "balanced-v1",
+        "passive-v1"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:D:5:seat-3:repeat-2",
+      "chart": "D",
+      "engine_seed": 16922116574703543850,
+      "focal_seat": 3,
+      "opponent_names_by_seat": [
+        "aggressive-v1",
+        "balanced-v1",
+        "passive-v1",
+        null,
+        "random"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:D:5:seat-4:repeat-2",
+      "chart": "D",
+      "engine_seed": 16860335074128285698,
+      "focal_seat": 4,
+      "opponent_names_by_seat": [
+        "balanced-v1",
+        "passive-v1",
+        "random",
+        "aggressive-v1",
+        null
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:E:3:seat-0:repeat-2",
+      "chart": "E",
+      "engine_seed": 6189595756450005464,
+      "focal_seat": 0,
+      "opponent_names_by_seat": [
+        null,
+        "aggressive-v1",
+        "balanced-v1"
+      ],
+      "player_count": 3
+    },
+    {
+      "case_id": "development-v1:E:3:seat-1:repeat-2",
+      "chart": "E",
+      "engine_seed": 2975029825553239894,
+      "focal_seat": 1,
+      "opponent_names_by_seat": [
+        "balanced-v1",
+        null,
+        "passive-v1"
+      ],
+      "player_count": 3
+    },
+    {
+      "case_id": "development-v1:E:3:seat-2:repeat-2",
+      "chart": "E",
+      "engine_seed": 13961948958847594213,
+      "focal_seat": 2,
+      "opponent_names_by_seat": [
+        "passive-v1",
+        "random",
+        null
+      ],
+      "player_count": 3
+    },
+    {
+      "case_id": "development-v1:E:4:seat-0:repeat-2",
+      "chart": "E",
+      "engine_seed": 2387655076159675390,
+      "focal_seat": 0,
+      "opponent_names_by_seat": [
+        null,
+        "balanced-v1",
+        "passive-v1",
+        "random"
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:E:4:seat-1:repeat-2",
+      "chart": "E",
+      "engine_seed": 6865340482137140539,
+      "focal_seat": 1,
+      "opponent_names_by_seat": [
+        "passive-v1",
+        null,
+        "random",
+        "aggressive-v1"
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:E:4:seat-2:repeat-2",
+      "chart": "E",
+      "engine_seed": 16383537591658798907,
+      "focal_seat": 2,
+      "opponent_names_by_seat": [
+        "random",
+        "aggressive-v1",
+        null,
+        "balanced-v1"
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:E:4:seat-3:repeat-2",
+      "chart": "E",
+      "engine_seed": 9348678638585667441,
+      "focal_seat": 3,
+      "opponent_names_by_seat": [
+        "aggressive-v1",
+        "balanced-v1",
+        "passive-v1",
+        null
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:E:5:seat-0:repeat-2",
+      "chart": "E",
+      "engine_seed": 5391932085391889466,
+      "focal_seat": 0,
+      "opponent_names_by_seat": [
+        null,
+        "passive-v1",
+        "random",
+        "aggressive-v1",
+        "balanced-v1"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:E:5:seat-1:repeat-2",
+      "chart": "E",
+      "engine_seed": 3719586950601688259,
+      "focal_seat": 1,
+      "opponent_names_by_seat": [
+        "random",
+        null,
+        "aggressive-v1",
+        "balanced-v1",
+        "passive-v1"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:E:5:seat-2:repeat-2",
+      "chart": "E",
+      "engine_seed": 5120196174992589845,
+      "focal_seat": 2,
+      "opponent_names_by_seat": [
+        "aggressive-v1",
+        "balanced-v1",
+        null,
+        "passive-v1",
+        "random"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:E:5:seat-3:repeat-2",
+      "chart": "E",
+      "engine_seed": 6686951191245817613,
+      "focal_seat": 3,
+      "opponent_names_by_seat": [
+        "balanced-v1",
+        "passive-v1",
+        "random",
+        null,
+        "aggressive-v1"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:E:5:seat-4:repeat-2",
+      "chart": "E",
+      "engine_seed": 13160800912908148609,
+      "focal_seat": 4,
+      "opponent_names_by_seat": [
+        "passive-v1",
+        "random",
+        "aggressive-v1",
+        "balanced-v1",
+        null
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:A:3:seat-0:repeat-3",
+      "chart": "A",
+      "engine_seed": 8319940125028862931,
+      "focal_seat": 0,
+      "opponent_names_by_seat": [
+        null,
+        "balanced-v1",
+        "passive-v1"
+      ],
+      "player_count": 3
+    },
+    {
+      "case_id": "development-v1:A:3:seat-1:repeat-3",
+      "chart": "A",
+      "engine_seed": 5219643598789176688,
+      "focal_seat": 1,
+      "opponent_names_by_seat": [
+        "passive-v1",
+        null,
+        "random"
+      ],
+      "player_count": 3
+    },
+    {
+      "case_id": "development-v1:A:3:seat-2:repeat-3",
+      "chart": "A",
+      "engine_seed": 3387222597302591519,
+      "focal_seat": 2,
+      "opponent_names_by_seat": [
+        "random",
+        "aggressive-v1",
+        null
+      ],
+      "player_count": 3
+    },
+    {
+      "case_id": "development-v1:A:4:seat-0:repeat-3",
+      "chart": "A",
+      "engine_seed": 15094577631047797166,
+      "focal_seat": 0,
+      "opponent_names_by_seat": [
+        null,
+        "passive-v1",
+        "random",
+        "aggressive-v1"
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:A:4:seat-1:repeat-3",
+      "chart": "A",
+      "engine_seed": 11290221154514810961,
+      "focal_seat": 1,
+      "opponent_names_by_seat": [
+        "random",
+        null,
+        "aggressive-v1",
+        "balanced-v1"
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:A:4:seat-2:repeat-3",
+      "chart": "A",
+      "engine_seed": 13567730999672259391,
+      "focal_seat": 2,
+      "opponent_names_by_seat": [
+        "aggressive-v1",
+        "balanced-v1",
+        null,
+        "passive-v1"
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:A:4:seat-3:repeat-3",
+      "chart": "A",
+      "engine_seed": 48431525670877335,
+      "focal_seat": 3,
+      "opponent_names_by_seat": [
+        "balanced-v1",
+        "passive-v1",
+        "random",
+        null
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:A:5:seat-0:repeat-3",
+      "chart": "A",
+      "engine_seed": 9626736314325257091,
+      "focal_seat": 0,
+      "opponent_names_by_seat": [
+        null,
+        "random",
+        "aggressive-v1",
+        "balanced-v1",
+        "passive-v1"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:A:5:seat-1:repeat-3",
+      "chart": "A",
+      "engine_seed": 4186147107444795250,
+      "focal_seat": 1,
+      "opponent_names_by_seat": [
+        "aggressive-v1",
+        null,
+        "balanced-v1",
+        "passive-v1",
+        "random"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:A:5:seat-2:repeat-3",
+      "chart": "A",
+      "engine_seed": 6926358422013999606,
+      "focal_seat": 2,
+      "opponent_names_by_seat": [
+        "balanced-v1",
+        "passive-v1",
+        null,
+        "random",
+        "aggressive-v1"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:A:5:seat-3:repeat-3",
+      "chart": "A",
+      "engine_seed": 7772049400115238450,
+      "focal_seat": 3,
+      "opponent_names_by_seat": [
+        "passive-v1",
+        "random",
+        "aggressive-v1",
+        null,
+        "balanced-v1"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:A:5:seat-4:repeat-3",
+      "chart": "A",
+      "engine_seed": 4258550350589597678,
+      "focal_seat": 4,
+      "opponent_names_by_seat": [
+        "random",
+        "aggressive-v1",
+        "balanced-v1",
+        "passive-v1",
+        null
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:B:3:seat-0:repeat-3",
+      "chart": "B",
+      "engine_seed": 5547534060995474749,
+      "focal_seat": 0,
+      "opponent_names_by_seat": [
+        null,
+        "passive-v1",
+        "random"
+      ],
+      "player_count": 3
+    },
+    {
+      "case_id": "development-v1:B:3:seat-1:repeat-3",
+      "chart": "B",
+      "engine_seed": 8396977112542093269,
+      "focal_seat": 1,
+      "opponent_names_by_seat": [
+        "random",
+        null,
+        "aggressive-v1"
+      ],
+      "player_count": 3
+    },
+    {
+      "case_id": "development-v1:B:3:seat-2:repeat-3",
+      "chart": "B",
+      "engine_seed": 8106025229135661852,
+      "focal_seat": 2,
+      "opponent_names_by_seat": [
+        "aggressive-v1",
+        "balanced-v1",
+        null
+      ],
+      "player_count": 3
+    },
+    {
+      "case_id": "development-v1:B:4:seat-0:repeat-3",
+      "chart": "B",
+      "engine_seed": 12525446991615958767,
+      "focal_seat": 0,
+      "opponent_names_by_seat": [
+        null,
+        "random",
+        "aggressive-v1",
+        "balanced-v1"
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:B:4:seat-1:repeat-3",
+      "chart": "B",
+      "engine_seed": 1723851606497928761,
+      "focal_seat": 1,
+      "opponent_names_by_seat": [
+        "aggressive-v1",
+        null,
+        "balanced-v1",
+        "passive-v1"
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:B:4:seat-2:repeat-3",
+      "chart": "B",
+      "engine_seed": 15708487487996532083,
+      "focal_seat": 2,
+      "opponent_names_by_seat": [
+        "balanced-v1",
+        "passive-v1",
+        null,
+        "random"
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:B:4:seat-3:repeat-3",
+      "chart": "B",
+      "engine_seed": 8725729089098912050,
+      "focal_seat": 3,
+      "opponent_names_by_seat": [
+        "passive-v1",
+        "random",
+        "aggressive-v1",
+        null
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:B:5:seat-0:repeat-3",
+      "chart": "B",
+      "engine_seed": 1125418912890396655,
+      "focal_seat": 0,
+      "opponent_names_by_seat": [
+        null,
+        "aggressive-v1",
+        "balanced-v1",
+        "passive-v1",
+        "random"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:B:5:seat-1:repeat-3",
+      "chart": "B",
+      "engine_seed": 16445095003064623005,
+      "focal_seat": 1,
+      "opponent_names_by_seat": [
+        "balanced-v1",
+        null,
+        "passive-v1",
+        "random",
+        "aggressive-v1"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:B:5:seat-2:repeat-3",
+      "chart": "B",
+      "engine_seed": 2953496828930390830,
+      "focal_seat": 2,
+      "opponent_names_by_seat": [
+        "passive-v1",
+        "random",
+        null,
+        "aggressive-v1",
+        "balanced-v1"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:B:5:seat-3:repeat-3",
+      "chart": "B",
+      "engine_seed": 5957847564705670994,
+      "focal_seat": 3,
+      "opponent_names_by_seat": [
+        "random",
+        "aggressive-v1",
+        "balanced-v1",
+        null,
+        "passive-v1"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:B:5:seat-4:repeat-3",
+      "chart": "B",
+      "engine_seed": 12892854567918295445,
+      "focal_seat": 4,
+      "opponent_names_by_seat": [
+        "aggressive-v1",
+        "balanced-v1",
+        "passive-v1",
+        "random",
+        null
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:C:3:seat-0:repeat-3",
+      "chart": "C",
+      "engine_seed": 11783403801838298253,
+      "focal_seat": 0,
+      "opponent_names_by_seat": [
+        null,
+        "random",
+        "aggressive-v1"
+      ],
+      "player_count": 3
+    },
+    {
+      "case_id": "development-v1:C:3:seat-1:repeat-3",
+      "chart": "C",
+      "engine_seed": 8755946628659303641,
+      "focal_seat": 1,
+      "opponent_names_by_seat": [
+        "aggressive-v1",
+        null,
+        "balanced-v1"
+      ],
+      "player_count": 3
+    },
+    {
+      "case_id": "development-v1:C:3:seat-2:repeat-3",
+      "chart": "C",
+      "engine_seed": 38986047032173562,
+      "focal_seat": 2,
+      "opponent_names_by_seat": [
+        "balanced-v1",
+        "passive-v1",
+        null
+      ],
+      "player_count": 3
+    },
+    {
+      "case_id": "development-v1:C:4:seat-0:repeat-3",
+      "chart": "C",
+      "engine_seed": 16532701435722482858,
+      "focal_seat": 0,
+      "opponent_names_by_seat": [
+        null,
+        "aggressive-v1",
+        "balanced-v1",
+        "passive-v1"
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:C:4:seat-1:repeat-3",
+      "chart": "C",
+      "engine_seed": 11788386070025246607,
+      "focal_seat": 1,
+      "opponent_names_by_seat": [
+        "balanced-v1",
+        null,
+        "passive-v1",
+        "random"
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:C:4:seat-2:repeat-3",
+      "chart": "C",
+      "engine_seed": 6464820545913262829,
+      "focal_seat": 2,
+      "opponent_names_by_seat": [
+        "passive-v1",
+        "random",
+        null,
+        "aggressive-v1"
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:C:4:seat-3:repeat-3",
+      "chart": "C",
+      "engine_seed": 10184317340948611895,
+      "focal_seat": 3,
+      "opponent_names_by_seat": [
+        "random",
+        "aggressive-v1",
+        "balanced-v1",
+        null
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:C:5:seat-0:repeat-3",
+      "chart": "C",
+      "engine_seed": 12444135631534148883,
+      "focal_seat": 0,
+      "opponent_names_by_seat": [
+        null,
+        "balanced-v1",
+        "passive-v1",
+        "random",
+        "aggressive-v1"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:C:5:seat-1:repeat-3",
+      "chart": "C",
+      "engine_seed": 3457203269212987147,
+      "focal_seat": 1,
+      "opponent_names_by_seat": [
+        "passive-v1",
+        null,
+        "random",
+        "aggressive-v1",
+        "balanced-v1"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:C:5:seat-2:repeat-3",
+      "chart": "C",
+      "engine_seed": 8716182863360931493,
+      "focal_seat": 2,
+      "opponent_names_by_seat": [
+        "random",
+        "aggressive-v1",
+        null,
+        "balanced-v1",
+        "passive-v1"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:C:5:seat-3:repeat-3",
+      "chart": "C",
+      "engine_seed": 1819882836504311084,
+      "focal_seat": 3,
+      "opponent_names_by_seat": [
+        "aggressive-v1",
+        "balanced-v1",
+        "passive-v1",
+        null,
+        "random"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:C:5:seat-4:repeat-3",
+      "chart": "C",
+      "engine_seed": 13881708940684130406,
+      "focal_seat": 4,
+      "opponent_names_by_seat": [
+        "balanced-v1",
+        "passive-v1",
+        "random",
+        "aggressive-v1",
+        null
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:D:3:seat-0:repeat-3",
+      "chart": "D",
+      "engine_seed": 9283546239165309895,
+      "focal_seat": 0,
+      "opponent_names_by_seat": [
+        null,
+        "aggressive-v1",
+        "balanced-v1"
+      ],
+      "player_count": 3
+    },
+    {
+      "case_id": "development-v1:D:3:seat-1:repeat-3",
+      "chart": "D",
+      "engine_seed": 5216025253209518068,
+      "focal_seat": 1,
+      "opponent_names_by_seat": [
+        "balanced-v1",
+        null,
+        "passive-v1"
+      ],
+      "player_count": 3
+    },
+    {
+      "case_id": "development-v1:D:3:seat-2:repeat-3",
+      "chart": "D",
+      "engine_seed": 1998474874771745980,
+      "focal_seat": 2,
+      "opponent_names_by_seat": [
+        "passive-v1",
+        "random",
+        null
+      ],
+      "player_count": 3
+    },
+    {
+      "case_id": "development-v1:D:4:seat-0:repeat-3",
+      "chart": "D",
+      "engine_seed": 17631443856857465221,
+      "focal_seat": 0,
+      "opponent_names_by_seat": [
+        null,
+        "balanced-v1",
+        "passive-v1",
+        "random"
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:D:4:seat-1:repeat-3",
+      "chart": "D",
+      "engine_seed": 9476991518373210500,
+      "focal_seat": 1,
+      "opponent_names_by_seat": [
+        "passive-v1",
+        null,
+        "random",
+        "aggressive-v1"
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:D:4:seat-2:repeat-3",
+      "chart": "D",
+      "engine_seed": 7703039736519370041,
+      "focal_seat": 2,
+      "opponent_names_by_seat": [
+        "random",
+        "aggressive-v1",
+        null,
+        "balanced-v1"
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:D:4:seat-3:repeat-3",
+      "chart": "D",
+      "engine_seed": 13967899622741896645,
+      "focal_seat": 3,
+      "opponent_names_by_seat": [
+        "aggressive-v1",
+        "balanced-v1",
+        "passive-v1",
+        null
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:D:5:seat-0:repeat-3",
+      "chart": "D",
+      "engine_seed": 7220166855837036687,
+      "focal_seat": 0,
+      "opponent_names_by_seat": [
+        null,
+        "passive-v1",
+        "random",
+        "aggressive-v1",
+        "balanced-v1"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:D:5:seat-1:repeat-3",
+      "chart": "D",
+      "engine_seed": 3779606477218932738,
+      "focal_seat": 1,
+      "opponent_names_by_seat": [
+        "random",
+        null,
+        "aggressive-v1",
+        "balanced-v1",
+        "passive-v1"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:D:5:seat-2:repeat-3",
+      "chart": "D",
+      "engine_seed": 948489399081887217,
+      "focal_seat": 2,
+      "opponent_names_by_seat": [
+        "aggressive-v1",
+        "balanced-v1",
+        null,
+        "passive-v1",
+        "random"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:D:5:seat-3:repeat-3",
+      "chart": "D",
+      "engine_seed": 6292106869618260122,
+      "focal_seat": 3,
+      "opponent_names_by_seat": [
+        "balanced-v1",
+        "passive-v1",
+        "random",
+        null,
+        "aggressive-v1"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:D:5:seat-4:repeat-3",
+      "chart": "D",
+      "engine_seed": 7236221662177625719,
+      "focal_seat": 4,
+      "opponent_names_by_seat": [
+        "passive-v1",
+        "random",
+        "aggressive-v1",
+        "balanced-v1",
+        null
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:E:3:seat-0:repeat-3",
+      "chart": "E",
+      "engine_seed": 2789080060735229562,
+      "focal_seat": 0,
+      "opponent_names_by_seat": [
+        null,
+        "balanced-v1",
+        "passive-v1"
+      ],
+      "player_count": 3
+    },
+    {
+      "case_id": "development-v1:E:3:seat-1:repeat-3",
+      "chart": "E",
+      "engine_seed": 3921729080912093114,
+      "focal_seat": 1,
+      "opponent_names_by_seat": [
+        "passive-v1",
+        null,
+        "random"
+      ],
+      "player_count": 3
+    },
+    {
+      "case_id": "development-v1:E:3:seat-2:repeat-3",
+      "chart": "E",
+      "engine_seed": 1261161424304140218,
+      "focal_seat": 2,
+      "opponent_names_by_seat": [
+        "random",
+        "aggressive-v1",
+        null
+      ],
+      "player_count": 3
+    },
+    {
+      "case_id": "development-v1:E:4:seat-0:repeat-3",
+      "chart": "E",
+      "engine_seed": 12553395610424024510,
+      "focal_seat": 0,
+      "opponent_names_by_seat": [
+        null,
+        "passive-v1",
+        "random",
+        "aggressive-v1"
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:E:4:seat-1:repeat-3",
+      "chart": "E",
+      "engine_seed": 6792852114114652132,
+      "focal_seat": 1,
+      "opponent_names_by_seat": [
+        "random",
+        null,
+        "aggressive-v1",
+        "balanced-v1"
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:E:4:seat-2:repeat-3",
+      "chart": "E",
+      "engine_seed": 14732510095886738373,
+      "focal_seat": 2,
+      "opponent_names_by_seat": [
+        "aggressive-v1",
+        "balanced-v1",
+        null,
+        "passive-v1"
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:E:4:seat-3:repeat-3",
+      "chart": "E",
+      "engine_seed": 13169985928887879574,
+      "focal_seat": 3,
+      "opponent_names_by_seat": [
+        "balanced-v1",
+        "passive-v1",
+        "random",
+        null
+      ],
+      "player_count": 4
+    },
+    {
+      "case_id": "development-v1:E:5:seat-0:repeat-3",
+      "chart": "E",
+      "engine_seed": 13879027543556921581,
+      "focal_seat": 0,
+      "opponent_names_by_seat": [
+        null,
+        "random",
+        "aggressive-v1",
+        "balanced-v1",
+        "passive-v1"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:E:5:seat-1:repeat-3",
+      "chart": "E",
+      "engine_seed": 7333256950089453735,
+      "focal_seat": 1,
+      "opponent_names_by_seat": [
+        "aggressive-v1",
+        null,
+        "balanced-v1",
+        "passive-v1",
+        "random"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:E:5:seat-2:repeat-3",
+      "chart": "E",
+      "engine_seed": 17999713031763223418,
+      "focal_seat": 2,
+      "opponent_names_by_seat": [
+        "balanced-v1",
+        "passive-v1",
+        null,
+        "random",
+        "aggressive-v1"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:E:5:seat-3:repeat-3",
+      "chart": "E",
+      "engine_seed": 16970218536872258894,
+      "focal_seat": 3,
+      "opponent_names_by_seat": [
+        "passive-v1",
+        "random",
+        "aggressive-v1",
+        null,
+        "balanced-v1"
+      ],
+      "player_count": 5
+    },
+    {
+      "case_id": "development-v1:E:5:seat-4:repeat-3",
+      "chart": "E",
+      "engine_seed": 17638778964007742382,
+      "focal_seat": 4,
+      "opponent_names_by_seat": [
+        "random",
+        "aggressive-v1",
+        "balanced-v1",
+        "passive-v1",
+        null
+      ],
+      "player_count": 5
+    }
+  ],
+  "digest": "17c016350dbe717641b8cd499b0908e3bc0faa811a3b4f5e574f8713a5bf2b3d",
+  "recipe": {
+    "charts": [
+      "A",
+      "B",
+      "C",
+      "D",
+      "E"
+    ],
+    "name": "development-v1",
+    "opponent_names": [
+      "random",
+      "aggressive-v1",
+      "balanced-v1",
+      "passive-v1"
+    ],
+    "player_counts": [
+      3,
+      4,
+      5
+    ],
+    "purpose": "development",
+    "repetitions_per_seat_cell": 4,
+    "root_seed": 9001,
+    "schema_version": 1
+  }
+}

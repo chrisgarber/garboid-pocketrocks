@@ -1,0 +1,47 @@
+{
+  "algorithm": {
+    "elite_count": 4,
+    "generation_count": 8,
+    "mutation_radius_steps": 4,
+    "name": "mu-plus-lambda-v1",
+    "population_size": 12
+  },
+  "coefficient_grids": {
+    "bid_shading": {
+      "maximum": "1",
+      "minimum": "0",
+      "step": "0.05"
+    },
+    "future_cash_weight": {
+      "maximum": "2",
+      "minimum": "0",
+      "step": "0.05"
+    },
+    "liquidity_strength": {
+      "maximum": "1.5",
+      "minimum": "0",
+      "step": "0.05"
+    },
+    "objective_progress_weight": {
+      "maximum": "1",
+      "minimum": "0",
+      "step": "0.05"
+    }
+  },
+  "development_corpus": {
+    "digest": "17c016350dbe717641b8cd499b0908e3bc0faa811a3b4f5e574f8713a5bf2b3d",
+    "name": "development-v1"
+  },
+  "digest": "627eb77836f8dceace745a8fb7f60573e2dad05aa47a423d902850c32a98f5e0",
+  "initial_coefficients": {
+    "bid_shading": "0.05",
+    "future_cash_weight": "1.5",
+    "liquidity_strength": "0.75",
+    "objective_progress_weight": "0.25"
+  },
+  "name": "aggressive-v3-search-v1",
+  "personality": "aggressive",
+  "predecessor_name": "aggressive-v2",
+  "schema_version": 1,
+  "search_seed": 11001
+}

@@ -1,0 +1,52 @@
+{
+  "artifacts": [
+    "search-manifest.json",
+    "search-report.json",
+    "candidate-evaluations.jsonl",
+    "selection-log.jsonl",
+    "development-games.jsonl",
+    "development-corpus-snapshot.json",
+    "frozen-candidate.json"
+  ],
+  "best_result": {
+    "candidate_identity": "aggressive-v3-candidate-g007-s008-c70e11540db9",
+    "final_money_delta": 3609,
+    "generation": 7,
+    "normalized_finish_delta": 36.58333333333334,
+    "rating_delta": 252.83828743380695,
+    "slot": 8
+  },
+  "coverage": {
+    "completed_baseline_games": 240,
+    "completed_candidate_games": 23040,
+    "completed_generations": 8,
+    "evaluated_candidates": 96,
+    "proposed_candidates": 96,
+    "requested_baseline_games": 240,
+    "requested_candidate_games": 23040
+  },
+  "development_corpus": {
+    "cases": 240,
+    "digest": "17c016350dbe717641b8cd499b0908e3bc0faa811a3b4f5e574f8713a5bf2b3d",
+    "name": "development-v1"
+  },
+  "execution": {
+    "batch_size": 64,
+    "workers": 4
+  },
+  "failures": [],
+  "frozen_candidate_identity": "aggressive-v3-candidate-g007-s008-c70e11540db9",
+  "repository_commit": "5fb33de9734234ce0902bf79b85a75c3a5585c23",
+  "schema_version": 1,
+  "search": {
+    "elite_count": 4,
+    "generation_count": 8,
+    "manifest_digest": "627eb77836f8dceace745a8fb7f60573e2dad05aa47a423d902850c32a98f5e0",
+    "name": "aggressive-v3-search-v1",
+    "personality": "aggressive",
+    "population_size": 12,
+    "predecessor_name": "aggressive-v2"
+  },
+  "selected_candidate_identity": "aggressive-v3-candidate-g007-s008-c70e11540db9",
+  "status": "frozen_improvement"
+}
