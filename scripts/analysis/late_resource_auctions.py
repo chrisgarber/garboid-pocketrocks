@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from itertools import batched
 
 from pocketrocks import ActionId
+from pocketrocks.sim.constants import ACTION_WIRE_IDS
 
 from garboid_pocketrocks.bots import (
     AggressiveHeuristicBot,
@@ -22,17 +23,14 @@ from garboid_pocketrocks.heuristics.profiles import (
     PASSIVE_PROFILE,
 )
 from garboid_pocketrocks.heuristics.valuation import HeuristicValuator
-from garboid_pocketrocks.rules import live_ruleset
-from garboid_pocketrocks.simulator.engine import GameEngine
-from garboid_pocketrocks.simulator.events import EventKind
-from garboid_pocketrocks.simulator.model import Phase
+from garboid_pocketrocks.knowledge import canonical_knowledge
 from garboid_pocketrocks.simulator.monte_carlo import (
     GameJob,
     MonteCarloConfig,
     MonteCarloRunner,
     _execute_job,
 )
-from garboid_pocketrocks.simulator.sampling import WeightedRulesetSampler
+from garboid_pocketrocks.simulator.session import SdkGameSession
 
 GAMES = 100_000
 ROOT_SEED = 20260729
@@ -134,17 +132,24 @@ def analyze_chunk(jobs: tuple[GameJob, ...]) -> Chunk:
 
     for job in jobs:
         completed = _execute_job(job)
-        transition = GameEngine.start(job.ruleset, player_count=3, seed=job.seed)
-        knowledge = job.ruleset.knowledge(3)
+        session = SdkGameSession.start(
+            player_count=3,
+            seed=job.seed,
+            value_chart=job.value_chart,
+            objectives_enabled=job.objectives_enabled,
+        )
+        knowledge = canonical_knowledge(
+            3,
+            value_chart=job.value_chart,
+            objectives_enabled=job.objectives_enabled,
+        )
         for _, recorded_decisions in completed.match.replay.decisions:
-            assert transition.pending is not None
             decisions = dict(recorded_decisions)
-            if transition.state.phase is Phase.BIDDING:
-                assert transition.state.current_action is not None
-                action = transition.state.current_action.action_id
-                turn = transition.state.turn_index + 1
+            if session.pending.decision_kind == "submitBid":
+                action = ActionId(ACTION_WIRE_IDS[session.snapshot.current_action])
+                turn = session.snapshot.turn_index + 1
                 if action in RESOURCE_ACTIONS:
-                    for seat, context in transition.pending.contexts:
+                    for seat, context in session.pending.contexts:
                         bot = job.lineup[seat].name
                         result = valuators[bot].evaluate_bid(context, knowledge)
                         submitted = decisions[seat].value or 0
@@ -201,21 +206,19 @@ def analyze_chunk(jobs: tuple[GameJob, ...]) -> Chunk:
                                 )
                             )
 
-            transition = GameEngine.step(transition.state, decisions)
-            for event in transition.events:
-                if event.kind is EventKind.AUCTION_RESOLVED and event.action_id in RESOURCE_ACTIONS:
-                    assert event.seat is not None
-                    assert event.amount is not None
-                    assert event.turn_index is not None
-                    bot = job.lineup[event.seat].name
-                    key = (bot, event.action_id, band(event.turn_index + 1))
+            transition = session.step(decisions)
+            for record in transition.turn_records:
+                action = ActionId(ACTION_WIRE_IDS[record.action])
+                if action in RESOURCE_ACTIONS:
+                    bot = job.lineup[record.winner_seat].name
+                    key = (bot, action, band(record.turn_index + 1))
                     wins[key].wins += 1
-                    wins[key].payments += event.amount
-                    market = market_wins[(event.action_id, band(event.turn_index + 1))]
+                    wins[key].payments += record.paid
+                    market = market_wins[(action, band(record.turn_index + 1))]
                     market.wins += 1
-                    market.payments += event.amount
+                    market.payments += record.paid
 
-        for seat, player in enumerate(transition.state.players):
+        for seat, player in enumerate(session.snapshot.players):
             terminal_cash[job.lineup[seat].name] += player.cash
 
     return Chunk(
@@ -229,12 +232,12 @@ def analyze_chunk(jobs: tuple[GameJob, ...]) -> Chunk:
 
 
 def main() -> None:
-    charts = tuple(live_ruleset(chart) for chart in "ABCDE")
+    charts = tuple("ABCDE")
     config = MonteCarloConfig(
         bot_specs=tuple(BotSpec.from_bot_class(bot) for bot in BOT_CLASSES),
         games=GAMES,
         player_counts=(3,),
-        ruleset_sampler=WeightedRulesetSampler(tuple((ruleset, 1) for ruleset in charts)),
+        value_charts=charts,
         root_seed=ROOT_SEED,
     )
     chunks = tuple(

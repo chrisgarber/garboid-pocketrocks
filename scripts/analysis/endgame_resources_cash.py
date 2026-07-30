@@ -15,16 +15,13 @@ from garboid_pocketrocks.bots import (
     BotSpec,
     PassiveHeuristicBot,
 )
-from garboid_pocketrocks.rules import live_ruleset
-from garboid_pocketrocks.simulator.engine import GameEngine
-from garboid_pocketrocks.simulator.model import Phase
 from garboid_pocketrocks.simulator.monte_carlo import (
     GameJob,
     MonteCarloConfig,
     MonteCarloRunner,
     _execute_job,
 )
-from garboid_pocketrocks.simulator.sampling import WeightedRulesetSampler
+from garboid_pocketrocks.simulator.session import SdkGameSession
 
 BOT_CLASSES = (
     AggressiveHeuristicBot,
@@ -167,19 +164,19 @@ def _analyze_chunk(jobs: tuple[GameJob, ...]) -> ChunkSummary:
     for job in jobs:
         completed = _execute_job(job)
         replay = completed.match.replay
-        transition = GameEngine.start(
-            job.ruleset,
+        session = SdkGameSession.start(
             player_count=job.player_count,
             seed=job.seed,
+            value_chart=job.value_chart,
+            objectives_enabled=job.objectives_enabled,
         )
         saw_cash_zero = {bot: False for bot in BOT_NAMES}
         saw_hard_constraint = {bot: False for bot in BOT_NAMES}
 
         for _, recorded_decisions in replay.decisions:
-            assert transition.pending is not None
             decisions = dict(recorded_decisions)
-            if transition.state.phase is Phase.BIDDING:
-                contexts = transition.pending.contexts_by_seat
+            if session.pending.decision_kind == "submitBid":
+                contexts = session.pending.contexts_by_seat
                 for seat in range(job.player_count):
                     bot = job.lineup[seat].name
                     context = contexts[seat]
@@ -202,14 +199,15 @@ def _analyze_chunk(jobs: tuple[GameJob, ...]) -> ChunkSummary:
                         saw_hard_constraint[bot] = True
                         if bid == 0:
                             bucket.hard_constrained_passes += 1
-            transition = GameEngine.step(transition.state, decisions)
+            session.step(decisions)
 
-        turns.add(transition.state.turn_index)
-        for seat, player in enumerate(transition.state.players):
+        snapshot = session.snapshot
+        turns.add(snapshot.turn_index)
+        for seat, player in enumerate(snapshot.players):
             bot = job.lineup[seat].name
-            resources[bot].add(len(player.won_resources))
+            resources[bot].add(len(player.won_suits))
             cash[bot].add(player.cash)
-            debt = sum(loan.principal for loan in player.loans)
+            debt = sum(player.loans)
             net_cash_after_debt[bot].add(player.cash - debt)
             constraints[bot].bot_games_cash_zero += int(saw_cash_zero[bot])
             constraints[bot].bot_games_hard_constrained += int(saw_hard_constraint[bot])
@@ -224,12 +222,12 @@ def _analyze_chunk(jobs: tuple[GameJob, ...]) -> ChunkSummary:
 
 
 def main() -> None:
-    charts = tuple(live_ruleset(chart) for chart in "ABCDE")
+    charts = tuple("ABCDE")
     config = MonteCarloConfig(
         bot_specs=tuple(BotSpec.from_bot_class(bot) for bot in BOT_CLASSES),
         games=GAMES,
         player_counts=(3,),
-        ruleset_sampler=WeightedRulesetSampler(tuple((ruleset, 1) for ruleset in charts)),
+        value_charts=charts,
         root_seed=ROOT_SEED,
     )
     jobs = MonteCarloRunner.plan(config)

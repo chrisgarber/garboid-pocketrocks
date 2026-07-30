@@ -13,12 +13,10 @@ from garboid_pocketrocks.bots import (
     BotSpec,
     PassiveHeuristicBot,
 )
-from garboid_pocketrocks.rules import live_ruleset
 from garboid_pocketrocks.simulator.monte_carlo import (
     MonteCarloConfig,
     MonteCarloRunner,
 )
-from garboid_pocketrocks.simulator.sampling import WeightedRulesetSampler
 
 BOT_CLASSES = (
     AggressiveHeuristicBot,
@@ -56,12 +54,12 @@ def distribution(values: list[int] | tuple[int, ...]) -> dict[str, float | int]:
 
 
 def main() -> None:
-    charts = tuple(live_ruleset(chart) for chart in "ABCDE")
+    charts = tuple("ABCDE")
     config = MonteCarloConfig(
         bot_specs=tuple(BotSpec.from_bot_class(bot) for bot in BOT_CLASSES),
         games=GAMES,
         player_counts=(3,),
-        ruleset_sampler=WeightedRulesetSampler(tuple((ruleset, 1) for ruleset in charts)),
+        value_charts=charts,
         root_seed=ROOT_SEED,
     )
     result = MonteCarloRunner.run(config, workers=16)
@@ -96,17 +94,17 @@ def main() -> None:
 
     per_chart: dict[str, object] = {}
     for chart in charts:
-        label = chart.name
-        games = sum(1 for summary in result.game_summaries if summary.ruleset_name == chart.name)
+        label = f"live-{chart}"
+        games = sum(1 for summary in result.game_summaries if summary.ruleset_name == label)
         winning_scores = [
             max(score.final_money for score in summary.scores)
             for summary in result.game_summaries
-            if summary.ruleset_name == chart.name
+            if summary.ruleset_name == label
         ]
         bots: dict[str, object] = {}
         for name in BOT_NAMES:
             bucket = next(
-                item for item in stats_by_name[name].per_ruleset if item.ruleset_name == chart.name
+                item for item in stats_by_name[name].per_ruleset if item.ruleset_name == label
             )
             bots[name] = {
                 "games": bucket.games,
