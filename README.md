@@ -129,30 +129,27 @@ spread, and quantiles.
 
 ## Multiplayer bot tournaments
 
-Rank every registered simulator bot with 10,000 deterministic games:
+Rank the standard simulator field with 15,000 deterministic games:
 
 ```bash
-uv run garboid-tournament \
-  --games 10000 \
-  --players 3,4,5 \
-  --charts A,B,C,D,E \
-  --seed 42 \
-  --workers 4 \
+uv run --extra neural garboid-tournament \
   --output-dir tournament-results
 ```
 
-Those game, player, chart, seed, and bootstrap settings are the defaults.
+The defaults are 15,000 games, three through five players, charts A through E,
+root seed zero, batch size 64, and 200 bootstrap samples.
 Lineups contain distinct bot identities, condition exposure is balanced across
 the 15 chart/player-count cells, and seats are rotated fairly. A fixed seed
 produces identical game summaries, rankings, and bootstrap intervals regardless
 of worker count. Workers accelerate both match simulation and interval fitting.
 
 The shared registry includes the random bot, the latest unversioned heuristic
-profiles, and the explicit v1 and v2 heuristic generations, so the full default
-has enough distinct identities for five-player games. Adding future `BotSpec`
-entries to that registry automatically includes them in tournaments. Use
-`--bots` or `--exclude-bots` for a reproducible subset and
-`--bootstrap-samples 0` for quick experiments.
+profiles, the explicit v1 and v2 heuristic generations, and the frozen
+`vector_ppo_small_v1_g1500` smoke policy. The curated default field uses random,
+the six distinct versioned heuristic policies, and that smoke policy; it omits
+the unversioned aliases because they duplicate v2 behavior. Use `--bots` or
+`--exclude-bots` for a reproducible subset and `--bootstrap-samples 0` for
+quick experiments.
 
 The estimator fits complete multiplayer finishes with a tie-aware
 Plackett–Luce model. `worth` is the fitted positive strength normalized across

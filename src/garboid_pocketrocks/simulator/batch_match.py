@@ -12,7 +12,16 @@ from pocketrocks import BotDecision, DecisionContext
 from pocketrocks.sim import BatchSimEngine, RevealRecord, ScoreRow, TurnRecord
 from pocketrocks.sim.constants import ACTION_WIRE_IDS
 
-from garboid_pocketrocks.bots.base import BotBrain, BotSpec
+from garboid_pocketrocks.adapters.public_history import (
+    PublicAuctionResolved,
+    PublicEvent,
+    PublicEventKind,
+    PublicGameSetup,
+    PublicHistory,
+    PublicInformationRevealed,
+    PublicTurnOpened,
+)
+from garboid_pocketrocks.bots.base import BotBrain, BotSpec, HistoryAwareBotBrain
 from garboid_pocketrocks.knowledge import RulesetKnowledge, canonical_knowledge
 from garboid_pocketrocks.simulator.batch_context import build_batch_context
 from garboid_pocketrocks.simulator.replay import MatchReplay
@@ -73,6 +82,7 @@ def run_batch_matches(jobs: Sequence[BatchGameJob]) -> tuple[MatchResult, ...]:
     brains: list[list[BotBrain | None]] = []
     faults: list[list[BotFault]] = [[] for _ in jobs]
     knowledge: list[RulesetKnowledge] = []
+    histories: list[list[PublicEvent]] = []
     decisions: list[list[tuple[int, tuple[tuple[int, BotDecision], ...]]]] = [[] for _ in jobs]
     turns: list[list[TurnRecord]] = [[] for _ in jobs]
     step_indices = [0] * len(jobs)
@@ -95,12 +105,25 @@ def run_batch_matches(jobs: Sequence[BatchGameJob]) -> tuple[MatchResult, ...]:
                     error=error,
                 )
         brains.append(row_brains)
-        knowledge.append(
-            canonical_knowledge(
-                player_count,
-                value_chart=job.value_chart,
-                objectives_enabled=job.objectives_enabled,
-            )
+        game_knowledge = canonical_knowledge(
+            player_count,
+            value_chart=job.value_chart,
+            objectives_enabled=job.objectives_enabled,
+        )
+        knowledge.append(game_knowledge)
+        histories.append(
+            [
+                PublicGameSetup(
+                    kind=PublicEventKind.GAME_SETUP,
+                    player_count=player_count,
+                    starting_cash=game_knowledge.starting_cash,
+                    value_chart=game_knowledge.value_chart,
+                    initial_tiebreak_seat=int(engine.tiebreak_seats[row]),
+                    objective_ids=tuple(
+                        int(value) for value in engine.objective_ids[row] if value > 0
+                    ),
+                )
+            ]
         )
 
     while True:
@@ -113,6 +136,18 @@ def run_batch_matches(jobs: Sequence[BatchGameJob]) -> tuple[MatchResult, ...]:
         turn_indices = engine.turn_indices.astype(np.int64, copy=True)
         legal = engine.legal_max_bids()
         raw_bids = np.zeros((len(jobs), player_count), dtype=np.int16)
+        for raw_row in active_rows:
+            row = int(raw_row)
+            histories[row].append(
+                PublicTurnOpened(
+                    kind=PublicEventKind.TURN_OPENED,
+                    action_id=int(action_ids[row]),
+                    resource_ids=(
+                        int(resources_before[row, 0]),
+                        int(resources_before[row, 1]),
+                    ),
+                )
+            )
 
         for raw_row in active_rows:
             row = int(raw_row)
@@ -138,6 +173,7 @@ def run_batch_matches(jobs: Sequence[BatchGameJob]) -> tuple[MatchResult, ...]:
                     brain=brains[row][seat],
                     context=context,
                     knowledge=knowledge[row],
+                    history=tuple(histories[row]),
                     fault_mode=job.fault_mode,
                     faults=faults[row],
                     turn_index=int(turn_indices[row]),
@@ -152,6 +188,14 @@ def run_batch_matches(jobs: Sequence[BatchGameJob]) -> tuple[MatchResult, ...]:
             step_indices[row] += 1
 
         outcome = engine.resolve_bids(raw_bids)
+        for raw_row in active_rows:
+            row = int(raw_row)
+            histories[row].append(
+                PublicAuctionResolved(
+                    kind=PublicEventKind.AUCTION_RESOLVED,
+                    bids_by_seat=tuple(int(value) for value in outcome.effective_bids[row]),
+                )
+            )
         for raw_row in active_rows:
             row = int(raw_row)
             action_id = int(action_ids[row])
@@ -217,6 +261,7 @@ def run_batch_matches(jobs: Sequence[BatchGameJob]) -> tuple[MatchResult, ...]:
                     brain=brains[row][winner],
                     context=context,
                     knowledge=knowledge[row],
+                    history=tuple(histories[row]),
                     fault_mode=job.fault_mode,
                     faults=faults[row],
                     turn_index=int(engine.turn_indices[row]),
@@ -225,11 +270,18 @@ def run_batch_matches(jobs: Sequence[BatchGameJob]) -> tuple[MatchResult, ...]:
                 )
                 decisions[row].append((step_indices[row], ((winner, decision),)))
                 step_indices[row] += 1
-                assert decision.action_kind == "selectInfoToReveal"
-                assert decision.value is not None
-                reveal_index = decision.value
+                if decision.action_kind == "selectInfoToReveal":
+                    assert decision.value is not None
+                    reveal_index = decision.value
             reveal_indices[row] = reveal_index
             revealed_suit = int(engine.hand_cards[row, winner, reveal_index])
+            histories[row].append(
+                PublicInformationRevealed(
+                    kind=PublicEventKind.INFORMATION_REVEALED,
+                    seat=winner,
+                    suit_id=revealed_suit,
+                )
+            )
             turns[row][-1] = replace(
                 turns[row][-1],
                 reveal=RevealRecord(
@@ -303,6 +355,7 @@ def _choose_decision(
     brain: BotBrain | None,
     context: DecisionContext,
     knowledge: RulesetKnowledge,
+    history: PublicHistory,
     fault_mode: FaultMode,
     faults: list[BotFault],
     turn_index: int,
@@ -312,7 +365,14 @@ def _choose_decision(
     if brain is None:
         return _fallback(context)
     try:
-        decision = brain.choose_decision(context, knowledge)
+        if isinstance(brain, HistoryAwareBotBrain):
+            decision = brain.choose_decision_with_history(
+                context,
+                knowledge,
+                history,
+            )
+        else:
+            decision = brain.choose_decision(context, knowledge)
         context.validate(decision)
         return decision
     except Exception as error:

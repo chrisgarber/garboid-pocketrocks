@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, ClassVar, Protocol
+from typing import Any, ClassVar, Protocol, runtime_checkable
 
 from pocketrocks import BotDecision, DecisionContext, PocketRocksBot
 
+from garboid_pocketrocks.adapters.public_history import PublicHistory
 from garboid_pocketrocks.knowledge import RulesetKnowledge, knowledge_for_context
 
 
@@ -16,6 +17,17 @@ class BotBrain(Protocol):
         ruleset: RulesetKnowledge,
     ) -> BotDecision:
         """Return one synchronous SDK decision."""
+
+
+@runtime_checkable
+class HistoryAwareBotBrain(Protocol):
+    def choose_decision_with_history(
+        self,
+        context: DecisionContext,
+        ruleset: RulesetKnowledge,
+        history: PublicHistory,
+    ) -> BotDecision:
+        """Return one decision using exact immutable public history."""
 
 
 BrainFactory = Callable[[int | None], BotBrain]

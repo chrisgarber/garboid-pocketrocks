@@ -6,10 +6,11 @@ self-play. The implemented training envelope covers every live value chart
 the same frozen policy snapshot during collection, and every seat trajectory is
 then used by PPO.
 
-This is a training system, not yet a registered live `NeuralBot`. It proves
-legal SDK-compatible inference, balanced self-play, PPO updates, value
-diagnostics, throughput calibration, and update-boundary checkpoint/resume.
-It does not yet establish competition strength.
+This is a training system, not yet a registered live remote `NeuralBot`. The
+frozen `vector_ppo_small_v1_g1500` smoke checkpoint is registered for local
+simulation and the standard tournament. It proves legal SDK-compatible
+inference, balanced self-play, PPO updates, value diagnostics, throughput
+calibration, and update-boundary checkpoint/resume.
 
 ## Install
 
@@ -21,6 +22,12 @@ uv sync --locked --extra neural
 
 All commands below also run from the repository root. Output directories must
 be new or empty.
+
+Run the standard tournament, including the frozen smoke policy, with:
+
+```bash
+uv run --extra neural garboid-tournament
+```
 
 ## Model and information boundary
 

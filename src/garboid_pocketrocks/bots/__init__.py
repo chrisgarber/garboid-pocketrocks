@@ -4,6 +4,7 @@ from garboid_pocketrocks.bots.base import (
     BotBrain,
     BotSpec,
     BrainFactory,
+    HistoryAwareBotBrain,
     PocketRocksFastBot,
 )
 from garboid_pocketrocks.bots.heuristic import (
@@ -28,6 +29,9 @@ from garboid_pocketrocks.bots.registry import (
     DEFAULT_TOURNAMENT_BOT_SPECS,
     registered_bot_specs,
 )
+from garboid_pocketrocks.neural.tournament_bot import (
+    VectorPpoSmallV1G1500Brain,
+)
 
 __all__ = [
     "BOT_SPECS",
@@ -45,6 +49,7 @@ __all__ = [
     "BalancedHeuristicV1Brain",
     "BalancedHeuristicV2Brain",
     "HeuristicBotBrain",
+    "HistoryAwareBotBrain",
     "PassiveHeuristicBot",
     "PassiveHeuristicBrain",
     "PassiveHeuristicV1Brain",
@@ -52,5 +57,6 @@ __all__ = [
     "PocketRocksFastBot",
     "RandomBot",
     "RandomBotBrain",
+    "VectorPpoSmallV1G1500Brain",
     "registered_bot_specs",
 ]
