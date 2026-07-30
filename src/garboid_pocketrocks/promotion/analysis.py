@@ -331,14 +331,15 @@ def _validate_results(
         job = expected_by_index[game_index]
         summary_failures = _summary_failures(job, summary)
         failures.extend(summary_failures)
-        if not summary_failures:
-            exact_by_index[game_index] = summary
+        if _has_trusted_seat_identities(job, summary):
             for bot_id, count in zip(
                 summary.bot_ids,
                 summary.fault_counts,
                 strict=True,
             ):
                 faults[bot_id] += abs(count)
+        if not summary_failures:
+            exact_by_index[game_index] = summary
 
     for game_index in expected_by_index.keys() - summaries_by_index.keys():
         failures.append(
@@ -370,6 +371,19 @@ def _validate_results(
         completed_games=len(exact_by_index),
         faults_by_identity=nonzero_faults,
         failures=_ordered_failures(failures),
+    )
+
+
+def _has_trusted_seat_identities(
+    job: GameJob,
+    summary: GameSummary,
+) -> bool:
+    """Return whether each reported fault can be assigned to its planned bot."""
+
+    return (
+        summary.bot_names == tuple(spec.name for spec in job.lineup)
+        and summary.bot_ids == tuple(spec.bot_id for spec in job.lineup)
+        and len(summary.fault_counts) == job.player_count
     )
 
 
