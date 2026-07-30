@@ -21,6 +21,7 @@ from garboid_pocketrocks.neural.encoding import (
     batch_observations,
 )
 from garboid_pocketrocks.neural.model import NeuralPolicy
+from garboid_pocketrocks.neural.planning import SelfPlayEpisodePlan
 from garboid_pocketrocks.neural.policy import evaluate_masked_policy
 from garboid_pocketrocks.neural.seeding import EpisodePlan
 from garboid_pocketrocks.rules import LIVE_RULESET
@@ -93,14 +94,64 @@ class RolloutEpisode:
 
 
 @dataclass(frozen=True, slots=True)
+class SeatTrajectory:
+    """One policy identity's complete trajectory for one game seat."""
+
+    seat: int
+    policy_identity: str
+    trainable: bool
+    transitions: tuple[RolloutTransition, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class MultiSeatEpisode:
+    """One complete self-play game with a separate trajectory per seat."""
+
+    plan: SelfPlayEpisodePlan
+    trajectories: tuple[SeatTrajectory, ...]
+    result: GameResult
+
+
+@dataclass(frozen=True, slots=True)
 class RolloutBatch:
     """Complete episodes collected under one frozen policy."""
 
     episodes: tuple[RolloutEpisode, ...]
+    multi_seat_episodes: tuple[MultiSeatEpisode, ...] = ()
 
     @property
     def transitions(self) -> tuple[RolloutTransition, ...]:
-        return tuple(transition for episode in self.episodes for transition in episode.transitions)
+        stage1 = tuple(
+            transition
+            for episode in self.episodes
+            for transition in episode.transitions
+        )
+        self_play = tuple(
+            transition
+            for episode in self.multi_seat_episodes
+            for trajectory in episode.trajectories
+            if trajectory.trainable
+            for transition in trajectory.transitions
+        )
+        return (*stage1, *self_play)
+
+    @classmethod
+    def from_multi_seat(
+        cls,
+        episodes: Sequence[MultiSeatEpisode],
+    ) -> RolloutBatch:
+        """Build a rollout whose PPO-visible transitions are trainable seats."""
+
+        collected = tuple(episodes)
+        if not collected:
+            raise RolloutError("multi-seat rollout requires at least one episode")
+        if not any(
+            trajectory.trainable
+            for episode in collected
+            for trajectory in episode.trajectories
+        ):
+            raise RolloutError("multi-seat rollout contains no trainable trajectory")
+        return cls(episodes=(), multi_seat_episodes=collected)
 
 
 def collect_rollout(
