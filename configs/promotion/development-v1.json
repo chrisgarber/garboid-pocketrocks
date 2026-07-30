@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "name": "development-v1",
+  "purpose": "development",
+  "root_seed": 9001,
+  "repetitions_per_seat_cell": 4,
+  "charts": [
+    "A",
+    "B",
+    "C",
+    "D",
+    "E"
+  ],
+  "player_counts": [
+    3,
+    4,
+    5
+  ],
+  "opponent_names": [
+    "random",
+    "aggressive-v1",
+    "balanced-v1",
+    "passive-v1"
+  ]
+}
