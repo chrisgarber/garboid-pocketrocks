@@ -144,12 +144,13 @@ produces identical game summaries, rankings, and bootstrap intervals regardless
 of worker count. Workers accelerate both match simulation and interval fitting.
 
 The shared registry includes the random bot, the latest unversioned heuristic
-profiles, the explicit v1 and v2 heuristic generations, and the frozen
-`vector_ppo_small_v1_g1500` smoke policy. The curated default field uses random,
-the six distinct versioned heuristic policies, and that smoke policy; it omits
-the unversioned aliases because they duplicate v2 behavior. Use `--bots` or
-`--exclude-bots` for a reproducible subset and `--bootstrap-samples 0` for
-quick experiments.
+profiles, the explicit v1 and v2 heuristic generations, the frozen
+`vector_ppo_small_v1_g1500` smoke policy, and the large
+`vector_ppo_large_v1_g350k` policy trained for exactly 349,860 games. The
+curated default field uses random, the six distinct versioned heuristic
+policies, and both neural policies; it omits the unversioned aliases because
+they duplicate v2 behavior. Use `--bots` or `--exclude-bots` for a reproducible
+subset and `--bootstrap-samples 0` for quick experiments.
 
 The estimator fits complete multiplayer finishes with a tie-aware
 Plackett–Luce model. `worth` is the fitted positive strength normalized across

@@ -58,9 +58,7 @@ def test_large_checkpoint_is_frozen_at_rounded_training_age() -> None:
     }
     assert loaded.manifest.completed_episodes == 349_860
     assert loaded.manifest.completed_updates == 196
-    assert loaded.manifest.supported_ruleset_names == tuple(
-        f"live-{chart}" for chart in "ABCDE"
-    )
+    assert loaded.manifest.supported_ruleset_names == tuple(f"live-{chart}" for chart in "ABCDE")
     assert loaded.manifest.supported_player_counts == (3, 4, 5)
     assert len(loaded.manifest.parameter_digest) == 64
 
@@ -316,8 +314,10 @@ In `test_cli_runs_all_conditions_with_current_registry`, exclude both neural
 models so this dependency-light CLI integration remains:
 
 ```python
-"--exclude-bots",
-"vector_ppo_small_v1_g1500,vector_ppo_large_v1_g350k",
+neural_exclusions = [
+    "--exclude-bots",
+    "vector_ppo_small_v1_g1500,vector_ppo_large_v1_g350k",
+]
 ```
 
 - [ ] **Step 2: Run the registry tests and verify they fail**

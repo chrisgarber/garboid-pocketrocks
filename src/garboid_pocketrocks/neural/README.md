@@ -6,11 +6,18 @@ self-play. The implemented training envelope covers every live value chart
 the same frozen policy snapshot during collection, and every seat trajectory is
 then used by PPO.
 
-This is a training system, not yet a registered live remote `NeuralBot`. The
-frozen `vector_ppo_small_v1_g1500` smoke checkpoint is registered for local
-simulation and the standard tournament. It proves legal SDK-compatible
-inference, balanced self-play, PPO updates, value diagnostics, throughput
-calibration, and update-boundary checkpoint/resume.
+This is a training system, not yet a registered live remote `NeuralBot`. Two
+frozen checkpoints are registered for local simulation and the standard
+tournament:
+
+- `vector_ppo_small_v1_g1500`, the 1,500-game smoke policy;
+- `vector_ppo_large_v1_g350k`, the rounded release name for the large policy
+  trained for exactly 349,860 games and 196 updates.
+
+Their inference manifests retain exact training ages and repository provenance.
+Together they exercise legal SDK-compatible inference, balanced self-play, PPO
+updates, value diagnostics, throughput calibration, and update-boundary
+checkpoint/resume.
 
 ## Install
 
@@ -23,7 +30,7 @@ uv sync --locked --extra neural
 All commands below also run from the repository root. Output directories must
 be new or empty.
 
-Run the standard tournament, including the frozen smoke policy, with:
+Run the standard tournament, including both frozen neural policies, with:
 
 ```bash
 uv run --extra neural garboid-tournament
@@ -74,7 +81,10 @@ The current checkpoint-stable capacity profiles are:
 Completed checkpoints receive lossless local IDs in the form
 `vector_ppo_<profile>_v1_g<completed-games>`, for example
 `vector_ppo_large_v1_g1000000`. Network size and training age are therefore
-visible in tournament/reporting identities without rounding the game count.
+visible in tournament/reporting identities. The tournament's
+`vector_ppo_large_v1_g350k` release name is an explicit rounded alias requested
+for the 349,860-game checkpoint; its manifest remains the source of truth for
+the exact age.
 
 The trunk feeds three heads:
 
