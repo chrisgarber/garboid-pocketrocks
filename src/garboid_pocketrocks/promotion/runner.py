@@ -244,12 +244,17 @@ def _resolved_report_opponents(
 
 
 def _repository_commit() -> str:
-    completed = subprocess.run(
-        ("git", "rev-parse", "HEAD"),
-        check=True,
-        capture_output=True,
-        text=True,
-    )
+    try:
+        completed = subprocess.run(
+            ("git", "rev-parse", "HEAD"),
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (OSError, subprocess.CalledProcessError) as error:
+        raise RuntimeError(
+            "Could not determine the repository commit with git rev-parse HEAD."
+        ) from error
     commit = completed.stdout.strip()
     if not commit:
         raise RuntimeError("git did not return a repository commit")

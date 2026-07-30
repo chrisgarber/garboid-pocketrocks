@@ -181,7 +181,11 @@ def _require_distinct_compared_bots(candidate: BotSpec, incumbent: BotSpec) -> N
 
 def _requested_output_dir(argv: Sequence[str] | None) -> Path:
     arguments = tuple(sys.argv[1:] if argv is None else argv)
-    for index, value in enumerate(arguments[:-1]):
+    output_dir = _DEFAULT_OUTPUT_DIR
+    for index, value in enumerate(arguments):
         if value == "--output-dir":
-            return Path(arguments[index + 1])
-    return _DEFAULT_OUTPUT_DIR
+            if index + 1 < len(arguments) and not arguments[index + 1].startswith("-"):
+                output_dir = Path(arguments[index + 1])
+        elif value.startswith("--output-dir="):
+            output_dir = Path(value.partition("=")[2])
+    return output_dir
