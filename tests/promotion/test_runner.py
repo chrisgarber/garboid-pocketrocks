@@ -290,7 +290,78 @@ def test_simulation_error_writes_a_nonpromotion_report(
     assert run.plan is not None
     assert run.monte_carlo_result is None
     assert [failure.code for failure in run.report.analysis.failures] == ["simulation_failed"]
+    assert run.report.analysis.failures[0].message.endswith("worker process failed")
     assert run.artifacts.report_json.is_file()
+
+
+@pytest.mark.parametrize(
+    "simulator_error",
+    (
+        OSError("worker pipe closed"),
+        RuntimeError("SDK execution failed"),
+        ValueError("simulator result was invalid"),
+    ),
+)
+def test_raw_simulator_exceptions_write_a_nonpromotion_report(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    simulator_error: Exception,
+) -> None:
+    config, registry = _run_inputs(pair_count=1)
+
+    def fail_simulation(*args: object, **kwargs: object) -> None:
+        del args, kwargs
+        raise simulator_error
+
+    monkeypatch.setattr(
+        "garboid_pocketrocks.promotion.runner.MonteCarloRunner.run_jobs",
+        fail_simulation,
+    )
+
+    run = PromotionRunner.run(
+        config,
+        registry=registry,
+        workers=1,
+        output_dir=tmp_path,
+        repository_commit="test-commit",
+    )
+
+    failure = run.report.analysis.failures[0]
+    assert run.plan is not None
+    assert run.monte_carlo_result is None
+    assert failure.code == "simulation_failed"
+    assert type(simulator_error).__name__ in failure.message
+    assert str(simulator_error) in failure.message
+    assert run.artifacts.report_json.is_file()
+
+
+@pytest.mark.parametrize("control_flow_error", (KeyboardInterrupt(), SystemExit(2)))
+def test_simulator_preserves_process_control_exceptions(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    control_flow_error: BaseException,
+) -> None:
+    config, registry = _run_inputs(pair_count=1)
+
+    def interrupt_simulation(*args: object, **kwargs: object) -> None:
+        del args, kwargs
+        raise control_flow_error
+
+    monkeypatch.setattr(
+        "garboid_pocketrocks.promotion.runner.MonteCarloRunner.run_jobs",
+        interrupt_simulation,
+    )
+
+    with pytest.raises(type(control_flow_error)) as captured:
+        PromotionRunner.run(
+            config,
+            registry=registry,
+            workers=1,
+            output_dir=tmp_path,
+            repository_commit="test-commit",
+        )
+
+    assert captured.value is control_flow_error
 
 
 def test_nonfinite_analyzer_output_is_replaced_with_a_failure(

@@ -92,9 +92,8 @@ class PromotionRunner:
                 incumbent=config.incumbent,
                 registry=registry,
             )
-            result = MonteCarloRunner.run_jobs(
-                plan.monte_carlo_config,
-                plan.jobs,
+            result = _run_promotion_games(
+                plan,
                 workers=workers,
                 batch_size=config.batch_size,
             )
@@ -172,6 +171,27 @@ class PromotionRunner:
             report=report,
             artifacts=artifacts,
         )
+
+
+def _run_promotion_games(
+    plan: PromotionPlan,
+    *,
+    workers: int,
+    batch_size: int,
+) -> MonteCarloResult:
+    try:
+        return MonteCarloRunner.run_jobs(
+            plan.monte_carlo_config,
+            plan.jobs,
+            workers=workers,
+            batch_size=batch_size,
+        )
+    except SimulationError:
+        raise
+    except Exception as error:
+        raise SimulationError(
+            f"The simulator stopped unexpectedly with {type(error).__name__}: {error}"
+        ) from error
 
 
 def _failure_analysis(
