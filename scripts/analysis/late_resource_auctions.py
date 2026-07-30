@@ -262,6 +262,15 @@ def main() -> None:
 
     bands = ("early_1_5", "middle_6_12", "late_13_plus")
     payload = {
+        "configuration": {
+            "games": GAMES,
+            "players": 3,
+            "bots": tuple(PROFILES),
+            "charts": tuple("ABCDE"),
+            "chart_sampling": "equal-weight deterministic sampling",
+            "root_seed": ROOT_SEED,
+            "workers": 16,
+        },
         "games": total_games,
         "auction2_by_band": {
             name: {period: bids[(name, ActionId.AUCTION2, period)].freeze() for period in bands}
