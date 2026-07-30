@@ -40,8 +40,10 @@ Update every direct `HeuristicProfile` construction to pass a
 `tests/heuristics/test_profiles.py`:
 
 ```python
-("future_cash_weight", -0.1),
-("future_cash_weight", float("nan")),
+(
+    ("future_cash_weight", -0.1),
+    ("future_cash_weight", float("nan")),
+)
 ```
 
 Construct the profile under test with:
@@ -49,15 +51,9 @@ Construct the profile under test with:
 ```python
 HeuristicProfile(
     name="test",
-    liquidity_strength=(
-        value if field == "liquidity_strength" else 0.4
-    ),
-    future_cash_weight=(
-        value if field == "future_cash_weight" else 0.5
-    ),
-    objective_progress_weight=(
-        value if field == "objective_progress_weight" else 0.2
-    ),
+    liquidity_strength=(value if field == "liquidity_strength" else 0.4),
+    future_cash_weight=(value if field == "future_cash_weight" else 0.5),
+    objective_progress_weight=(value if field == "objective_progress_weight" else 0.2),
     bid_shading=value if field == "bid_shading" else 0.25,
 )
 ```
@@ -126,12 +122,15 @@ Import `future_cash_value` and add:
 
 ```python
 def test_future_cash_value_is_zero_at_zero_horizon() -> None:
-    assert future_cash_value(
-        30,
-        horizon=0.0,
-        starting_cash=30,
-        weight=1.0,
-    ) == 0.0
+    assert (
+        future_cash_value(
+            30,
+            horizon=0.0,
+            starting_cash=30,
+            weight=1.0,
+        )
+        == 0.0
+    )
 
 
 def test_future_cash_value_is_flat_above_reserve_target() -> None:
@@ -367,11 +366,7 @@ early_results = tuple(
     HeuristicValuator(profile).evaluate_bid(early_context, knowledge)
     for profile in (AGGRESSIVE_PROFILE, BALANCED_PROFILE, PASSIVE_PROFILE)
 )
-assert (
-    early_results[0].chosen_bid
-    > early_results[1].chosen_bid
-    > early_results[2].chosen_bid
-)
+assert early_results[0].chosen_bid > early_results[1].chosen_bid > early_results[2].chosen_bid
 
 for profile in (AGGRESSIVE_PROFILE, BALANCED_PROFILE, PASSIVE_PROFILE):
     early = HeuristicValuator(profile).evaluate_bid(early_context, knowledge)

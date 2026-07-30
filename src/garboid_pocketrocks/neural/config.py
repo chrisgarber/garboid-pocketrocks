@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from garboid_pocketrocks.rules import LIVE_RULESET
+from garboid_pocketrocks.knowledge import canonical_knowledge
 
 
 @dataclass(frozen=True, slots=True)
@@ -92,13 +92,13 @@ def stage1_encoder_config() -> NeuralEncoderConfig:
     """Return the exact live-A, three-player Stage 1 encoder contract."""
 
     player_count = 3
-    setup = LIVE_RULESET.setup_for(player_count)
+    knowledge = canonical_knowledge(player_count)
     history_bound = (
-        1 + (2 * sum(LIVE_RULESET.action_counts)) + (player_count * setup.private_cards_per_player)
+        1 + (2 * sum(knowledge.action_counts)) + (player_count * knowledge.private_cards_per_player)
     )
     return NeuralEncoderConfig(
         schema_version=1,
-        supported_ruleset_names=(LIVE_RULESET.name,),
+        supported_ruleset_names=(knowledge.name,),
         supported_player_counts=(player_count,),
         max_bid=100,
         max_hand_size=5,

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pocketrocks import OBJECTIVES, ActionId, DecisionContext
 
-from garboid_pocketrocks.rules import RulesetKnowledge
+from garboid_pocketrocks.knowledge import RulesetKnowledge
 
 
 def make_knowledge(

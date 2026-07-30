@@ -6,30 +6,52 @@ from dataclasses import replace
 
 import pytest
 from pocketrocks import OBJECTIVES, ActionId, BotDecision, DecisionContext, Suit
+from pocketrocks.sim.constants import VALUE_CHARTS
 
 from garboid_pocketrocks.bots import (
-    AGGRESSIVE_HEURISTIC_BOT_SPEC,
-    BALANCED_HEURISTIC_BOT_SPEC,
-    PASSIVE_HEURISTIC_BOT_SPEC,
     AggressiveHeuristicBot,
     AggressiveHeuristicBrain,
+    AggressiveHeuristicV1Brain,
+    AggressiveHeuristicV2Brain,
     BalancedHeuristicBot,
     BalancedHeuristicBrain,
+    BalancedHeuristicV1Brain,
+    BalancedHeuristicV2Brain,
     BotSpec,
     PassiveHeuristicBot,
     PassiveHeuristicBrain,
+    PassiveHeuristicV1Brain,
+    PassiveHeuristicV2Brain,
     PocketRocksFastBot,
 )
-from garboid_pocketrocks.bots.heuristic import HeuristicBotBrain
+from garboid_pocketrocks.bots.heuristic import (
+    AGGRESSIVE_HEURISTIC_BOT_SPEC,
+    AGGRESSIVE_HEURISTIC_V1_BOT_SPEC,
+    AGGRESSIVE_HEURISTIC_V2_BOT_SPEC,
+    BALANCED_HEURISTIC_BOT_SPEC,
+    BALANCED_HEURISTIC_V1_BOT_SPEC,
+    BALANCED_HEURISTIC_V2_BOT_SPEC,
+    PASSIVE_HEURISTIC_BOT_SPEC,
+    PASSIVE_HEURISTIC_V1_BOT_SPEC,
+    PASSIVE_HEURISTIC_V2_BOT_SPEC,
+    HeuristicBotBrain,
+)
 from garboid_pocketrocks.heuristics.errors import HeuristicInputError
-from garboid_pocketrocks.heuristics.profiles import BALANCED_PROFILE
+from garboid_pocketrocks.heuristics.profiles import (
+    BALANCED_PROFILE,
+    HEURISTIC_V1,
+    HEURISTIC_V2,
+)
 from garboid_pocketrocks.heuristics.valuation import HeuristicValuator
-from garboid_pocketrocks.rules import LIVE_RULESET, VALUE_CHARTS, RulesetKnowledge
+from garboid_pocketrocks.knowledge import (
+    RulesetKnowledge,
+    canonical_knowledge,
+    knowledge_for_context,
+)
 from garboid_pocketrocks.simulator.monte_carlo import (
     MonteCarloConfig,
     MonteCarloRunner,
 )
-from garboid_pocketrocks.simulator.sampling import FixedRulesetSampler
 
 
 def make_knowledge(
@@ -94,6 +116,86 @@ def test_heuristic_bots_have_distinct_static_public_identities() -> None:
         BalancedHeuristicBot.BOT_NAME,
         PassiveHeuristicBot.BOT_NAME,
     } == {"aggressive", "balanced", "passive"}
+
+
+def test_versioned_heuristic_specs_use_names_as_private_simulation_ids() -> None:
+    specs = (
+        AGGRESSIVE_HEURISTIC_V1_BOT_SPEC,
+        BALANCED_HEURISTIC_V1_BOT_SPEC,
+        PASSIVE_HEURISTIC_V1_BOT_SPEC,
+        AGGRESSIVE_HEURISTIC_V2_BOT_SPEC,
+        BALANCED_HEURISTIC_V2_BOT_SPEC,
+        PASSIVE_HEURISTIC_V2_BOT_SPEC,
+    )
+
+    assert tuple(spec.name for spec in specs) == (
+        "aggressive-v1",
+        "balanced-v1",
+        "passive-v1",
+        "aggressive-v2",
+        "balanced-v2",
+        "passive-v2",
+    )
+    assert all(spec.bot_id == spec.name for spec in specs)
+
+
+@pytest.mark.parametrize(
+    ("spec", "brain_class", "profile"),
+    (
+        (
+            AGGRESSIVE_HEURISTIC_V1_BOT_SPEC,
+            AggressiveHeuristicV1Brain,
+            HEURISTIC_V1.aggressive,
+        ),
+        (
+            BALANCED_HEURISTIC_V1_BOT_SPEC,
+            BalancedHeuristicV1Brain,
+            HEURISTIC_V1.balanced,
+        ),
+        (PASSIVE_HEURISTIC_V1_BOT_SPEC, PassiveHeuristicV1Brain, HEURISTIC_V1.passive),
+        (
+            AGGRESSIVE_HEURISTIC_V2_BOT_SPEC,
+            AggressiveHeuristicV2Brain,
+            HEURISTIC_V2.aggressive,
+        ),
+        (
+            BALANCED_HEURISTIC_V2_BOT_SPEC,
+            BalancedHeuristicV2Brain,
+            HEURISTIC_V2.balanced,
+        ),
+        (PASSIVE_HEURISTIC_V2_BOT_SPEC, PassiveHeuristicV2Brain, HEURISTIC_V2.passive),
+    ),
+)
+def test_versioned_spec_factories_use_pinned_profiles(
+    spec: BotSpec,
+    brain_class: type[HeuristicBotBrain],
+    profile: object,
+) -> None:
+    brain = spec.make_brain(seed=42)
+
+    assert isinstance(brain, brain_class)
+    assert brain.valuator.profile is profile
+
+
+@pytest.mark.parametrize(
+    ("latest_brain", "v2_brain"),
+    (
+        (AggressiveHeuristicBrain, AggressiveHeuristicV2Brain),
+        (BalancedHeuristicBrain, BalancedHeuristicV2Brain),
+        (PassiveHeuristicBrain, PassiveHeuristicV2Brain),
+    ),
+)
+def test_unversioned_brains_match_v2_decisions(
+    latest_brain: Callable[[], HeuristicBotBrain],
+    v2_brain: Callable[[], HeuristicBotBrain],
+) -> None:
+    context = make_context(action_id=ActionId.AUCTION2, legal_max=17)
+    knowledge = make_knowledge()
+
+    assert latest_brain().choose_decision(context, knowledge) == v2_brain().choose_decision(
+        context,
+        knowledge,
+    )
 
 
 @pytest.mark.parametrize(
@@ -192,9 +294,9 @@ def test_live_wrapper_reconciles_contextual_public_rules(
         legal_max_amount=30,
         revealable_count=5,
     )
-    contextual_knowledge = replace(
-        LIVE_RULESET.knowledge(context.player_count),
-        value_chart=chart,
+    contextual_knowledge = canonical_knowledge(
+        context.player_count,
+        value_chart=chart_name,
     )
     expected = brain_class().choose_decision(context, contextual_knowledge)
     bot = bot_class(
@@ -210,14 +312,7 @@ def test_live_wrapper_reconciles_contextual_public_rules(
     assert actual == expected
 
 
-def test_contextual_knowledge_keeps_configured_hidden_and_deck_priors() -> None:
-    configured_ruleset = replace(
-        LIVE_RULESET,
-        name="custom-priors",
-        resource_counts=(7, 7, 7, 7, 7),
-        action_counts=(13, 9, 3, 2, 3, 2),
-        objective_pool=(1, 2, 3, 4, 5),
-    )
+def test_contextual_knowledge_uses_sdk_canonical_hidden_and_deck_priors() -> None:
     context = replace(
         make_context(
             action_id=ActionId.AUCTION2,
@@ -245,22 +340,21 @@ def test_contextual_knowledge_keeps_configured_hidden_and_deck_priors() -> None:
         api_key="test-key",
         server_url="ws://example.test",
         reconnect=False,
-        ruleset=configured_ruleset,
     )
 
     knowledge = bot._knowledge_for_context(context)
 
-    assert knowledge.name == "custom-priors"
+    assert knowledge == knowledge_for_context(context)
+    assert knowledge.name == "live-E"
     assert knowledge.player_count == 4
     assert knowledge.starting_cash == 27
     assert knowledge.private_cards_per_player == 4
     assert knowledge.value_chart == VALUE_CHARTS["E"]
     assert knowledge.active_objective_count == 2
     assert knowledge.objectives_enabled
-    assert knowledge.resource_counts == configured_ruleset.resource_counts
-    assert knowledge.action_counts == configured_ruleset.action_counts
-    assert knowledge.objective_pool == configured_ruleset.objective_pool
-    assert not set(context.objective_ids) <= set(knowledge.objective_pool)
+    assert knowledge.resource_counts == (6, 6, 6, 6, 6)
+    assert knowledge.action_counts == (12, 8, 3, 2, 3, 2)
+    assert knowledge.objective_pool == tuple(sorted(OBJECTIVES))
 
     disabled_knowledge = bot._knowledge_for_context(replace(context, objective_ids=()))
     assert disabled_knowledge.active_objective_count == 0
@@ -303,6 +397,12 @@ def test_exported_heuristic_specs_are_picklable_and_build_fresh_brains() -> None
         AGGRESSIVE_HEURISTIC_BOT_SPEC,
         BALANCED_HEURISTIC_BOT_SPEC,
         PASSIVE_HEURISTIC_BOT_SPEC,
+        AGGRESSIVE_HEURISTIC_V1_BOT_SPEC,
+        BALANCED_HEURISTIC_V1_BOT_SPEC,
+        PASSIVE_HEURISTIC_V1_BOT_SPEC,
+        AGGRESSIVE_HEURISTIC_V2_BOT_SPEC,
+        BALANCED_HEURISTIC_V2_BOT_SPEC,
+        PASSIVE_HEURISTIC_V2_BOT_SPEC,
     )
 
     for spec in specs:
@@ -323,7 +423,7 @@ def test_two_worker_monte_carlo_smoke_uses_all_three_heuristic_specs() -> None:
             bot_specs=specs,
             games=3,
             player_counts=(3,),
-            ruleset_sampler=FixedRulesetSampler(LIVE_RULESET),
+            value_charts=("A",),
             root_seed=1234,
         ),
         workers=2,

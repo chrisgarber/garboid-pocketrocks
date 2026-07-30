@@ -7,8 +7,12 @@ from garboid_pocketrocks.heuristics.errors import HeuristicInputError
 from garboid_pocketrocks.heuristics.profiles import (
     AGGRESSIVE_PROFILE,
     BALANCED_PROFILE,
+    HEURISTIC_V1,
+    HEURISTIC_V2,
+    LATEST_HEURISTICS,
     PASSIVE_PROFILE,
     HeuristicProfile,
+    HeuristicProfileSet,
 )
 
 
@@ -22,6 +26,8 @@ def test_heuristic_input_error_is_a_value_error() -> None:
         ("liquidity_strength", -0.1),
         ("liquidity_strength", float("nan")),
         ("liquidity_strength", float("inf")),
+        ("future_cash_weight", -0.1),
+        ("future_cash_weight", float("nan")),
         ("objective_progress_weight", -0.1),
         ("objective_progress_weight", 1.1),
         ("objective_progress_weight", float("-inf")),
@@ -35,6 +41,7 @@ def test_profile_rejects_invalid_coefficient(field: str, value: float) -> None:
         HeuristicProfile(
             name="invalid",
             liquidity_strength=value if field == "liquidity_strength" else 0.4,
+            future_cash_weight=value if field == "future_cash_weight" else 0.5,
             objective_progress_weight=(value if field == "objective_progress_weight" else 0.2),
             bid_shading=value if field == "bid_shading" else 0.25,
         )
@@ -42,13 +49,47 @@ def test_profile_rejects_invalid_coefficient(field: str, value: float) -> None:
 
 def test_profile_rejects_empty_name() -> None:
     with pytest.raises(ValueError, match="name"):
-        HeuristicProfile("", 0.4, 0.2, 0.25)
+        HeuristicProfile("", 0.4, 0.5, 0.2, 0.25)
 
 
-def test_named_profiles_have_exact_constants() -> None:
-    assert AGGRESSIVE_PROFILE == HeuristicProfile("aggressive", 0.75, 0.25, 0.05)
-    assert BALANCED_PROFILE == HeuristicProfile("balanced", 0.40, 0.20, 0.25)
-    assert PASSIVE_PROFILE == HeuristicProfile("passive", 0.15, 0.15, 0.50)
+def test_versioned_profiles_have_exact_constants() -> None:
+    assert HEURISTIC_V1.version == "v1"
+    assert HEURISTIC_V1.aggressive == HeuristicProfile("aggressive", 0.75, 0.0, 0.25, 0.05)
+    assert HEURISTIC_V1.balanced == HeuristicProfile("balanced", 0.40, 0.0, 0.20, 0.25)
+    assert HEURISTIC_V1.passive == HeuristicProfile("passive", 0.15, 0.0, 0.15, 0.50)
+
+    assert HEURISTIC_V2.version == "v2"
+    assert HEURISTIC_V2.aggressive == HeuristicProfile("aggressive", 0.75, 1.50, 0.25, 0.05)
+    assert HEURISTIC_V2.balanced == HeuristicProfile("balanced", 0.40, 0.75, 0.20, 0.25)
+    assert HEURISTIC_V2.passive == HeuristicProfile("passive", 0.15, 0.60, 0.15, 0.30)
+
+
+def test_unversioned_profiles_alias_latest_generation() -> None:
+    assert LATEST_HEURISTICS is HEURISTIC_V2
+    assert AGGRESSIVE_PROFILE is HEURISTIC_V2.aggressive
+    assert BALANCED_PROFILE is HEURISTIC_V2.balanced
+    assert PASSIVE_PROFILE is HEURISTIC_V2.passive
+
+
+@pytest.mark.parametrize("version", ("", "1", "version-1", "v0", "v-1", "V1"))
+def test_profile_set_rejects_noncanonical_version(version: str) -> None:
+    with pytest.raises(ValueError, match="version"):
+        HeuristicProfileSet(
+            version,
+            HeuristicProfile("aggressive", 0.75, 0.0, 0.25, 0.05),
+            HeuristicProfile("balanced", 0.40, 0.0, 0.20, 0.25),
+            HeuristicProfile("passive", 0.15, 0.0, 0.15, 0.50),
+        )
+
+
+def test_profile_set_rejects_mismatched_personality_names() -> None:
+    with pytest.raises(ValueError, match="personalities"):
+        HeuristicProfileSet(
+            "v3",
+            HeuristicProfile("balanced", 0.75, 0.0, 0.25, 0.05),
+            HeuristicProfile("aggressive", 0.40, 0.0, 0.20, 0.25),
+            HeuristicProfile("passive", 0.15, 0.0, 0.15, 0.50),
+        )
 
 
 def test_named_profiles_have_expected_ordering() -> None:
@@ -68,6 +109,7 @@ def test_profiles_are_frozen_and_coefficients_are_finite() -> None:
         for profile in (AGGRESSIVE_PROFILE, BALANCED_PROFILE, PASSIVE_PROFILE)
         for coefficient in (
             profile.liquidity_strength,
+            profile.future_cash_weight,
             profile.objective_progress_weight,
             profile.bid_shading,
         )

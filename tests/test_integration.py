@@ -6,18 +6,18 @@ import numpy as np
 import pytest
 
 from garboid_pocketrocks.bots import (
-    AGGRESSIVE_HEURISTIC_BOT_SPEC,
-    BALANCED_HEURISTIC_BOT_SPEC,
-    PASSIVE_HEURISTIC_BOT_SPEC,
     BotSpec,
     RandomBot,
 )
-from garboid_pocketrocks.rules import live_ruleset
+from garboid_pocketrocks.bots.heuristic import (
+    AGGRESSIVE_HEURISTIC_BOT_SPEC,
+    BALANCED_HEURISTIC_BOT_SPEC,
+    PASSIVE_HEURISTIC_BOT_SPEC,
+)
 from garboid_pocketrocks.simulator.monte_carlo import (
     MonteCarloConfig,
     MonteCarloRunner,
 )
-from garboid_pocketrocks.simulator.sampling import FixedRulesetSampler
 from garboid_pocketrocks.training import (
     EnvironmentBounds,
     PocketRocksAECEnv,
@@ -51,7 +51,7 @@ def test_heuristic_profiles_make_only_legal_decisions_across_live_games(
             bot_specs=lineup,
             games=15,
             player_counts=(player_count,),
-            ruleset_sampler=FixedRulesetSampler(live_ruleset(chart)),
+            value_charts=(chart,),
             root_seed=root_seed,
         )
     )
@@ -79,10 +79,9 @@ def test_heuristic_profiles_make_only_legal_decisions_across_live_games(
 
 
 def test_single_agent_environment_runs_to_termination_with_masked_actions() -> None:
-    ruleset = live_ruleset("E")
     env = PocketRocksEnv(
         opponent_specs=_random_specs(2),
-        ruleset_sampler=FixedRulesetSampler(ruleset),
+        value_charts=("E",),
         player_count=3,
         bounds=EnvironmentBounds(max_bid=100, max_hand_size=5),
         learner_seat=1,
@@ -101,7 +100,7 @@ def test_single_agent_environment_runs_to_termination_with_masked_actions() -> N
 
 def test_multi_agent_environment_runs_to_termination_with_masked_actions() -> None:
     env = PocketRocksAECEnv(
-        ruleset_sampler=FixedRulesetSampler(live_ruleset("C")),
+        value_charts=("C",),
         player_count=3,
         bounds=EnvironmentBounds(max_bid=100, max_hand_size=5),
     )

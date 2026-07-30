@@ -5,14 +5,13 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 
-from pocketrocks import BotDecision
+from pocketrocks import BotDecision, DecisionContext
+from pocketrocks.sim import TurnRecord
 
 from garboid_pocketrocks.bots.base import BotBrain, BotSpec
-from garboid_pocketrocks.rules import Ruleset
-from garboid_pocketrocks.simulator.engine import GameEngine
-from garboid_pocketrocks.simulator.events import EventKind, GameEvent
-from garboid_pocketrocks.simulator.model import GameResult
+from garboid_pocketrocks.knowledge import canonical_knowledge
 from garboid_pocketrocks.simulator.replay import MatchReplay
+from garboid_pocketrocks.simulator.session import SdkGameSession, SessionResult
 
 
 class FaultMode(StrEnum):
@@ -31,8 +30,9 @@ class BotFault:
 
 @dataclass(frozen=True, slots=True)
 class MatchResult:
-    result: GameResult
-    events: tuple[GameEvent, ...]
+    result: SessionResult
+    events: tuple[object, ...]
+    turns: tuple[TurnRecord, ...]
     faults: tuple[BotFault, ...]
     replay: MatchReplay
 
@@ -42,9 +42,10 @@ class MatchRunner:
     def run(
         lineup: Sequence[BotSpec],
         *,
-        ruleset: Ruleset,
         player_count: int,
         seed: int,
+        value_chart: str = "A",
+        objectives_enabled: bool = True,
         fault_mode: FaultMode = FaultMode.RAISE,
     ) -> MatchResult:
         if len(lineup) != player_count:
@@ -52,7 +53,6 @@ class MatchRunner:
         brain_rng = random.Random(seed)
         brains: list[BotBrain | None] = []
         faults: list[BotFault] = []
-        external_events: list[GameEvent] = []
         for seat, spec in enumerate(lineup):
             try:
                 brains.append(spec.make_brain(seed=brain_rng.randrange(2**63)))
@@ -62,78 +62,85 @@ class MatchRunner:
                 brains.append(None)
                 _record_fault(
                     faults,
-                    external_events,
                     turn_index=0,
                     seat=seat,
                     bot_name=spec.name,
                     error=error,
                 )
 
-        transition = GameEngine.start(
-            ruleset,
+        session = SdkGameSession.start(
             player_count=player_count,
             seed=seed,
+            value_chart=value_chart,
+            objectives_enabled=objectives_enabled,
+            player_names=tuple(spec.name for spec in lineup),
         )
-        events = list(transition.events)
+        knowledge = canonical_knowledge(
+            player_count,
+            value_chart=value_chart,
+            objectives_enabled=objectives_enabled,
+        )
         decisions: list[tuple[int, tuple[tuple[int, BotDecision], ...]]] = []
         step_index = 0
-        while transition.result is None:
-            assert transition.pending is not None
+        while not session.terminated:
             decisions_by_seat: dict[int, BotDecision] = {}
-            for seat, context in transition.pending.contexts:
+            for seat, context in session.pending.contexts:
                 brain = brains[seat]
                 if brain is None:
-                    decision = BotDecision.pass_turn()
+                    decision = _fallback(context)
                 else:
                     try:
-                        decision = brain.choose_decision(
-                            context,
-                            ruleset.knowledge(player_count),
-                        )
+                        decision = brain.choose_decision(context, knowledge)
                         context.validate(decision)
                     except Exception as error:
                         if fault_mode is FaultMode.RAISE:
                             raise
                         _record_fault(
                             faults,
-                            external_events,
-                            turn_index=transition.state.turn_index,
+                            turn_index=session.snapshot.turn_index,
                             seat=seat,
                             bot_name=lineup[seat].name,
                             error=error,
                         )
-                        decision = BotDecision.pass_turn()
+                        decision = _fallback(context)
                 decisions_by_seat[seat] = decision
             recorded = tuple(sorted(decisions_by_seat.items()))
             decisions.append((step_index, recorded))
-            transition = GameEngine.step(transition.state, decisions_by_seat)
-            events.extend(external_events)
-            external_events.clear()
-            events.extend(transition.events)
+            session.step(decisions_by_seat)
             step_index += 1
 
+        result = session.result
+        assert result is not None
         replay = MatchReplay(
-            schema_version=1,
-            ruleset=ruleset,
+            schema_version=2,
             player_count=player_count,
             seed=seed,
+            value_chart=value_chart.upper(),
+            objectives_enabled=objectives_enabled,
             root_seed=None,
             game_index=None,
             bot_names=tuple(spec.name for spec in lineup),
             decisions=tuple(decisions),
-            events=tuple(events),
+            turns=session.history,
+            result=result,
         )
         return MatchResult(
-            result=transition.result,
-            events=tuple(events),
+            result=result,
+            events=session.events,
+            turns=session.history,
             faults=tuple(faults),
             replay=replay,
         )
 
 
+def _fallback(context: DecisionContext) -> BotDecision:
+    if context.decision_kind == "selectInfoToReveal":
+        return BotDecision.select_info_to_reveal(0)
+    return BotDecision.submit_bid(0)
+
+
 def _record_fault(
     faults: list[BotFault],
-    events: list[GameEvent],
     *,
     turn_index: int,
     seat: int,
@@ -147,19 +154,5 @@ def _record_fault(
             bot_name=bot_name,
             error_type=type(error).__name__,
             message=str(error),
-        )
-    )
-    events.extend(
-        (
-            GameEvent(
-                EventKind.BOT_FAULT,
-                turn_index=turn_index,
-                seat=seat,
-            ),
-            GameEvent(
-                EventKind.FALLBACK_APPLIED,
-                turn_index=turn_index,
-                seat=seat,
-            ),
         )
     )

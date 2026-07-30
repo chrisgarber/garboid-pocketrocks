@@ -17,7 +17,8 @@ dependencies = [
   "gymnasium>=1.3.0",
   "numpy>=2.5.1",
   "pettingzoo>=1.26.1",
-  "pocketrocks-python-sdk @ git+https://github.com/jaiparera/pocketrocks-python-sdk.git@597857446d47ac0890609a4767cad561578a2519",
+  "pocketrocks-python-sdk @ git+https://github.com/chrisgarber/pocketrocks-python-sdk.git@51cad378ee1e70a78e39ebbb25957ea003444873",
+  "scipy>=1.17",
 ]
 
 [project.optional-dependencies]
@@ -29,6 +30,7 @@ neural = [
 garboid-bots = "garboid_pocketrocks.bots.launcher:main"
 garboid-random-bot = "garboid_pocketrocks.bots.random_bot:main"
 garboid-simulate = "garboid_pocketrocks.simulator.cli:main"
+garboid-tournament = "garboid_pocketrocks.tournament.cli:main"
 garboid-train = "garboid_pocketrocks.neural.cli:main"
 
 [tool.hatch.metadata]

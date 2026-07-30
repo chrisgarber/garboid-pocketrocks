@@ -11,19 +11,20 @@ import numpy as np
 from gymnasium.spaces.space import MaskNDArray
 from pocketrocks import BotDecision, DecisionContext
 
-from garboid_pocketrocks.adapters.public_history import PublicHistory
-from garboid_pocketrocks.adapters.simulator_history import (
-    SimulatorPublicHistoryAdapter,
+from garboid_pocketrocks.adapters.public_history import (
+    PublicHistory,
+    public_history_from_sdk_events,
 )
 from garboid_pocketrocks.bots.base import BotBrain, BotSpec
-from garboid_pocketrocks.rules import Ruleset, RulesetKnowledge
-from garboid_pocketrocks.simulator.engine import EngineTransition, GameEngine
-from garboid_pocketrocks.simulator.model import Seat
-from garboid_pocketrocks.simulator.sampling import RulesetSampler
+from garboid_pocketrocks.knowledge import RulesetKnowledge, canonical_knowledge
+from garboid_pocketrocks.simulator.seeding import derive_seed
+from garboid_pocketrocks.simulator.session import SdkGameSession, SessionTransition
 from garboid_pocketrocks.training.actions import ActionCodec
 from garboid_pocketrocks.training.bounds import EnvironmentBounds
 from garboid_pocketrocks.training.observations import ObservationEncoder
 from garboid_pocketrocks.training.rewards import RewardBreakdown, RewardConfig, RewardTracker
+
+Seat = int
 
 
 class InvalidActionMode(StrEnum):
@@ -45,7 +46,7 @@ class _MaskedDiscrete(gym.spaces.Discrete[np.int32]):
 
 
 class PocketRocksEnv(gym.Env[dict[str, Any], int]):
-    """Gymnasium environment that controls one PocketRocks seat."""
+    """Gymnasium environment that controls one SDK-simulated PocketRocks seat."""
 
     metadata = {"render_modes": []}
 
@@ -53,9 +54,10 @@ class PocketRocksEnv(gym.Env[dict[str, Any], int]):
         self,
         *,
         opponent_specs: Sequence[BotSpec],
-        ruleset_sampler: RulesetSampler,
+        value_charts: tuple[str, ...],
         player_count: int,
         bounds: EnvironmentBounds,
+        objectives_enabled: tuple[bool, ...] = (True,),
         reward_config: RewardConfig = RewardConfig(),  # noqa: B008
         learner_seat: int | None = None,
         invalid_action_mode: InvalidActionMode = InvalidActionMode.RAISE,
@@ -66,8 +68,13 @@ class PocketRocksEnv(gym.Env[dict[str, Any], int]):
             raise ValueError("opponent_specs must contain one entry for every non-learner seat")
         if learner_seat is not None and not 0 <= learner_seat < player_count:
             raise ValueError("learner_seat is outside player count")
+        if not value_charts:
+            raise ValueError("value_charts must be nonempty")
+        if not objectives_enabled:
+            raise ValueError("objectives_enabled must be nonempty")
         self.opponent_specs = tuple(opponent_specs)
-        self.ruleset_sampler = ruleset_sampler
+        self.value_charts = tuple(chart.upper() for chart in value_charts)
+        self.objectives_enabled = objectives_enabled
         self.player_count = player_count
         self.bounds = bounds
         self.reward_config = reward_config
@@ -80,14 +87,14 @@ class PocketRocksEnv(gym.Env[dict[str, Any], int]):
             _MaskedDiscrete(self.action_codec.size, dtype=np.int32),
         )
         self.observation_space = self.observation_encoder.observation_space
-        self._validate_sampler_support()
+        self._validate_variants()
 
         self.learner_seat = learner_seat if learner_seat is not None else 0
-        self.transition: EngineTransition | None = None
+        self.session: SdkGameSession | None = None
+        self.transition: SessionTransition | None = None
         self._knowledge: RulesetKnowledge | None = None
         self._brains: dict[Seat, BotBrain] = {}
         self._learner_context: DecisionContext | None = None
-        self._history_adapter: SimulatorPublicHistoryAdapter | None = None
         self._reward_tracker = RewardTracker(reward_config)
         self._root_seed = 0
         self._step_breakdown = RewardBreakdown()
@@ -119,19 +126,36 @@ class PocketRocksEnv(gym.Env[dict[str, Any], int]):
             if self.fixed_learner_seat is not None
             else seat_rng.randrange(self.player_count)
         )
-        ruleset = self.ruleset_sampler.sample(root_seed=self._root_seed, game_index=0)
-        self.transition = GameEngine.start(
-            ruleset,
+        value_chart = random.Random(derive_seed(self._root_seed, "value_chart", 0)).choice(
+            self.value_charts
+        )
+        objectives_enabled = random.Random(
+            derive_seed(self._root_seed, "objectives_enabled", 0)
+        ).choice(self.objectives_enabled)
+        self.session = SdkGameSession.start(
             player_count=self.player_count,
             seed=self._root_seed,
+            value_chart=value_chart,
+            objectives_enabled=objectives_enabled,
         )
-        self._knowledge = ruleset.knowledge(self.player_count)
-        self._reward_tracker.reset(self.transition.state)
+        self._knowledge = canonical_knowledge(
+            self.player_count,
+            value_chart=value_chart,
+            objectives_enabled=objectives_enabled,
+        )
+        initial = self.session.snapshot
+        self.transition = SessionTransition(
+            before=initial,
+            snapshot=initial,
+            pending=self.session.pending,
+            result=None,
+            decisions=(),
+            events=self.session.events,
+            turn_records=(),
+        )
+        self._reward_tracker.reset(initial)
         opponent_seed = self._root_seed if opponent_seed_value is None else opponent_seed_value
         self._brains = self._make_opponent_brains(random.Random(opponent_seed))
-        self._history_adapter = SimulatorPublicHistoryAdapter.from_initial_transition(
-            self.transition
-        )
         self._learner_context = self._context_for_learner()
         return self._observation(), {"learner_seat": self.learner_seat}
 
@@ -149,17 +173,17 @@ class PocketRocksEnv(gym.Env[dict[str, Any], int]):
 
     @property
     def public_history(self) -> PublicHistory:
-        if self._history_adapter is None:
+        if self.session is None:
             raise RuntimeError("environment must be reset before observing")
-        return self._history_adapter.history
+        return public_history_from_sdk_events(self.session.events)
 
     def step(
         self,
         action: int,
     ) -> tuple[dict[str, Any], float, bool, bool, dict[str, Any]]:
-        if self.transition is None or self._learner_context is None:
+        if self.session is None or self.transition is None or self._learner_context is None:
             raise RuntimeError("environment must be reset before stepping")
-        if self.transition.terminated:
+        if self.session.terminated:
             raise RuntimeError("cannot step a terminated environment")
         breakdown = RewardBreakdown()
         decision = self._decision_for_learner(action)
@@ -190,42 +214,38 @@ class PocketRocksEnv(gym.Env[dict[str, Any], int]):
         learner_decisions: dict[Seat, BotDecision],
         accumulated: RewardBreakdown,
     ) -> None:
-        assert self.transition is not None
-        while not self.transition.terminated:
-            assert self.transition.pending is not None
+        assert self.session is not None
+        while not self.session.terminated:
             decisions = dict(learner_decisions)
-            for seat, context in self.transition.pending.contexts:
+            for seat, context in self.session.pending.contexts:
                 if seat == self.learner_seat:
                     continue
                 decisions[seat] = self._brains[seat].choose_decision(
                     context,
                     self._knowledge_for_game(),
                 )
-            self.transition = GameEngine.step(self.transition.state, decisions)
-            self._history_for_game().append(self.transition.events)
+            self.transition = self.session.step(decisions)
             accumulated = _add_breakdowns(
                 accumulated,
                 self._reward_tracker.update(self.transition)[self.learner_seat],
             )
             learner_decisions = {}
-            if self.transition.terminated:
-                self._learner_context = self._learner_context
+            if self.session.terminated:
                 self._step_breakdown = accumulated
                 return
-            assert self.transition.pending is not None
-            contexts = self.transition.pending.contexts_by_seat
+            contexts = self.session.pending.contexts_by_seat
             if self.learner_seat in contexts:
                 self._learner_context = contexts[self.learner_seat]
                 self._step_breakdown = accumulated
                 return
 
     def _return_step(self) -> tuple[dict[str, Any], float, bool, bool, dict[str, Any]]:
-        assert self.transition is not None
+        assert self.session is not None
         breakdown = self._step_breakdown
         return (
             self._observation(),
             breakdown.total,
-            self.transition.terminated,
+            self.session.terminated,
             False,
             {"reward_breakdown": asdict(breakdown)},
         )
@@ -236,17 +256,12 @@ class PocketRocksEnv(gym.Env[dict[str, Any], int]):
         return self.observation_encoder.encode(self._learner_context, self._knowledge)
 
     def _context_for_learner(self) -> DecisionContext:
-        assert self.transition is not None
-        assert self.transition.pending is not None
-        return self.transition.pending.contexts_by_seat[self.learner_seat]
+        assert self.session is not None
+        return self.session.pending.contexts_by_seat[self.learner_seat]
 
     def _knowledge_for_game(self) -> RulesetKnowledge:
         assert self._knowledge is not None
         return self._knowledge
-
-    def _history_for_game(self) -> SimulatorPublicHistoryAdapter:
-        assert self._history_adapter is not None
-        return self._history_adapter
 
     def _make_opponent_brains(self, rng: random.Random) -> dict[Seat, BotBrain]:
         brains: dict[Seat, BotBrain] = {}
@@ -256,20 +271,22 @@ class PocketRocksEnv(gym.Env[dict[str, Any], int]):
                 brains[seat] = next(specs).make_brain(seed=rng.randrange(2**63))
         return brains
 
-    def _validate_sampler_support(self) -> None:
-        support = self.ruleset_sampler.support()
-        if not support:
-            raise ValueError("ruleset sampler support must not be empty")
-        for ruleset in support:
-            self._validate_ruleset(ruleset)
-
-    def _validate_ruleset(self, ruleset: Ruleset) -> None:
-        ruleset.setup_for(self.player_count)
-        transition = GameEngine.start(ruleset, player_count=self.player_count, seed=0)
-        knowledge = ruleset.knowledge(self.player_count)
-        assert transition.pending is not None
-        for _, context in transition.pending.contexts:
-            self.observation_encoder.encode(context, knowledge)
+    def _validate_variants(self) -> None:
+        for value_chart in self.value_charts:
+            for objectives_enabled in self.objectives_enabled:
+                session = SdkGameSession.start(
+                    player_count=self.player_count,
+                    seed=0,
+                    value_chart=value_chart,
+                    objectives_enabled=objectives_enabled,
+                )
+                knowledge = canonical_knowledge(
+                    self.player_count,
+                    value_chart=value_chart,
+                    objectives_enabled=objectives_enabled,
+                )
+                for _seat, context in session.pending.contexts:
+                    self.observation_encoder.encode(context, knowledge)
 
 
 def _add_breakdowns(left: RewardBreakdown, right: RewardBreakdown) -> RewardBreakdown:

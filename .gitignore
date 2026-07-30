@@ -24,6 +24,7 @@ htmlcov/
 .vscode/
 
 # Local simulation and training artifacts
+/analysis-output/
 /artifacts/
 /checkpoints/
 /data/

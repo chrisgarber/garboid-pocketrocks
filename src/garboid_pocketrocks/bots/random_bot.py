@@ -6,7 +6,7 @@ import random
 from pocketrocks import BotDecision, DecisionContext
 
 from garboid_pocketrocks.bots.base import PocketRocksFastBot
-from garboid_pocketrocks.rules import RulesetKnowledge
+from garboid_pocketrocks.knowledge import RulesetKnowledge
 
 
 class RandomBotBrain:

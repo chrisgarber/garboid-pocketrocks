@@ -23,6 +23,7 @@ from garboid_pocketrocks.adapters.public_history import (  # noqa: E402
     PublicInformationRevealed,
     PublicTurnOpened,
 )
+from garboid_pocketrocks.knowledge import canonical_knowledge  # noqa: E402
 from garboid_pocketrocks.neural.checkpoint import (  # noqa: E402
     CheckpointError,
     InferenceManifest,
@@ -41,7 +42,6 @@ from garboid_pocketrocks.neural.encoding import (  # noqa: E402
 )
 from garboid_pocketrocks.neural.model import NeuralPolicy  # noqa: E402
 from garboid_pocketrocks.neural.policy import evaluate_masked_policy  # noqa: E402
-from garboid_pocketrocks.rules import LIVE_RULESET  # noqa: E402
 from garboid_pocketrocks.training.bounds import EnvironmentBounds  # noqa: E402
 
 
@@ -70,7 +70,7 @@ def _context() -> DecisionContext:
         decision_kind="submitBid",
         player_count=3,
         starting_cash=30,
-        value_chart=LIVE_RULESET.value_chart,
+        value_chart=canonical_knowledge(3).value_chart,
         objective_ids=(1, 2, 3, 4),
         current_action_id=1,
         current_resource_ids=(1, 0),
@@ -92,7 +92,7 @@ def _history() -> PublicHistory:
             kind=PublicEventKind.GAME_SETUP,
             player_count=3,
             starting_cash=30,
-            value_chart=LIVE_RULESET.value_chart,
+            value_chart=canonical_knowledge(3).value_chart,
             initial_tiebreak_seat=0,
             objective_ids=(1, 2, 3, 4),
         ),
@@ -118,7 +118,7 @@ def _fixture_batch() -> NeuralBatch:
     bounds = EnvironmentBounds(config.max_bid, config.max_hand_size)
     observation = NeuralObservationEncoder(config, bounds).encode(
         _context(),
-        LIVE_RULESET.knowledge(3),
+        canonical_knowledge(3),
         _history(),
     )
     return batch_observations((observation,), torch.device("cpu"))

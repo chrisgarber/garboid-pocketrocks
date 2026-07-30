@@ -5,13 +5,12 @@ from pocketrocks import BotDecision, DecisionContext
 from garboid_pocketrocks.bots.base import BotSpec, PocketRocksFastBot
 from garboid_pocketrocks.heuristics.errors import HeuristicInputError
 from garboid_pocketrocks.heuristics.profiles import (
-    AGGRESSIVE_PROFILE,
-    BALANCED_PROFILE,
-    PASSIVE_PROFILE,
+    HEURISTIC_V1,
+    HEURISTIC_V2,
     HeuristicProfile,
 )
 from garboid_pocketrocks.heuristics.valuation import HeuristicValuator
-from garboid_pocketrocks.rules import RulesetKnowledge
+from garboid_pocketrocks.knowledge import RulesetKnowledge
 
 
 class HeuristicBotBrain:
@@ -36,19 +35,52 @@ class HeuristicBotBrain:
             return BotDecision.pass_turn()
 
 
-class AggressiveHeuristicBrain(HeuristicBotBrain):
-    def __init__(self) -> None:
-        super().__init__(AGGRESSIVE_PROFILE)
+class AggressiveHeuristicV1Brain(HeuristicBotBrain):
+    def __init__(self, seed: int | None = None) -> None:
+        del seed
+        super().__init__(HEURISTIC_V1.aggressive)
 
 
-class BalancedHeuristicBrain(HeuristicBotBrain):
-    def __init__(self) -> None:
-        super().__init__(BALANCED_PROFILE)
+class BalancedHeuristicV1Brain(HeuristicBotBrain):
+    def __init__(self, seed: int | None = None) -> None:
+        del seed
+        super().__init__(HEURISTIC_V1.balanced)
 
 
-class PassiveHeuristicBrain(HeuristicBotBrain):
-    def __init__(self) -> None:
-        super().__init__(PASSIVE_PROFILE)
+class PassiveHeuristicV1Brain(HeuristicBotBrain):
+    def __init__(self, seed: int | None = None) -> None:
+        del seed
+        super().__init__(HEURISTIC_V1.passive)
+
+
+class AggressiveHeuristicV2Brain(HeuristicBotBrain):
+    def __init__(self, seed: int | None = None) -> None:
+        del seed
+        super().__init__(HEURISTIC_V2.aggressive)
+
+
+class BalancedHeuristicV2Brain(HeuristicBotBrain):
+    def __init__(self, seed: int | None = None) -> None:
+        del seed
+        super().__init__(HEURISTIC_V2.balanced)
+
+
+class PassiveHeuristicV2Brain(HeuristicBotBrain):
+    def __init__(self, seed: int | None = None) -> None:
+        del seed
+        super().__init__(HEURISTIC_V2.passive)
+
+
+class AggressiveHeuristicBrain(AggressiveHeuristicV2Brain):
+    """Latest aggressive heuristic brain."""
+
+
+class BalancedHeuristicBrain(BalancedHeuristicV2Brain):
+    """Latest balanced heuristic brain."""
+
+
+class PassiveHeuristicBrain(PassiveHeuristicV2Brain):
+    """Latest passive heuristic brain."""
 
 
 class AggressiveHeuristicBot(PocketRocksFastBot):
@@ -90,3 +122,29 @@ class PassiveHeuristicBot(PocketRocksFastBot):
 AGGRESSIVE_HEURISTIC_BOT_SPEC = BotSpec.from_bot_class(AggressiveHeuristicBot)
 BALANCED_HEURISTIC_BOT_SPEC = BotSpec.from_bot_class(BalancedHeuristicBot)
 PASSIVE_HEURISTIC_BOT_SPEC = BotSpec.from_bot_class(PassiveHeuristicBot)
+
+AGGRESSIVE_HEURISTIC_V1_BOT_SPEC = BotSpec.for_simulation(
+    "aggressive-v1",
+    AggressiveHeuristicV1Brain,
+)
+BALANCED_HEURISTIC_V1_BOT_SPEC = BotSpec.for_simulation(
+    "balanced-v1",
+    BalancedHeuristicV1Brain,
+)
+PASSIVE_HEURISTIC_V1_BOT_SPEC = BotSpec.for_simulation(
+    "passive-v1",
+    PassiveHeuristicV1Brain,
+)
+
+AGGRESSIVE_HEURISTIC_V2_BOT_SPEC = BotSpec.for_simulation(
+    "aggressive-v2",
+    AggressiveHeuristicV2Brain,
+)
+BALANCED_HEURISTIC_V2_BOT_SPEC = BotSpec.for_simulation(
+    "balanced-v2",
+    BalancedHeuristicV2Brain,
+)
+PASSIVE_HEURISTIC_V2_BOT_SPEC = BotSpec.for_simulation(
+    "passive-v2",
+    PassiveHeuristicV2Brain,
+)

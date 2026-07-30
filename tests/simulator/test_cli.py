@@ -4,15 +4,19 @@ import json
 import subprocess
 from pathlib import Path
 
-from garboid_pocketrocks.bots import BotSpec, RandomBot
-from garboid_pocketrocks.rules import LIVE_RULESET
-from garboid_pocketrocks.simulator.cli import _table
+from garboid_pocketrocks.bots import BOT_SPECS_BY_NAME, BotSpec, RandomBot
+from garboid_pocketrocks.simulator.cli import _BOT_REGISTRY, _bot_names, _table
 from garboid_pocketrocks.simulator.monte_carlo import (
     MonteCarloConfig,
     MonteCarloRunner,
 )
 from garboid_pocketrocks.simulator.replay import load_replay, replay_match
-from garboid_pocketrocks.simulator.sampling import FixedRulesetSampler
+
+
+def test_simulator_cli_uses_shared_registry() -> None:
+    from garboid_pocketrocks.simulator import cli
+
+    assert cli._BOT_REGISTRY == BOT_SPECS_BY_NAME
 
 
 def _run_cli(*arguments: str) -> subprocess.CompletedProcess[str]:
@@ -22,6 +26,58 @@ def _run_cli(*arguments: str) -> subprocess.CompletedProcess[str]:
         text=True,
         capture_output=True,
     )
+
+
+def test_simulate_cli_accepts_explicit_heuristic_generations() -> None:
+    assert _bot_names(
+        "aggressive-v1,balanced-v1,passive-v1,aggressive-v2,balanced-v2,passive-v2"
+    ) == (
+        "aggressive-v1",
+        "balanced-v1",
+        "passive-v1",
+        "aggressive-v2",
+        "balanced-v2",
+        "passive-v2",
+    )
+
+
+def test_simulate_cli_uses_names_as_private_generation_ids() -> None:
+    versioned_names = (
+        "aggressive-v1",
+        "balanced-v1",
+        "passive-v1",
+        "aggressive-v2",
+        "balanced-v2",
+        "passive-v2",
+    )
+
+    assert all(_BOT_REGISTRY[name].bot_id == name for name in versioned_names)
+
+
+def test_simulate_cli_runs_mixed_generations_without_faults() -> None:
+    completed = _run_cli(
+        "--bots",
+        "balanced-v1,balanced-v2,passive-v2",
+        "--games",
+        "6",
+        "--players",
+        "3",
+        "--seed",
+        "20260729",
+        "--workers",
+        "2",
+        "--format",
+        "json",
+    )
+
+    statistics = json.loads(completed.stdout)["result"]["bot_statistics"]
+
+    assert {entry["bot_name"] for entry in statistics} == {
+        "balanced-v1",
+        "balanced-v2",
+        "passive-v2",
+    }
+    assert all(entry["faults"] == 0 for entry in statistics)
 
 
 def test_simulate_cli_runs_heuristic_bots_identically_across_worker_counts() -> None:
@@ -89,7 +145,7 @@ def test_table_includes_formatted_behavior_columns() -> None:
             bot_specs=(repeated, repeated, repeated),
             games=1,
             player_counts=(3,),
-            ruleset_sampler=FixedRulesetSampler(LIVE_RULESET),
+            value_charts=("A",),
             root_seed=42,
         )
     )

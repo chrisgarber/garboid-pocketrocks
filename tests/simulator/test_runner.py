@@ -4,7 +4,7 @@ import pytest
 from pocketrocks import BotDecision, DecisionContext
 
 from garboid_pocketrocks.bots import BotSpec, RandomBot
-from garboid_pocketrocks.rules import LIVE_RULESET, RulesetKnowledge
+from garboid_pocketrocks.knowledge import RulesetKnowledge
 from garboid_pocketrocks.simulator.runner import FaultMode, MatchRunner
 
 
@@ -32,15 +32,15 @@ def test_match_runner_is_reproducible_and_uses_fresh_brains() -> None:
 
     left = MatchRunner.run(
         lineup,
-        ruleset=LIVE_RULESET,
         player_count=3,
         seed=91,
+        value_chart="E",
     )
     right = MatchRunner.run(
         lineup,
-        ruleset=LIVE_RULESET,
         player_count=3,
         seed=91,
+        value_chart="E",
     )
 
     assert left.result == right.result
@@ -56,7 +56,6 @@ def test_record_and_pass_records_brain_failure() -> None:
 
     match = MatchRunner.run(
         lineup,
-        ruleset=LIVE_RULESET,
         player_count=3,
         seed=5,
         fault_mode=FaultMode.RECORD_AND_PASS,
@@ -66,7 +65,7 @@ def test_record_and_pass_records_brain_failure() -> None:
     assert match.faults[0].seat == 0
     assert match.faults[0].bot_name == "raising"
     assert match.faults[0].error_type == "RuntimeError"
-    assert any(event.kind.value == "bot_fault" for event in match.events)
+    assert match.result.scores
 
 
 def test_raise_mode_propagates_original_brain_exception() -> None:
@@ -78,8 +77,28 @@ def test_raise_mode_propagates_original_brain_exception() -> None:
     with pytest.raises(RuntimeError, match="brain exploded"):
         MatchRunner.run(
             lineup,
-            ruleset=LIVE_RULESET,
             player_count=3,
             seed=5,
             fault_mode=FaultMode.RAISE,
         )
+
+
+def test_automatic_reveals_are_not_recorded_as_bot_decisions() -> None:
+    match = MatchRunner.run(
+        _random_lineup(),
+        player_count=3,
+        seed=31,
+    )
+
+    automatic_reveals = tuple(
+        turn.reveal for turn in match.turns if turn.reveal is not None and turn.reveal.auto
+    )
+    choice_reveal_decisions = tuple(
+        decisions for _step, decisions in match.replay.decisions if len(decisions) == 1
+    )
+    nonautomatic_reveals = tuple(
+        turn.reveal for turn in match.turns if turn.reveal is not None and not turn.reveal.auto
+    )
+
+    assert automatic_reveals
+    assert len(choice_reveal_decisions) == len(nonautomatic_reveals)
