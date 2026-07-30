@@ -171,6 +171,11 @@ def test_real_paired_gate_is_deterministic_across_serial_parallel_and_repeat_run
     }
     assert planned_cells == requested_cells
     for pair in serial.plan.pairs:
+        candidate_at_focal_seat = pair.candidate_game.lineup[pair.case.focal_seat]
+        incumbent_at_focal_seat = pair.incumbent_game.lineup[pair.case.focal_seat]
+        assert candidate_at_focal_seat == serial.plan.candidate
+        assert incumbent_at_focal_seat == serial.plan.incumbent
+        assert candidate_at_focal_seat != incumbent_at_focal_seat
         assert pair.candidate_game.seed == pair.incumbent_game.seed == pair.case.engine_seed
         assert pair.candidate_game.value_chart == pair.incumbent_game.value_chart == pair.case.chart
         assert (
