@@ -50,7 +50,8 @@ Every attempted run that reaches reporting writes three files:
   uncertainty interval; bootstrap progress; faults; failure reasons; artifact
   names; and the final `promoted` value.
 - `paired-games.jsonl` contains one canonical summary for each executed game.
-  Adjacent candidate and incumbent summaries are the matched twins.
+  For pair `n`, game index `2n` is the candidate game and `2n+1` is its
+  incumbent twin. Failed evidence may have gaps where a game did not finish.
 - `corpus-snapshot.json` contains the normalized, expanded development and
   held-out corpora and their digests.
 

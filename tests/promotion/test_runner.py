@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import math
 import subprocess
 from dataclasses import replace
@@ -205,6 +206,19 @@ def test_overlapping_corpus_seeds_write_a_nonpromotion_report(tmp_path: Path) ->
     assert [failure.code for failure in run.report.analysis.failures] == ["corpus_seed_overlap"]
     assert run.artifacts.report_json.is_file()
     assert run.artifacts.paired_games_jsonl.read_bytes() == b""
+    payload = json.loads(run.artifacts.report_json.read_bytes())
+    assert payload["execution"] == {
+        "bot_ids": ["candidate", "incumbent", "opponent-a", "opponent-b"],
+        "games": 2,
+        "player_counts": [3],
+        "value_charts": ["A"],
+        "root_seed": 90_001,
+        "objectives_enabled": [True],
+        "fault_mode": "record_and_pass",
+        "capture_replays": False,
+        "workers": 1,
+        "batch_size": 2,
+    }
 
 
 def test_candidate_and_incumbent_identity_collision_writes_a_report(tmp_path: Path) -> None:
@@ -296,6 +310,7 @@ def test_nonfinite_analyzer_output_is_replaced_with_a_failure(
             interval=None,
             bootstrap_requested=config.bootstrap_samples,
             bootstrap_converged=config.bootstrap_samples,
+            unattributed_faults=0,
             faults_by_identity=(),
             warnings=(),
             failures=(),

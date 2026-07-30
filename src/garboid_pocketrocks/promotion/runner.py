@@ -194,6 +194,7 @@ def _failure_analysis(
         interval=None,
         bootstrap_requested=config.bootstrap_samples,
         bootstrap_converged=0,
+        unattributed_faults=0,
         faults_by_identity=(),
         warnings=(),
         failures=(PromotionFailure(code=code, message=message),),

@@ -16,6 +16,7 @@ from garboid_pocketrocks.promotion.corpus import (
     corpus_snapshot_payload,
 )
 from garboid_pocketrocks.simulator.monte_carlo import GameSummary
+from garboid_pocketrocks.simulator.runner import FaultMode
 from garboid_pocketrocks.simulator.session import SessionScore
 
 _PROMOTION_REPORT_NAME = "promotion-report.json"
@@ -170,7 +171,9 @@ def promotion_report_payload(report: PromotionReport) -> dict[str, object]:
     faults_by_identity = [
         {"bot_id": bot_id, "count": count} for bot_id, count in analysis.faults_by_identity
     ]
-    total_faults = sum(count for _, count in analysis.faults_by_identity)
+    total_faults = analysis.unattributed_faults + sum(
+        count for _, count in analysis.faults_by_identity
+    )
     return {
         "schema_version": report.schema_version,
         "repository_commit": report.repository_commit,
@@ -178,6 +181,18 @@ def promotion_report_payload(report: PromotionReport) -> dict[str, object]:
         "incumbent": _bot_identity_payload(report.incumbent),
         "opponents": [_bot_identity_payload(opponent) for opponent in report.opponents],
         "execution": {
+            "bot_ids": [
+                report.candidate.bot_id,
+                report.incumbent.bot_id,
+                *(opponent.bot_id for opponent in report.opponents),
+            ],
+            "games": 2 * len(report.held_out.cases),
+            "player_counts": list(report.held_out.recipe.player_counts),
+            "value_charts": list(report.held_out.recipe.charts),
+            "root_seed": report.held_out.recipe.root_seed,
+            "objectives_enabled": [True],
+            "fault_mode": FaultMode.RECORD_AND_PASS.value,
+            "capture_replays": False,
             "workers": report.workers,
             "batch_size": report.batch_size,
         },
@@ -200,6 +215,7 @@ def promotion_report_payload(report: PromotionReport) -> dict[str, object]:
         },
         "faults": {
             "total": total_faults,
+            "unattributed": analysis.unattributed_faults,
             "by_identity": faults_by_identity,
         },
         "warnings": list(analysis.warnings),
@@ -221,6 +237,10 @@ def _corpus_report_payload(corpus: PromotionCorpus) -> dict[str, object]:
         "digest": corpus.digest,
         "purpose": corpus.recipe.purpose,
         "root_seed": corpus.recipe.root_seed,
+        "repetitions_per_seat_cell": corpus.recipe.repetitions_per_seat_cell,
+        "charts": list(corpus.recipe.charts),
+        "player_counts": list(corpus.recipe.player_counts),
+        "opponent_names": list(corpus.recipe.opponent_names),
         "engine_seeds": list(corpus.engine_seeds),
     }
 
