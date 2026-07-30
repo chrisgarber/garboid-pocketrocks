@@ -24,6 +24,7 @@ from garboid_pocketrocks.promotion.reporting import (
     PromotionReport,
     build_promotion_report,
     promotion_report_payload,
+    validate_artifact_output_dir,
     write_promotion_artifacts,
 )
 from garboid_pocketrocks.simulator.monte_carlo import GameSummary
@@ -280,6 +281,29 @@ def test_nonfinite_value_fails_before_any_final_artifact_is_written(
     assert not any((tmp_path / name).exists() for name in _ARTIFACT_NAMES)
 
 
+@pytest.mark.parametrize("corpus_label", ("development", "held_out"))
+def test_rejects_snapshot_corpus_that_does_not_match_the_report(
+    tmp_path: Path,
+    corpus_label: str,
+) -> None:
+    report, summaries, development, held_out = _report_inputs()
+    mismatched = replace(
+        development if corpus_label == "development" else held_out,
+        digest="f" * 64,
+    )
+
+    with pytest.raises(ValueError, match=f"{corpus_label.replace('_', '-')} corpus"):
+        write_promotion_artifacts(
+            tmp_path,
+            report=report,
+            game_summaries=summaries,
+            development=mismatched if corpus_label == "development" else development,
+            held_out=mismatched if corpus_label == "held_out" else held_out,
+        )
+
+    assert not any((tmp_path / name).exists() for name in _ARTIFACT_NAMES)
+
+
 def test_nonempty_output_directory_requires_explicit_overwrite(tmp_path: Path) -> None:
     report, summaries, development, held_out = _report_inputs()
     unrelated = tmp_path / "notes.txt"
@@ -296,6 +320,25 @@ def test_nonempty_output_directory_requires_explicit_overwrite(tmp_path: Path) -
 
     assert unrelated.read_text(encoding="utf-8") == "keep me"
     assert not any((tmp_path / name).exists() for name in _ARTIFACT_NAMES)
+
+
+def test_output_directory_preflight_is_public_and_defaults_to_safe(
+    tmp_path: Path,
+) -> None:
+    missing = tmp_path / "missing"
+    validate_artifact_output_dir(missing)
+    missing.mkdir()
+    validate_artifact_output_dir(missing)
+
+    (missing / "notes.txt").write_text("keep me", encoding="utf-8")
+    with pytest.raises(FileExistsError, match="not empty"):
+        validate_artifact_output_dir(missing)
+    validate_artifact_output_dir(missing, overwrite=True)
+
+    file_path = tmp_path / "not-a-directory"
+    file_path.write_text("plain file", encoding="utf-8")
+    with pytest.raises(NotADirectoryError, match="not a directory"):
+        validate_artifact_output_dir(file_path)
 
 
 def test_overwrite_replaces_only_known_artifacts_and_preserves_unrelated_files(
@@ -330,40 +373,82 @@ def test_overwrite_replaces_only_known_artifacts_and_preserves_unrelated_files(
     }
 
 
-def test_replace_failure_preserves_previous_artifact_and_removes_temporary_file(
+@pytest.mark.parametrize("failure_position", (1, 2, 3))
+@pytest.mark.parametrize("existing_generation", (False, True))
+def test_replace_failure_rolls_back_the_complete_artifact_generation(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    failure_position: int,
+    existing_generation: bool,
 ) -> None:
     report, summaries, development, held_out = _report_inputs()
-    artifacts = write_promotion_artifacts(
-        tmp_path,
-        report=report,
-        game_summaries=summaries,
-        development=development,
-        held_out=held_out,
-    )
-    previous_report = artifacts.report_json.read_bytes()
-    real_replace = os.replace
+    previous_bytes: dict[str, bytes] = {}
+    unrelated = tmp_path / "notes.txt"
+    if existing_generation:
+        artifacts = write_promotion_artifacts(
+            tmp_path,
+            report=report,
+            game_summaries=summaries,
+            development=development,
+            held_out=held_out,
+        )
+        previous_bytes = {
+            path.name: path.read_bytes()
+            for path in (
+                artifacts.report_json,
+                artifacts.paired_games_jsonl,
+                artifacts.corpus_snapshot_json,
+            )
+        }
+        unrelated.write_text("keep me", encoding="utf-8")
 
-    def fail_replacing_report(source: Any, destination: Any) -> None:
-        if Path(destination).name == "promotion-report.json":
-            raise OSError("simulated atomic replacement failure")
+    changed_development = replace(development, digest="f" * 64)
+    changed_report = replace(
+        report,
+        repository_commit="new-commit",
+        development=changed_development,
+    )
+    changed_summaries = tuple(
+        replace(
+            summary,
+            decision_counts=tuple(count + 1 for count in summary.decision_counts),
+        )
+        for summary in summaries
+    )
+    real_replace = os.replace
+    artifact_replacements = 0
+
+    def fail_selected_artifact_replacement(source: Any, destination: Any) -> None:
+        nonlocal artifact_replacements
+        source_path = Path(source)
+        destination_path = Path(destination)
+        if destination_path.name in _ARTIFACT_NAMES and ".backup." not in source_path.name:
+            artifact_replacements += 1
+            if artifact_replacements == failure_position:
+                raise OSError(f"simulated failure replacing artifact {failure_position}")
         real_replace(source, destination)
 
     monkeypatch.setattr(
         "garboid_pocketrocks.promotion.reporting.os.replace",
-        fail_replacing_report,
+        fail_selected_artifact_replacement,
     )
 
-    with pytest.raises(OSError, match="simulated atomic replacement failure"):
+    with pytest.raises(
+        OSError,
+        match=f"simulated failure replacing artifact {failure_position}",
+    ):
         write_promotion_artifacts(
             tmp_path,
-            report=replace(report, repository_commit="new-commit"),
-            game_summaries=summaries,
-            development=development,
+            report=changed_report,
+            game_summaries=changed_summaries,
+            development=changed_development,
             held_out=held_out,
-            overwrite=True,
+            overwrite=existing_generation,
         )
 
-    assert artifacts.report_json.read_bytes() == previous_report
-    assert not tuple(tmp_path.glob(".promotion-report.json.*"))
+    if existing_generation:
+        assert {name: (tmp_path / name).read_bytes() for name in _ARTIFACT_NAMES} == previous_bytes
+        assert unrelated.read_text(encoding="utf-8") == "keep me"
+    else:
+        assert not any((tmp_path / name).exists() for name in _ARTIFACT_NAMES)
+    assert not tuple(path for path in tmp_path.iterdir() if path.name.startswith("."))

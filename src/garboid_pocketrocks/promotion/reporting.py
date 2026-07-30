@@ -56,6 +56,13 @@ class PromotionArtifacts:
     corpus_snapshot_json: Path
 
 
+@dataclass(frozen=True, slots=True)
+class _PreparedArtifact:
+    target: Path
+    staged: Path
+    backup: Path | None
+
+
 def build_promotion_report(
     *,
     repository_commit: str,
@@ -98,9 +105,14 @@ def write_promotion_artifacts(
     held_out: PromotionCorpus,
     overwrite: bool = False,
 ) -> PromotionArtifacts:
-    """Write the report, sorted game summaries, and corpus snapshot atomically."""
+    """Write one rollback-protected generation of promotion artifacts."""
 
-    _validate_output_directory(output_dir, overwrite=overwrite)
+    validate_artifact_output_dir(output_dir, overwrite=overwrite)
+    _require_report_corpora(
+        report,
+        development=development,
+        held_out=held_out,
+    )
     rendered_artifacts = (
         (
             _PROMOTION_REPORT_NAME,
@@ -115,17 +127,20 @@ def write_promotion_artifacts(
             _render_json_document(
                 {
                     "schema_version": 1,
-                    "development": corpus_snapshot_payload(development),
-                    "held_out": corpus_snapshot_payload(held_out),
+                    "development": corpus_snapshot_payload(report.development),
+                    "held_out": corpus_snapshot_payload(report.held_out),
                 }
             ),
         ),
     )
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    _validate_output_directory(output_dir, overwrite=overwrite)
-    for artifact_name, content in rendered_artifacts:
-        _atomic_write(output_dir / artifact_name, content)
+    validate_artifact_output_dir(output_dir, overwrite=overwrite)
+    prepared_artifacts = _prepare_artifact_generation(
+        output_dir,
+        rendered_artifacts,
+    )
+    _replace_artifact_generation(prepared_artifacts)
 
     return PromotionArtifacts(
         report_json=output_dir / _PROMOTION_REPORT_NAME,
@@ -203,6 +218,22 @@ def _corpus_report_payload(corpus: PromotionCorpus) -> dict[str, object]:
     }
 
 
+def _require_report_corpora(
+    report: PromotionReport,
+    *,
+    development: PromotionCorpus,
+    held_out: PromotionCorpus,
+) -> None:
+    if development != report.development:
+        raise ValueError(
+            "The development corpus does not match the corpus recorded in the promotion report."
+        )
+    if held_out != report.held_out:
+        raise ValueError(
+            "The held-out corpus does not match the corpus recorded in the promotion report."
+        )
+
+
 def _render_game_summaries(game_summaries: Sequence[GameSummary]) -> str:
     ordered_summaries = sorted(game_summaries, key=lambda summary: summary.game_index)
     try:
@@ -250,7 +281,13 @@ def _render_json_document(payload: Mapping[str, object]) -> str:
         raise ValueError("Promotion artifacts must contain only finite JSON numbers.") from error
 
 
-def _validate_output_directory(output_dir: Path, *, overwrite: bool) -> None:
+def validate_artifact_output_dir(
+    output_dir: Path,
+    *,
+    overwrite: bool = False,
+) -> None:
+    """Reject unsafe promotion artifact output paths before work begins."""
+
     if not output_dir.exists():
         return
     if not output_dir.is_dir():
@@ -259,22 +296,114 @@ def _validate_output_directory(output_dir: Path, *, overwrite: bool) -> None:
         raise FileExistsError(f"promotion output directory is not empty: {output_dir}")
 
 
-def _atomic_write(path: Path, content: str) -> None:
+def _prepare_artifact_generation(
+    output_dir: Path,
+    rendered_artifacts: tuple[tuple[str, str], ...],
+) -> tuple[_PreparedArtifact, ...]:
+    prepared: list[_PreparedArtifact] = []
+    try:
+        for artifact_name, content in rendered_artifacts:
+            target = output_dir / artifact_name
+            staged = _stage_bytes(
+                output_dir,
+                prefix=f".{artifact_name}.staged.",
+                content=content.encode("utf-8"),
+            )
+            prepared.append(
+                _PreparedArtifact(
+                    target=target,
+                    staged=staged,
+                    backup=None,
+                )
+            )
+
+        for index, artifact in enumerate(prepared):
+            backup = (
+                _stage_bytes(
+                    output_dir,
+                    prefix=f".{artifact.target.name}.backup.",
+                    content=artifact.target.read_bytes(),
+                )
+                if artifact.target.exists()
+                else None
+            )
+            prepared[index] = _PreparedArtifact(
+                target=artifact.target,
+                staged=artifact.staged,
+                backup=backup,
+            )
+        return tuple(prepared)
+    except Exception:
+        _remove_prepared_files(prepared)
+        raise
+
+
+def _replace_artifact_generation(
+    prepared_artifacts: tuple[_PreparedArtifact, ...],
+) -> None:
+    replaced: list[_PreparedArtifact] = []
+    try:
+        for artifact in prepared_artifacts:
+            os.replace(artifact.staged, artifact.target)
+            replaced.append(artifact)
+    except Exception as replacement_error:
+        rollback_errors = _rollback_replaced_artifacts(replaced)
+        _remove_prepared_files(prepared_artifacts)
+        if rollback_errors:
+            error_summary = "; ".join(str(error) for error in rollback_errors)
+            raise RuntimeError(
+                "Promotion artifact replacement failed, and the previous artifact "
+                f"generation could not be fully restored: {error_summary}"
+            ) from replacement_error
+        raise
+    _remove_prepared_files(prepared_artifacts)
+
+
+def _rollback_replaced_artifacts(
+    replaced_artifacts: Sequence[_PreparedArtifact],
+) -> tuple[OSError, ...]:
+    rollback_errors: list[OSError] = []
+    for artifact in reversed(replaced_artifacts):
+        try:
+            if artifact.backup is None:
+                artifact.target.unlink(missing_ok=True)
+            else:
+                os.replace(artifact.backup, artifact.target)
+        except OSError as error:
+            rollback_errors.append(error)
+    return tuple(rollback_errors)
+
+
+def _remove_prepared_files(
+    prepared_artifacts: Sequence[_PreparedArtifact],
+) -> None:
+    for artifact in prepared_artifacts:
+        artifact.staged.unlink(missing_ok=True)
+        if artifact.backup is not None:
+            artifact.backup.unlink(missing_ok=True)
+
+
+def _stage_bytes(
+    directory: Path,
+    *,
+    prefix: str,
+    content: bytes,
+) -> Path:
     temporary_path: Path | None = None
+    staged = False
     try:
         with tempfile.NamedTemporaryFile(
-            mode="w",
-            encoding="utf-8",
-            dir=path.parent,
-            prefix=f".{path.name}.",
+            mode="wb",
+            dir=directory,
+            prefix=prefix,
             delete=False,
         ) as stream:
             temporary_path = Path(stream.name)
             stream.write(content)
             stream.flush()
             os.fsync(stream.fileno())
-        os.replace(temporary_path, path)
-        temporary_path = None
+        staged = True
+        return temporary_path
     finally:
-        if temporary_path is not None:
+        if temporary_path is not None and not staged:
             temporary_path.unlink(missing_ok=True)
