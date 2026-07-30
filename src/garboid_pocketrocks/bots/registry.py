@@ -30,6 +30,16 @@ BOT_SPECS = (
     PASSIVE_HEURISTIC_V2_BOT_SPEC,
 )
 
+DEFAULT_TOURNAMENT_BOT_SPECS = (
+    BOT_SPECS[0],
+    AGGRESSIVE_HEURISTIC_V1_BOT_SPEC,
+    BALANCED_HEURISTIC_V1_BOT_SPEC,
+    PASSIVE_HEURISTIC_V1_BOT_SPEC,
+    AGGRESSIVE_HEURISTIC_V2_BOT_SPEC,
+    BALANCED_HEURISTIC_V2_BOT_SPEC,
+    PASSIVE_HEURISTIC_V2_BOT_SPEC,
+)
+
 
 def _index_specs(specs: tuple[BotSpec, ...]) -> Mapping[str, BotSpec]:
     names = tuple(spec.name for spec in specs)

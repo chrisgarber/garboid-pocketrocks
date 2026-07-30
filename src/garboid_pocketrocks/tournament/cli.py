@@ -5,7 +5,11 @@ import os
 from collections.abc import Mapping
 from pathlib import Path
 
-from garboid_pocketrocks.bots import BOT_SPECS_BY_NAME, BotSpec
+from garboid_pocketrocks.bots import (
+    BOT_SPECS_BY_NAME,
+    DEFAULT_TOURNAMENT_BOT_SPECS,
+    BotSpec,
+)
 from garboid_pocketrocks.tournament.runner import TournamentRun, TournamentRunner
 from garboid_pocketrocks.tournament.schedule import TournamentConfig
 
@@ -77,8 +81,15 @@ def _resolve_bot_specs(
     include: tuple[str, ...] | None,
     exclude: tuple[str, ...],
     registry: Mapping[str, BotSpec],
+    defaults: tuple[BotSpec, ...] | None = None,
 ) -> tuple[BotSpec, ...]:
-    requested = tuple(registry) if include is None else include
+    requested = (
+        tuple(spec.name for spec in defaults)
+        if include is None and defaults is not None
+        else tuple(registry)
+        if include is None
+        else include
+    )
     unknown = (set(requested) | set(exclude)) - set(registry)
     if unknown:
         raise ValueError(f"unknown bot name(s): {', '.join(sorted(unknown))}")
@@ -139,6 +150,7 @@ def main() -> None:
             include=args.bots,
             exclude=args.exclude_bots,
             registry=BOT_SPECS_BY_NAME,
+            defaults=DEFAULT_TOURNAMENT_BOT_SPECS,
         )
         config = TournamentConfig(
             bot_specs=bot_specs,
