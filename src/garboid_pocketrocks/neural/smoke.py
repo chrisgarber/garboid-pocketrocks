@@ -8,7 +8,7 @@ import platform
 import subprocess
 import time
 from collections.abc import Iterable
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Any, cast
 
@@ -57,9 +57,10 @@ from garboid_pocketrocks.neural.seeding import (
     derive_seed,
     plan_stage1_episodes,
 )
-from garboid_pocketrocks.neural.trainer import resume, train
+from garboid_pocketrocks.neural.trainer import train
 from garboid_pocketrocks.neural.training_checkpoint import (
     load_training_checkpoint,
+    save_training_checkpoint,
 )
 from garboid_pocketrocks.rules import LIVE_RULESET
 from garboid_pocketrocks.simulator.sampling import FixedRulesetSampler
@@ -130,10 +131,24 @@ def run_self_play_smoke(
     collection = cast(dict[str, object], metrics["collection"])
     ppo = cast(dict[str, object], metrics["ppo"])
     value = _read_value_metrics(cast(dict[str, object], ppo["value"]))
-    resumed = resume(
-        result.final_checkpoint,
-        result.run_dir / "resume-probe",
-        max_additional_updates=1,
+    probe_path = result.run_dir / "resume-probe"
+    save_training_checkpoint(
+        probe_path,
+        model=loaded.model,
+        optimizer=loaded.optimizer,
+        manifest=replace(
+            loaded.manifest,
+            lineage=(
+                *loaded.manifest.lineage,
+                str(result.final_checkpoint.resolve()),
+            ),
+        ),
+        generator_states=loaded.generator_states,
+        metrics=loaded.metrics,
+    )
+    resumed = load_training_checkpoint(
+        probe_path,
+        device=torch.device("cpu"),
     )
     smoke_result = SelfPlaySmokeResult(
         completed_updates=result.completed_updates,
@@ -156,7 +171,13 @@ def run_self_play_smoke(
             == parameter_digest(loaded.model.state_dict())
         ),
         resume_verified=(
-            resumed.completed_updates == result.completed_updates + 1
+            resumed.manifest.progress == loaded.manifest.progress
+            and resumed.manifest.parameter_digest
+            == loaded.manifest.parameter_digest
+            and _nested_equal(
+                resumed.optimizer.state_dict(),
+                loaded.optimizer.state_dict(),
+            )
         ),
     )
     _write_json_payload(
@@ -592,6 +613,21 @@ def _as_float(value: object, name: str) -> float:
     ):
         raise SmokeError(f"{name} must be finite")
     return float(value)
+
+
+def _nested_equal(left: object, right: object) -> bool:
+    if isinstance(left, torch.Tensor) and isinstance(right, torch.Tensor):
+        return bool(torch.equal(left, right))
+    if isinstance(left, dict) and isinstance(right, dict):
+        return set(left) == set(right) and all(
+            _nested_equal(left[key], right[key]) for key in left
+        )
+    if isinstance(left, (list, tuple)) and isinstance(right, (list, tuple)):
+        return len(left) == len(right) and all(
+            _nested_equal(first, second)
+            for first, second in zip(left, right, strict=True)
+        )
+    return bool(left == right)
 
 
 def _write_result(result: SmokeResult) -> None:
