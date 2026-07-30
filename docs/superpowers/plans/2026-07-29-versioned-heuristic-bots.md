@@ -222,10 +222,7 @@ git commit -m "feat: expose versioned heuristic simulations"
 Add a parser test that calls `_bot_names` and requires:
 
 ```python
-assert _bot_names(
-    "aggressive-v1,balanced-v1,passive-v1,"
-    "aggressive-v2,balanced-v2,passive-v2"
-) == (
+assert _bot_names("aggressive-v1,balanced-v1,passive-v1,aggressive-v2,balanced-v2,passive-v2") == (
     "aggressive-v1",
     "balanced-v1",
     "passive-v1",
