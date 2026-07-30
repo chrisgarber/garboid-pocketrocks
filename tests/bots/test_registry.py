@@ -22,6 +22,7 @@ def test_registered_bot_specs_have_unique_names_and_ids() -> None:
         "balanced-v2",
         "passive-v2",
         "vector_ppo_small_v1_g1500",
+        "vector_ppo_large_v1_g350k",
     )
     assert len({spec.name for spec in specs}) == len(specs)
     assert len({spec.bot_id for spec in specs}) == len(specs)
@@ -40,4 +41,5 @@ def test_default_tournament_specs_include_baseline_and_versioned_bots_only() -> 
         "balanced-v2",
         "passive-v2",
         "vector_ppo_small_v1_g1500",
+        "vector_ppo_large_v1_g350k",
     )
