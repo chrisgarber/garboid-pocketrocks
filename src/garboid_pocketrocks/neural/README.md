@@ -6,8 +6,7 @@ self-play. The implemented training envelope covers every live value chart
 the same frozen policy snapshot during collection, and every seat trajectory is
 then used by PPO.
 
-This is a training system, not yet a registered live remote `NeuralBot`. Two
-frozen checkpoints are registered for local simulation and the standard
+Two frozen checkpoints are registered for local simulation and the standard
 tournament:
 
 - `vector_ppo_small_v1_g1500`, the 1,500-game smoke policy;
@@ -18,6 +17,18 @@ Their inference manifests retain exact training ages and repository provenance.
 Together they exercise legal SDK-compatible inference, balanced self-play, PPO
 updates, value diagnostics, throughput calibration, and update-boundary
 checkpoint/resume.
+
+The public live alias `ppo-large-teen` currently delegates to
+`vector_ppo_large_v1_g350k` and connects through
+`bot_dd7807c1-93bc-4f70-80c8-a2f2d7d26429`. Run it alongside the other public
+bots with:
+
+```bash
+uv run --extra neural garboid-bots
+```
+
+The frozen checkpoint name remains immutable for reproducibility. The public
+alias is the moving latest pointer for compatible large teen releases.
 
 ## Install
 

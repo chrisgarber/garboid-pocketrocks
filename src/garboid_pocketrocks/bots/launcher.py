@@ -10,6 +10,7 @@ from garboid_pocketrocks.bots.heuristic import (
     PassiveHeuristicBot,
 )
 from garboid_pocketrocks.bots.random_bot import RandomBot
+from garboid_pocketrocks.neural.live_bot import PpoLargeTeenBot
 
 
 class RunnableBot(Protocol):
@@ -23,6 +24,7 @@ BOT_REGISTRY: dict[str, BotFactory] = {
     AggressiveHeuristicBot.BOT_NAME: AggressiveHeuristicBot,
     BalancedHeuristicBot.BOT_NAME: BalancedHeuristicBot,
     PassiveHeuristicBot.BOT_NAME: PassiveHeuristicBot,
+    PpoLargeTeenBot.BOT_NAME: PpoLargeTeenBot,
 }
 
 
