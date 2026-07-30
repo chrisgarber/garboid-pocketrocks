@@ -54,8 +54,6 @@ from garboid_pocketrocks.neural.seeding import (
     derive_seed,
     plan_stage1_episodes,
 )
-from garboid_pocketrocks.rules import LIVE_RULESET
-from garboid_pocketrocks.simulator.sampling import FixedRulesetSampler
 from garboid_pocketrocks.training.bounds import EnvironmentBounds
 from garboid_pocketrocks.training.rewards import RewardBreakdown
 from garboid_pocketrocks.training.single_agent_env import PocketRocksEnv
@@ -389,7 +387,7 @@ def _canonical_fixture_batch() -> NeuralBatch:
             BALANCED_HEURISTIC_BOT_SPEC,
             PASSIVE_HEURISTIC_BOT_SPEC,
         ),
-        ruleset_sampler=FixedRulesetSampler(LIVE_RULESET),
+        value_charts=("A",),
         player_count=3,
         bounds=bounds,
         learner_seat=0,
