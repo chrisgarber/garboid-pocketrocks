@@ -5,7 +5,10 @@ from pathlib import Path
 
 import pytest
 
-from garboid_pocketrocks.bots import BOT_SPECS_BY_NAME
+from garboid_pocketrocks.bots import (
+    BOT_SPECS_BY_NAME,
+    DEFAULT_TOURNAMENT_BOT_SPECS,
+)
 from garboid_pocketrocks.tournament.cli import (
     _parser,
     _resolve_bot_specs,
@@ -34,15 +37,11 @@ def test_bot_filters_include_then_exclude_registered_names() -> None:
 
 
 def test_bot_filters_use_curated_defaults_when_include_is_omitted() -> None:
-    defaults = tuple(
-        spec for name, spec in BOT_SPECS_BY_NAME.items() if name == "random" or "-v" in name
-    )
-
     selected = _resolve_bot_specs(
         include=None,
         exclude=(),
         registry=BOT_SPECS_BY_NAME,
-        defaults=defaults,
+        defaults=DEFAULT_TOURNAMENT_BOT_SPECS,
     )
 
     assert tuple(spec.name for spec in selected) == (
@@ -53,6 +52,7 @@ def test_bot_filters_use_curated_defaults_when_include_is_omitted() -> None:
         "aggressive-v2",
         "balanced-v2",
         "passive-v2",
+        "vector_ppo_small_v1_g1500",
     )
 
 
@@ -81,6 +81,8 @@ def test_cli_runs_all_conditions_with_current_registry(tmp_path: Path) -> None:
             "15",
             "--bootstrap-samples",
             "0",
+            "--exclude-bots",
+            "vector_ppo_small_v1_g1500",
             "--output-dir",
             str(tmp_path),
         ],
