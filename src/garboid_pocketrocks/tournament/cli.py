@@ -63,7 +63,7 @@ def _parser() -> argparse.ArgumentParser:
         type=_positive_int,
         default=max(1, (os.cpu_count() or 2) - 1),
     )
-    parser.add_argument("--batch-size", type=_positive_int, default=256)
+    parser.add_argument("--batch-size", type=_positive_int, default=64)
     parser.add_argument("--bootstrap-samples", type=_nonnegative_int, default=200)
     parser.add_argument("--bots", type=_csv)
     parser.add_argument("--exclude-bots", type=_csv, default=())

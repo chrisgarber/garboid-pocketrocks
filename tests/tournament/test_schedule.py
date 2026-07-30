@@ -22,7 +22,7 @@ def test_default_config_describes_full_tournament() -> None:
     assert config.charts == ("A", "B", "C", "D", "E")
     assert config.fault_mode is FaultMode.RECORD_AND_PASS
     assert config.bootstrap_samples == 200
-    assert config.batch_size == 256
+    assert config.batch_size == 64
 
 
 def test_config_rejects_nonpositive_batch_size() -> None:

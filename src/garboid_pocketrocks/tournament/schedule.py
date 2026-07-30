@@ -23,7 +23,7 @@ class TournamentConfig:
     charts: tuple[str, ...] = tuple(VALUE_CHARTS)
     root_seed: int = 0
     fault_mode: FaultMode = FaultMode.RECORD_AND_PASS
-    batch_size: int = 256
+    batch_size: int = 64
     bootstrap_samples: int = 200
 
     def __post_init__(self) -> None:
