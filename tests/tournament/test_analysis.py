@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import random
+
 import pytest
 
 import garboid_pocketrocks.tournament.analysis as analysis_module
 from garboid_pocketrocks.simulator.monte_carlo import GameSummary, MonteCarloResult
+from garboid_pocketrocks.simulator.seeding import derive_seed
 from garboid_pocketrocks.tournament.analysis import (
     analyze_tournament,
     bootstrap_rating_intervals,
@@ -12,6 +15,7 @@ from garboid_pocketrocks.tournament.rating import (
     PlackettLuceFit,
     RankingObservation,
     fit_plackett_luce,
+    observations_from_games,
 )
 
 from .helpers import game_summary
@@ -120,6 +124,29 @@ def test_bootstrap_is_deterministic_and_resamples_whole_games() -> None:
     assert first.converged == 20
     assert tuple(interval.bot_id for interval in first.intervals) == ("a", "b", "c")
     assert all(interval.lower <= interval.upper for interval in first.intervals)
+
+
+@pytest.mark.parametrize("replicate", range(5))
+def test_weighted_bootstrap_replicate_matches_whole_game_resample(replicate: int) -> None:
+    games = _games()
+    bot_ids = ("a", "b", "c")
+    root_seed = 42
+    rng = random.Random(derive_seed(root_seed, "bootstrap", replicate))
+    resampled = tuple(games[rng.randrange(len(games))] for _ in games)
+    reference = fit_plackett_luce(observations_from_games(resampled), bot_ids)
+
+    optimized = analysis_module._fit_bootstrap_replicate(
+        observations_from_games(games),
+        bot_ids,
+        root_seed,
+        replicate,
+    )
+
+    assert optimized is not None
+    assert dict(optimized) == pytest.approx(
+        {rating.bot_id: rating.rating for rating in reference.ratings},
+        abs=1e-8,
+    )
 
 
 def test_bootstrap_zero_samples_returns_no_intervals() -> None:

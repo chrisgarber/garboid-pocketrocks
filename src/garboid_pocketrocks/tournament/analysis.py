@@ -16,6 +16,7 @@ from garboid_pocketrocks.simulator.monte_carlo import (
 from garboid_pocketrocks.simulator.seeding import derive_seed
 from garboid_pocketrocks.tournament.rating import (
     PlackettLuceFit,
+    RankingObservation,
     TournamentRatingError,
     fit_plackett_luce,
     observations_from_games,
@@ -116,7 +117,7 @@ class _Accumulator:
         self.faults += faults
 
 
-_BOOTSTRAP_GAMES: tuple[GameSummary, ...] = ()
+_BOOTSTRAP_OBSERVATIONS: tuple[RankingObservation, ...] = ()
 _BOOTSTRAP_BOT_IDS: tuple[str, ...] = ()
 _BOOTSTRAP_ROOT_SEED = 0
 
@@ -254,12 +255,13 @@ def bootstrap_rating_intervals(
     if not games:
         raise ValueError("bootstrap requires at least one game")
 
+    observations = observations_from_games(games)
     ratings_by_bot: dict[str, list[float]] = {bot_id: [] for bot_id in bot_ids}
     converged = 0
     execution_warnings: tuple[str, ...] = ()
     if workers == 1:
         replicate_results = tuple(
-            _fit_bootstrap_replicate(games, bot_ids, root_seed, replicate)
+            _fit_bootstrap_replicate(observations, bot_ids, root_seed, replicate)
             for replicate in range(samples)
         )
     else:
@@ -267,7 +269,7 @@ def bootstrap_rating_intervals(
             with ProcessPoolExecutor(
                 max_workers=min(workers, samples),
                 initializer=_initialize_bootstrap_worker,
-                initargs=(games, bot_ids, root_seed),
+                initargs=(observations, bot_ids, root_seed),
             ) as executor:
                 replicate_results = tuple(executor.map(_fit_bootstrap_worker, range(samples)))
         except Exception as error:
@@ -275,7 +277,7 @@ def bootstrap_rating_intervals(
                 f"parallel bootstrap failed with {type(error).__name__}; retried serially",
             )
             replicate_results = tuple(
-                _fit_bootstrap_replicate(games, bot_ids, root_seed, replicate)
+                _fit_bootstrap_replicate(observations, bot_ids, root_seed, replicate)
                 for replicate in range(samples)
             )
     for ratings in replicate_results:
@@ -319,21 +321,21 @@ def bootstrap_rating_intervals(
 
 
 def _initialize_bootstrap_worker(
-    games: tuple[GameSummary, ...],
+    observations: tuple[RankingObservation, ...],
     bot_ids: tuple[str, ...],
     root_seed: int,
 ) -> None:
-    global _BOOTSTRAP_GAMES, _BOOTSTRAP_BOT_IDS, _BOOTSTRAP_ROOT_SEED
-    _BOOTSTRAP_GAMES = games
+    global _BOOTSTRAP_OBSERVATIONS, _BOOTSTRAP_BOT_IDS, _BOOTSTRAP_ROOT_SEED
+    _BOOTSTRAP_OBSERVATIONS = observations
     _BOOTSTRAP_BOT_IDS = bot_ids
     _BOOTSTRAP_ROOT_SEED = root_seed
 
 
 def _fit_bootstrap_worker(replicate: int) -> tuple[tuple[str, float], ...] | None:
-    if not _BOOTSTRAP_GAMES or not _BOOTSTRAP_BOT_IDS:
+    if not _BOOTSTRAP_OBSERVATIONS or not _BOOTSTRAP_BOT_IDS:
         raise RuntimeError("bootstrap worker was not initialized")
     return _fit_bootstrap_replicate(
-        _BOOTSTRAP_GAMES,
+        _BOOTSTRAP_OBSERVATIONS,
         _BOOTSTRAP_BOT_IDS,
         _BOOTSTRAP_ROOT_SEED,
         replicate,
@@ -341,15 +343,25 @@ def _fit_bootstrap_worker(replicate: int) -> tuple[tuple[str, float], ...] | Non
 
 
 def _fit_bootstrap_replicate(
-    games: tuple[GameSummary, ...],
+    observations: tuple[RankingObservation, ...],
     bot_ids: tuple[str, ...],
     root_seed: int,
     replicate: int,
 ) -> tuple[tuple[str, float], ...] | None:
     rng = random.Random(derive_seed(root_seed, "bootstrap", replicate))
-    resampled = tuple(games[rng.randrange(len(games))] for _ in games)
+    counts: dict[int, int] = {}
+    for _ in observations:
+        index = rng.randrange(len(observations))
+        counts[index] = counts.get(index, 0) + 1
+    resampled = tuple(
+        RankingObservation(
+            observations[index].rank_groups,
+            weight=observations[index].weight * count,
+        )
+        for index, count in counts.items()
+    )
     try:
-        fit = fit_plackett_luce(observations_from_games(resampled), bot_ids)
+        fit = fit_plackett_luce(resampled, bot_ids)
     except TournamentRatingError:
         return None
     return tuple((rating.bot_id, rating.rating) for rating in fit.ratings)
