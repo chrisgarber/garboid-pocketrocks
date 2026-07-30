@@ -18,6 +18,7 @@ dependencies = [
   "numpy>=2.5.1",
   "pettingzoo>=1.26.1",
   "pocketrocks-python-sdk @ git+https://github.com/jaiparera/pocketrocks-python-sdk.git@597857446d47ac0890609a4767cad561578a2519",
+  "scipy>=1.17",
 ]
 
 [project.optional-dependencies]
