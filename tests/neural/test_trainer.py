@@ -3,11 +3,15 @@ from __future__ import annotations
 from dataclasses import replace
 from pathlib import Path
 
-from garboid_pocketrocks.neural.run_config import (
+import pytest
+
+pytest.importorskip("torch")
+
+from garboid_pocketrocks.neural.run_config import (  # noqa: E402
     ParallelConfig,
     TrainingRunConfig,
 )
-from garboid_pocketrocks.neural.trainer import (
+from garboid_pocketrocks.neural.trainer import (  # noqa: E402
     inspect_checkpoint,
     resolve_games_per_cell,
     resume,
