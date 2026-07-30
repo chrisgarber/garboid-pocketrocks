@@ -10,7 +10,10 @@ import torch
 from numpy.typing import NDArray
 from pocketrocks import DecisionContext
 
-from garboid_pocketrocks.knowledge import canonical_knowledge
+from garboid_pocketrocks.knowledge import (
+    canonical_knowledge,
+    value_chart_from_ruleset_name,
+)
 from garboid_pocketrocks.neural.encoding import (
     NeuralBatch,
     NeuralObservation,
@@ -208,7 +211,10 @@ class PackedRollout:
                 dtype=np.int64,
             ),
             chart_indices=np.asarray(
-                [ord(item.metadata.ruleset_name[-1]) - ord("A") for item in transitions],
+                [
+                    ord(value_chart_from_ruleset_name(item.metadata.ruleset_name)) - ord("A")
+                    for item in transitions
+                ],
                 dtype=np.int64,
             ),
             player_counts=np.asarray(
@@ -294,7 +300,7 @@ def _phase_bucket(transition: RolloutTransition) -> int:
     opened_turns = int(np.count_nonzero(valid_ids[:, 0] == 2))
     knowledge = canonical_knowledge(
         transition.metadata.player_count,
-        value_chart=transition.metadata.ruleset_name.removeprefix("live-"),
+        value_chart=value_chart_from_ruleset_name(transition.metadata.ruleset_name),
     )
     total_turns = sum(knowledge.action_counts) - (
         transition.metadata.player_count * knowledge.private_cards_per_player

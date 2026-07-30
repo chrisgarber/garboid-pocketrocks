@@ -25,7 +25,10 @@ from garboid_pocketrocks.adapters.public_history import (
     PublicInformationRevealed,
     PublicTurnOpened,
 )
-from garboid_pocketrocks.knowledge import canonical_knowledge
+from garboid_pocketrocks.knowledge import (
+    canonical_knowledge,
+    value_chart_from_ruleset_name,
+)
 from garboid_pocketrocks.neural.collector import (
     CollectorMetrics,
     _freeze_policies,
@@ -188,7 +191,7 @@ def _collect_engine_batch(
     engine = BatchSimEngine.start(
         player_count=player_count,
         seeds=tuple(plan.engine_seed for plan in plans),
-        value_charts=tuple(plan.ruleset_name.removeprefix("live-") for plan in plans),
+        value_charts=tuple(value_chart_from_ruleset_name(plan.ruleset_name) for plan in plans),
     )
     bounds = EnvironmentBounds(
         max_bid=encoder_config.max_bid,
@@ -198,7 +201,7 @@ def _collect_engine_batch(
     histories: list[list[PublicEvent]] = []
     knowledge = []
     for row, plan in enumerate(plans):
-        chart = plan.ruleset_name.removeprefix("live-")
+        chart = value_chart_from_ruleset_name(plan.ruleset_name)
         game_knowledge = canonical_knowledge(
             player_count,
             value_chart=chart,

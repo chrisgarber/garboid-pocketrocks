@@ -12,6 +12,7 @@ from itertools import batched
 from pocketrocks.sim.constants import ACTION_WIRE_IDS, VALUE_CHARTS
 
 from garboid_pocketrocks.bots.base import BotSpec
+from garboid_pocketrocks.knowledge import ruleset_name
 from garboid_pocketrocks.simulator.batch_match import run_batch_matches
 from garboid_pocketrocks.simulator.errors import SimulationError
 from garboid_pocketrocks.simulator.replay import MatchReplay
@@ -213,14 +214,6 @@ class MonteCarloResult:
     bot_statistics: tuple[BotStatistics, ...]
     replays: tuple[MatchReplay, ...]
 
-    @property
-    def games(self) -> tuple[GameSummary, ...]:
-        return self.game_summaries
-
-    @property
-    def statistics(self) -> tuple[BotStatistics, ...]:
-        return self.bot_statistics
-
 
 @dataclass(frozen=True, slots=True)
 class _CompletedGame:
@@ -272,11 +265,6 @@ class _BehaviorAccumulator:
     wins_by_action: list[int] = field(default_factory=lambda: [0] * 6)
     resource_cards_won: int = 0
     objectives_claimed: int = 0
-
-
-def _variant_name(value_chart: str, objectives_enabled: bool) -> str:
-    suffix = "" if objectives_enabled else "-no-objectives"
-    return f"live-{value_chart}{suffix}"
 
 
 class MonteCarloRunner:
@@ -501,7 +489,7 @@ def _aggregate(
     per_ruleset: dict[str, dict[str, _StatisticsAccumulator]] = {}
     behavior: dict[str, _BehaviorAccumulator] = {}
     variant_names = tuple(
-        _variant_name(chart, enabled)
+        ruleset_name(chart, enabled)
         for chart in config.value_charts
         for enabled in config.objectives_enabled
     )
@@ -525,7 +513,7 @@ def _aggregate(
     for completed in sorted(completed_games, key=lambda item: item.job.game_index):
         job = completed.job
         match = completed.match
-        variant_name = _variant_name(job.value_chart, job.objectives_enabled)
+        variant_name = ruleset_name(job.value_chart, job.objectives_enabled)
         decisions_by_seat = tuple(
             sum(
                 decision_seat == seat

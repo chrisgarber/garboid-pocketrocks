@@ -10,6 +10,7 @@ import numpy as np
 import torch
 from torch import Tensor
 
+from garboid_pocketrocks.knowledge import ruleset_name
 from garboid_pocketrocks.neural.advantages import compute_gae
 from garboid_pocketrocks.neural.metrics import (
     ValueMetrics,
@@ -318,7 +319,7 @@ class PPOTrainer:
             torch.from_numpy(packed.old_values.copy()),
             targets.returns,
             ruleset_names=tuple(
-                f"live-{chr(ord('A') + int(index))}" for index in packed.chart_indices
+                ruleset_name(chr(ord("A") + int(index))) for index in packed.chart_indices
             ),
             player_counts=tuple(int(count) for count in packed.player_counts),
             phases=tuple(phases[int(index)] for index in packed.phase_buckets),

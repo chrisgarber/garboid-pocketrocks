@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-from garboid_pocketrocks.knowledge import canonical_knowledge
+from garboid_pocketrocks.knowledge import canonical_knowledge, ruleset_name
 
 ModelProfile = Literal["small", "medium", "large"]
 
@@ -144,7 +144,7 @@ def training_encoder_config() -> NeuralEncoderConfig:
     )
     return NeuralEncoderConfig(
         schema_version=1,
-        supported_ruleset_names=tuple(f"live-{chart}" for chart in "ABCDE"),
+        supported_ruleset_names=tuple(ruleset_name(chart) for chart in "ABCDE"),
         supported_player_counts=player_counts,
         max_bid=100,
         max_hand_size=5,

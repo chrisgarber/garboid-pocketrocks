@@ -221,6 +221,10 @@ def test_aggregation_reconciles_games_seats_rulesets_and_decisions() -> None:
 
     result = MonteCarloRunner.run(config)
 
+    assert result.game_summaries
+    assert result.bot_statistics
+    assert not hasattr(result, "games")
+    assert not hasattr(result, "statistics")
     assert [game.game_index for game in result.game_summaries] == list(range(9))
     assert sum(statistics.games for statistics in result.bot_statistics) == 27
     for statistics in result.bot_statistics:
