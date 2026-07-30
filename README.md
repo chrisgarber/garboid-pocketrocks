@@ -187,7 +187,7 @@ Released generations are immutable:
 | v2 | balanced | 0.40 | 0.75 | 0.20 | 0.25 |
 | v2 | passive | 0.15 | 0.60 | 0.15 | 0.30 |
 
-The simulator-ready identities are:
+The remote-capable heuristic identities are:
 
 | CLI name | Brain | Bot wrapper | `BotSpec` | Bot ID |
 | --- | --- | --- | --- | --- |
@@ -196,14 +196,21 @@ The simulator-ready identities are:
 | `passive` | `PassiveHeuristicBrain` | `PassiveHeuristicBot` | `PASSIVE_HEURISTIC_BOT_SPEC` | `bot_00000000-0000-4000-8000-00000000000c` |
 
 These three IDs are development-only placeholders, not registered live bot
-IDs. Explicit `*-v1` and `*-v2` simulation names use separate stable local
-IDs and `BotSpec` exports; `aggressive`, `balanced`, and `passive` remain
-aliases to v2. Replace the relevant class constant before connecting any
-heuristic bot wrapper to the live service. Fast bot wrappers reconcile the
-chart, starting cash, private-card count, and objective state exposed by each
-SDK context with their configured ruleset knowledge. Pass an explicit
-`Ruleset` when a game uses different resource or action deck counts, because
-the SDK context does not expose those initial counts.
+IDs. Replace the relevant class constant before connecting one of these
+wrappers to the live service.
+
+Historical `*-v1` and `*-v2` generations are local brain/spec pairs, not
+remote bot wrappers. Their versioned name is also their internal simulation
+identity (`BotSpec.bot_id`), so they do not pretend to have a server-issued
+bot ID. The CLI constructs those local specs from the versioned brain
+classes; Python callers can use the exported `*_HEURISTIC_VN_BOT_SPEC`
+constants. `aggressive`, `balanced`, and `passive` remain aliases to v2.
+
+Fast bot wrappers reconcile the chart, starting cash, private-card count, and
+objective state exposed by each SDK context with their configured ruleset
+knowledge. Pass an explicit `Ruleset` when a game uses different resource or
+action deck counts, because the SDK context does not expose those initial
+counts.
 
 Reveal decisions use the same finite-population model from an observer's
 perspective, without access to the bot's hand. For each candidate suit, the

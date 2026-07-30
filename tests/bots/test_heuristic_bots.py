@@ -19,22 +19,16 @@ from garboid_pocketrocks.bots import (
     PASSIVE_HEURISTIC_V2_BOT_SPEC,
     AggressiveHeuristicBot,
     AggressiveHeuristicBrain,
-    AggressiveHeuristicV1Bot,
     AggressiveHeuristicV1Brain,
-    AggressiveHeuristicV2Bot,
     AggressiveHeuristicV2Brain,
     BalancedHeuristicBot,
     BalancedHeuristicBrain,
-    BalancedHeuristicV1Bot,
     BalancedHeuristicV1Brain,
-    BalancedHeuristicV2Bot,
     BalancedHeuristicV2Brain,
     BotSpec,
     PassiveHeuristicBot,
     PassiveHeuristicBrain,
-    PassiveHeuristicV1Bot,
     PassiveHeuristicV1Brain,
-    PassiveHeuristicV2Bot,
     PassiveHeuristicV2Brain,
     PocketRocksFastBot,
 )
@@ -118,51 +112,60 @@ def test_heuristic_bots_have_distinct_static_public_identities() -> None:
     } == {"aggressive", "balanced", "passive"}
 
 
-def test_versioned_heuristic_bots_have_stable_public_identities() -> None:
-    assert (
-        AggressiveHeuristicV1Bot.BOT_NAME,
-        BalancedHeuristicV1Bot.BOT_NAME,
-        PassiveHeuristicV1Bot.BOT_NAME,
-    ) == ("aggressive-v1", "balanced-v1", "passive-v1")
-    assert (
-        AggressiveHeuristicV2Bot.BOT_NAME,
-        BalancedHeuristicV2Bot.BOT_NAME,
-        PassiveHeuristicV2Bot.BOT_NAME,
-    ) == ("aggressive-v2", "balanced-v2", "passive-v2")
-    assert (
-        AggressiveHeuristicV1Bot.BOT_ID,
-        BalancedHeuristicV1Bot.BOT_ID,
-        PassiveHeuristicV1Bot.BOT_ID,
-        AggressiveHeuristicV2Bot.BOT_ID,
-        BalancedHeuristicV2Bot.BOT_ID,
-        PassiveHeuristicV2Bot.BOT_ID,
-    ) == (
-        "bot_10000000-0000-4000-8000-000000000001",
-        "bot_10000000-0000-4000-8000-000000000002",
-        "bot_10000000-0000-4000-8000-000000000003",
-        "bot_20000000-0000-4000-8000-000000000001",
-        "bot_20000000-0000-4000-8000-000000000002",
-        "bot_20000000-0000-4000-8000-000000000003",
+def test_versioned_heuristic_specs_use_names_as_private_simulation_ids() -> None:
+    specs = (
+        AGGRESSIVE_HEURISTIC_V1_BOT_SPEC,
+        BALANCED_HEURISTIC_V1_BOT_SPEC,
+        PASSIVE_HEURISTIC_V1_BOT_SPEC,
+        AGGRESSIVE_HEURISTIC_V2_BOT_SPEC,
+        BALANCED_HEURISTIC_V2_BOT_SPEC,
+        PASSIVE_HEURISTIC_V2_BOT_SPEC,
     )
+
+    assert tuple(spec.name for spec in specs) == (
+        "aggressive-v1",
+        "balanced-v1",
+        "passive-v1",
+        "aggressive-v2",
+        "balanced-v2",
+        "passive-v2",
+    )
+    assert all(spec.bot_id == spec.name for spec in specs)
 
 
 @pytest.mark.parametrize(
-    ("bot_class", "brain_class", "profile"),
+    ("spec", "brain_class", "profile"),
     (
-        (AggressiveHeuristicV1Bot, AggressiveHeuristicV1Brain, HEURISTIC_V1.aggressive),
-        (BalancedHeuristicV1Bot, BalancedHeuristicV1Brain, HEURISTIC_V1.balanced),
-        (PassiveHeuristicV1Bot, PassiveHeuristicV1Brain, HEURISTIC_V1.passive),
-        (AggressiveHeuristicV2Bot, AggressiveHeuristicV2Brain, HEURISTIC_V2.aggressive),
-        (BalancedHeuristicV2Bot, BalancedHeuristicV2Brain, HEURISTIC_V2.balanced),
-        (PassiveHeuristicV2Bot, PassiveHeuristicV2Brain, HEURISTIC_V2.passive),
+        (
+            AGGRESSIVE_HEURISTIC_V1_BOT_SPEC,
+            AggressiveHeuristicV1Brain,
+            HEURISTIC_V1.aggressive,
+        ),
+        (
+            BALANCED_HEURISTIC_V1_BOT_SPEC,
+            BalancedHeuristicV1Brain,
+            HEURISTIC_V1.balanced,
+        ),
+        (PASSIVE_HEURISTIC_V1_BOT_SPEC, PassiveHeuristicV1Brain, HEURISTIC_V1.passive),
+        (
+            AGGRESSIVE_HEURISTIC_V2_BOT_SPEC,
+            AggressiveHeuristicV2Brain,
+            HEURISTIC_V2.aggressive,
+        ),
+        (
+            BALANCED_HEURISTIC_V2_BOT_SPEC,
+            BalancedHeuristicV2Brain,
+            HEURISTIC_V2.balanced,
+        ),
+        (PASSIVE_HEURISTIC_V2_BOT_SPEC, PassiveHeuristicV2Brain, HEURISTIC_V2.passive),
     ),
 )
-def test_versioned_bot_factories_use_pinned_profiles(
-    bot_class: type[PocketRocksFastBot],
+def test_versioned_spec_factories_use_pinned_profiles(
+    spec: BotSpec,
     brain_class: type[HeuristicBotBrain],
     profile: object,
 ) -> None:
-    brain = bot_class.build_brain(seed=42)
+    brain = spec.make_brain(seed=42)
 
     assert isinstance(brain, brain_class)
     assert brain.valuator.profile is profile

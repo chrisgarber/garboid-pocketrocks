@@ -41,7 +41,7 @@ design, or make a "small" change is not a versioning choice.
 
 | Choice | Required result |
 |---|---|
-| New version | Freeze old artifacts; add explicit versioned names and stable IDs; advance unversioned latest aliases; add reproducibility tests; benchmark against the preceding version |
+| New version | Freeze old artifacts; add explicit versioned simulation names; reserve `BOT_ID` for wrappers that connect remotely; advance unversioned latest aliases; add reproducibility tests; benchmark against the preceding version |
 | In place | Record the choice in task context; update pinned behavior tests deliberately; keep the version label |
 | Behavior-preserving | Proceed without asking; verify decisions remain unchanged |
 
@@ -50,7 +50,10 @@ design, or make a "small" change is not a versioning choice.
 - Keep shared engines shared; version configuration or policy artifacts
   instead of copying implementation unless the algorithm cannot reproduce the
   old behavior.
-- Keep released version names, IDs, coefficients, and checkpoints immutable.
+- Keep released version names, coefficients, checkpoints, and any real remote
+  bot IDs immutable.
+- Use the versioned name as the identity for local-only simulation specs.
+  Define `BOT_ID` only on wrappers that can connect to the remote service.
 - Make historical versions selectable in simulation and Python APIs.
 - Keep live launchers on latest aliases unless the user requests otherwise.
 - Report cross-generation strength using fixed seeds and committed benchmark

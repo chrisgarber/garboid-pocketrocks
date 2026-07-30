@@ -36,32 +36,38 @@ class HeuristicBotBrain:
 
 
 class AggressiveHeuristicV1Brain(HeuristicBotBrain):
-    def __init__(self) -> None:
+    def __init__(self, seed: int | None = None) -> None:
+        del seed
         super().__init__(HEURISTIC_V1.aggressive)
 
 
 class BalancedHeuristicV1Brain(HeuristicBotBrain):
-    def __init__(self) -> None:
+    def __init__(self, seed: int | None = None) -> None:
+        del seed
         super().__init__(HEURISTIC_V1.balanced)
 
 
 class PassiveHeuristicV1Brain(HeuristicBotBrain):
-    def __init__(self) -> None:
+    def __init__(self, seed: int | None = None) -> None:
+        del seed
         super().__init__(HEURISTIC_V1.passive)
 
 
 class AggressiveHeuristicV2Brain(HeuristicBotBrain):
-    def __init__(self) -> None:
+    def __init__(self, seed: int | None = None) -> None:
+        del seed
         super().__init__(HEURISTIC_V2.aggressive)
 
 
 class BalancedHeuristicV2Brain(HeuristicBotBrain):
-    def __init__(self) -> None:
+    def __init__(self, seed: int | None = None) -> None:
+        del seed
         super().__init__(HEURISTIC_V2.balanced)
 
 
 class PassiveHeuristicV2Brain(HeuristicBotBrain):
-    def __init__(self) -> None:
+    def __init__(self, seed: int | None = None) -> None:
+        del seed
         super().__init__(HEURISTIC_V2.passive)
 
 
@@ -77,83 +83,7 @@ class PassiveHeuristicBrain(PassiveHeuristicV2Brain):
     """Latest passive heuristic brain."""
 
 
-class _VersionedHeuristicBot(PocketRocksFastBot):
-    """Shared type for explicit and latest heuristic wrappers."""
-
-
-class AggressiveHeuristicV1Bot(_VersionedHeuristicBot):
-    """Simulation wrapper for the frozen v1 aggressive heuristic."""
-
-    BOT_ID = "bot_10000000-0000-4000-8000-000000000001"
-    BOT_NAME = "aggressive-v1"
-
-    @classmethod
-    def build_brain(cls, seed: int | None) -> AggressiveHeuristicV1Brain:
-        del seed
-        return AggressiveHeuristicV1Brain()
-
-
-class BalancedHeuristicV1Bot(_VersionedHeuristicBot):
-    """Simulation wrapper for the frozen v1 balanced heuristic."""
-
-    BOT_ID = "bot_10000000-0000-4000-8000-000000000002"
-    BOT_NAME = "balanced-v1"
-
-    @classmethod
-    def build_brain(cls, seed: int | None) -> BalancedHeuristicV1Brain:
-        del seed
-        return BalancedHeuristicV1Brain()
-
-
-class PassiveHeuristicV1Bot(_VersionedHeuristicBot):
-    """Simulation wrapper for the frozen v1 passive heuristic."""
-
-    BOT_ID = "bot_10000000-0000-4000-8000-000000000003"
-    BOT_NAME = "passive-v1"
-
-    @classmethod
-    def build_brain(cls, seed: int | None) -> PassiveHeuristicV1Brain:
-        del seed
-        return PassiveHeuristicV1Brain()
-
-
-class AggressiveHeuristicV2Bot(_VersionedHeuristicBot):
-    """Simulation wrapper for the frozen v2 aggressive heuristic."""
-
-    BOT_ID = "bot_20000000-0000-4000-8000-000000000001"
-    BOT_NAME = "aggressive-v2"
-
-    @classmethod
-    def build_brain(cls, seed: int | None) -> AggressiveHeuristicV2Brain:
-        del seed
-        return AggressiveHeuristicV2Brain()
-
-
-class BalancedHeuristicV2Bot(_VersionedHeuristicBot):
-    """Simulation wrapper for the frozen v2 balanced heuristic."""
-
-    BOT_ID = "bot_20000000-0000-4000-8000-000000000002"
-    BOT_NAME = "balanced-v2"
-
-    @classmethod
-    def build_brain(cls, seed: int | None) -> BalancedHeuristicV2Brain:
-        del seed
-        return BalancedHeuristicV2Brain()
-
-
-class PassiveHeuristicV2Bot(_VersionedHeuristicBot):
-    """Simulation wrapper for the frozen v2 passive heuristic."""
-
-    BOT_ID = "bot_20000000-0000-4000-8000-000000000003"
-    BOT_NAME = "passive-v2"
-
-    @classmethod
-    def build_brain(cls, seed: int | None) -> PassiveHeuristicV2Brain:
-        del seed
-        return PassiveHeuristicV2Brain()
-
-
-class AggressiveHeuristicBot(_VersionedHeuristicBot):
+class AggressiveHeuristicBot(PocketRocksFastBot):
     """Development-only live wrapper for the latest aggressive heuristic."""
 
     BOT_ID = "bot_00000000-0000-4000-8000-00000000000a"
@@ -165,7 +95,7 @@ class AggressiveHeuristicBot(_VersionedHeuristicBot):
         return AggressiveHeuristicBrain()
 
 
-class BalancedHeuristicBot(_VersionedHeuristicBot):
+class BalancedHeuristicBot(PocketRocksFastBot):
     """Development-only live wrapper for the latest balanced heuristic."""
 
     BOT_ID = "bot_00000000-0000-4000-8000-00000000000b"
@@ -177,7 +107,7 @@ class BalancedHeuristicBot(_VersionedHeuristicBot):
         return BalancedHeuristicBrain()
 
 
-class PassiveHeuristicBot(_VersionedHeuristicBot):
+class PassiveHeuristicBot(PocketRocksFastBot):
     """Development-only live wrapper for the latest passive heuristic."""
 
     BOT_ID = "bot_00000000-0000-4000-8000-00000000000c"
@@ -193,10 +123,28 @@ AGGRESSIVE_HEURISTIC_BOT_SPEC = BotSpec.from_bot_class(AggressiveHeuristicBot)
 BALANCED_HEURISTIC_BOT_SPEC = BotSpec.from_bot_class(BalancedHeuristicBot)
 PASSIVE_HEURISTIC_BOT_SPEC = BotSpec.from_bot_class(PassiveHeuristicBot)
 
-AGGRESSIVE_HEURISTIC_V1_BOT_SPEC = BotSpec.from_bot_class(AggressiveHeuristicV1Bot)
-BALANCED_HEURISTIC_V1_BOT_SPEC = BotSpec.from_bot_class(BalancedHeuristicV1Bot)
-PASSIVE_HEURISTIC_V1_BOT_SPEC = BotSpec.from_bot_class(PassiveHeuristicV1Bot)
+AGGRESSIVE_HEURISTIC_V1_BOT_SPEC = BotSpec.for_simulation(
+    "aggressive-v1",
+    AggressiveHeuristicV1Brain,
+)
+BALANCED_HEURISTIC_V1_BOT_SPEC = BotSpec.for_simulation(
+    "balanced-v1",
+    BalancedHeuristicV1Brain,
+)
+PASSIVE_HEURISTIC_V1_BOT_SPEC = BotSpec.for_simulation(
+    "passive-v1",
+    PassiveHeuristicV1Brain,
+)
 
-AGGRESSIVE_HEURISTIC_V2_BOT_SPEC = BotSpec.from_bot_class(AggressiveHeuristicV2Bot)
-BALANCED_HEURISTIC_V2_BOT_SPEC = BotSpec.from_bot_class(BalancedHeuristicV2Bot)
-PASSIVE_HEURISTIC_V2_BOT_SPEC = BotSpec.from_bot_class(PassiveHeuristicV2Bot)
+AGGRESSIVE_HEURISTIC_V2_BOT_SPEC = BotSpec.for_simulation(
+    "aggressive-v2",
+    AggressiveHeuristicV2Brain,
+)
+BALANCED_HEURISTIC_V2_BOT_SPEC = BotSpec.for_simulation(
+    "balanced-v2",
+    BalancedHeuristicV2Brain,
+)
+PASSIVE_HEURISTIC_V2_BOT_SPEC = BotSpec.for_simulation(
+    "passive-v2",
+    PassiveHeuristicV2Brain,
+)

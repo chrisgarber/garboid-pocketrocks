@@ -6,7 +6,7 @@ from pathlib import Path
 
 from garboid_pocketrocks.bots import BotSpec, RandomBot
 from garboid_pocketrocks.rules import LIVE_RULESET
-from garboid_pocketrocks.simulator.cli import _bot_names, _table
+from garboid_pocketrocks.simulator.cli import _BOT_REGISTRY, _bot_names, _table
 from garboid_pocketrocks.simulator.monte_carlo import (
     MonteCarloConfig,
     MonteCarloRunner,
@@ -35,6 +35,19 @@ def test_simulate_cli_accepts_explicit_heuristic_generations() -> None:
         "balanced-v2",
         "passive-v2",
     )
+
+
+def test_simulate_cli_uses_names_as_private_generation_ids() -> None:
+    versioned_names = (
+        "aggressive-v1",
+        "balanced-v1",
+        "passive-v1",
+        "aggressive-v2",
+        "balanced-v2",
+        "passive-v2",
+    )
+
+    assert all(_BOT_REGISTRY[name].bot_id == name for name in versioned_names)
 
 
 def test_simulate_cli_runs_mixed_generations_without_faults() -> None:

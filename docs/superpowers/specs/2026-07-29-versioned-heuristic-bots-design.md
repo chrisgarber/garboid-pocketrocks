@@ -64,17 +64,20 @@ exports remain latest aliases.
 
 ## Brains and bot specifications
 
-Provide explicit brain and bot classes for every version and personality.
-Versioned bot classes receive stable versioned simulation names and IDs.
-Their factories remain top-level and pickleable so multiprocessing simulation
-continues to work.
+Provide explicit brain classes and local `BotSpec` constants for every
+version and personality. Each local spec uses its versioned name as both its
+display name and internal simulation identity. Versioned brains remain
+top-level and pickleable so multiprocessing simulation continues to work.
 
-The existing unversioned brain, bot, and `BotSpec` exports remain available.
-They use the latest profiles and retain their current live bot IDs and names.
+The existing unversioned brain, remote-capable bot wrapper, and `BotSpec`
+exports remain available. They use the latest profiles and retain their
+current live bot IDs and names. Historical generations do not define
+remote-style `BOT_ID` values.
 
 Python callers can select either explicit versioned specs or latest aliases.
-The simulation CLI registers all six explicit version names plus the three
-latest aliases. Its help text lists the supported names.
+The simulation CLI constructs local specs from the versioned brain classes
+and registers all six explicit version names plus the three latest aliases.
+Its help text lists the supported names.
 
 The live launcher continues to start only:
 
@@ -83,8 +86,8 @@ The live launcher continues to start only:
 - `balanced`;
 - `passive`.
 
-Historical bot wrappers are simulation and Python API surfaces; they are not
-started as additional live connections.
+Historical brain/spec pairs are simulation and Python API surfaces; they are
+not remote wrappers and cannot be started as additional live connections.
 
 ## Repository skill
 
@@ -126,7 +129,7 @@ Profile tests pin:
 
 Bot tests pin:
 
-- stable names and IDs for every explicit version;
+- stable names for every explicit version and name-based local simulation IDs;
 - each bot factory to the correct profile;
 - unversioned decisions equal v2 decisions;
 - versioned specs remain pickleable and deterministic.
@@ -151,6 +154,7 @@ with the standard skill validator.
 
 - Existing imports and CLI commands continue to work.
 - Existing live bot IDs do not change.
+- Only remote-capable wrappers define live-style bot IDs.
 - Neural training continues to consume the latest unversioned bot specs.
 - Replays and statistics distinguish explicit historical versions by name.
 - The simulator, game engine, and SDK adapters remain unchanged.

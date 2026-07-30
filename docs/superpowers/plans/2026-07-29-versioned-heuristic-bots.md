@@ -4,15 +4,16 @@
 
 **Goal:** Preserve v1 and v2 heuristic generations as reproducible simulation opponents while keeping unversioned names and live bots on the latest generation, and add a repository skill that asks before substantial bot behavior changes.
 
-**Architecture:** Store each generation in a frozen `HeuristicProfileSet` and use the shared evaluator for both; v1 is exactly reproduced by a zero future-cash weight. Provide explicit versioned brains, wrappers, and specs for simulation, while existing unversioned APIs subclass the latest generation and retain their live identities. A repository-local skill governs future behavior-changing bot work.
+**Architecture:** Store each generation in a frozen `HeuristicProfileSet` and use the shared evaluator for both; v1 is exactly reproduced by a zero future-cash weight. Provide explicit versioned brains and local specs for simulation, while the existing unversioned remote wrappers retain their live identities. A repository-local skill governs future behavior-changing bot work.
 
 **Tech Stack:** Python 3.14, frozen dataclasses, pytest, deterministic multiprocessing simulator, repository-local Codex skills
 
 ## Global Constraints
 
-- Released v1 and v2 coefficients, names, and stable IDs are immutable.
+- Released v1 and v2 coefficients and names are immutable.
 - `aggressive`, `balanced`, and `passive` remain latest aliases.
 - Existing unversioned live bot IDs do not change.
+- Local-only versioned specs use their names as simulation IDs.
 - The live launcher starts only random and the three latest unversioned bots.
 - The simulation CLI accepts all six explicit version names.
 - Neural training continues to consume the unversioned latest specs.
@@ -120,42 +121,39 @@ git add src/garboid_pocketrocks/heuristics/profiles.py \
 git commit -m "feat: freeze heuristic profile generations"
 ```
 
-### Task 2: Add versioned brains, wrappers, and bot specs
+### Task 2: Add versioned brains and local bot specs
 
 **Files:**
 - Modify: `tests/bots/test_heuristic_bots.py`
+- Modify: `src/garboid_pocketrocks/bots/base.py`
 - Modify: `src/garboid_pocketrocks/bots/heuristic.py`
 - Modify: `src/garboid_pocketrocks/bots/__init__.py`
 
 **Interfaces:**
 - Consumes: `HEURISTIC_V1`, `HEURISTIC_V2`
 - Produces: `AggressiveHeuristicV1Brain` through `PassiveHeuristicV2Brain`
-- Produces: `AggressiveHeuristicV1Bot` through `PassiveHeuristicV2Bot`
 - Produces: six `*_HEURISTIC_VN_BOT_SPEC` constants
 - Preserves: all existing unversioned brain, bot, and spec exports
 
 - [ ] **Step 1: Write failing versioned-bot tests**
 
-Add parametrized tests requiring:
+Add parametrized tests requiring each versioned spec to use its name as its
+local identity:
 
 ```python
 (
-    AggressiveHeuristicV1Bot.BOT_NAME,
-    BalancedHeuristicV1Bot.BOT_NAME,
-    PassiveHeuristicV1Bot.BOT_NAME,
+    AGGRESSIVE_HEURISTIC_V1_BOT_SPEC.name,
+    BALANCED_HEURISTIC_V1_BOT_SPEC.name,
+    PASSIVE_HEURISTIC_V1_BOT_SPEC.name,
 ) == ("aggressive-v1", "balanced-v1", "passive-v1")
 
-(
-    AggressiveHeuristicV2Bot.BOT_NAME,
-    BalancedHeuristicV2Bot.BOT_NAME,
-    PassiveHeuristicV2Bot.BOT_NAME,
-) == ("aggressive-v2", "balanced-v2", "passive-v2")
+assert AGGRESSIVE_HEURISTIC_V1_BOT_SPEC.bot_id == "aggressive-v1"
 ```
 
-Pin the six UUID-like simulation IDs. Verify each built brain's
-`valuator.profile` is the matching member of `HEURISTIC_V1` or
-`HEURISTIC_V2`. For identical contexts, require each unversioned bot decision
-to equal its v2 bot decision. Pickle every explicit `BotSpec`.
+Verify each spec-built brain's `valuator.profile` is the matching member of
+`HEURISTIC_V1` or `HEURISTIC_V2`. For identical contexts, require each
+unversioned bot decision to equal its v2 spec decision. Pickle every explicit
+`BotSpec`.
 
 - [ ] **Step 2: Run the bot tests and verify RED**
 
@@ -165,36 +163,26 @@ Run:
 PYTHONPATH=src .venv/bin/pytest tests/bots/test_heuristic_bots.py -q
 ```
 
-Expected: import failures for the versioned classes and specs.
+Expected: import failures for the versioned brains and specs.
 
-- [ ] **Step 3: Implement explicit versioned bot APIs**
+- [ ] **Step 3: Implement explicit versioned simulation APIs**
 
-Add six profile-specific brain classes. Add an internal wrapper base:
+Add `BotSpec.for_simulation(name, brain_factory)`, which assigns the name to
+both `name` and `bot_id`. Add six profile-specific brain classes whose
+constructors accept and ignore an optional seed so the classes themselves are
+top-level, pickleable factories.
 
 ```python
-class _VersionedHeuristicBot(PocketRocksFastBot):
-    BRAIN_CLASS: ClassVar[type[HeuristicBotBrain]]
-
-    @classmethod
-    def build_brain(cls, seed: int | None) -> HeuristicBotBrain:
-        del seed
-        return cls.BRAIN_CLASS()
+AGGRESSIVE_HEURISTIC_V1_BOT_SPEC = BotSpec.for_simulation(
+    "aggressive-v1",
+    AggressiveHeuristicV1Brain,
+)
 ```
 
-Define six explicit versioned wrappers with these stable IDs:
-
-```text
-aggressive-v1 bot_10000000-0000-4000-8000-000000000001
-balanced-v1   bot_10000000-0000-4000-8000-000000000002
-passive-v1    bot_10000000-0000-4000-8000-000000000003
-aggressive-v2 bot_20000000-0000-4000-8000-000000000001
-balanced-v2   bot_20000000-0000-4000-8000-000000000002
-passive-v2    bot_20000000-0000-4000-8000-000000000003
-```
-
-Keep the existing unversioned wrappers and IDs, but make their brain classes
-subclass the corresponding v2 brain classes. Export all new public symbols
-from `garboid_pocketrocks.bots`.
+Keep the existing unversioned remote wrappers and IDs, but make their brain
+classes subclass the corresponding v2 brain classes. Historical generations
+do not get wrappers or remote-style `BOT_ID` values. Export the versioned
+brains and local specs from `garboid_pocketrocks.bots`.
 
 - [ ] **Step 4: Run bot and integration tests and verify GREEN**
 
@@ -212,21 +200,20 @@ Expected: PASS.
 
 ```bash
 git add src/garboid_pocketrocks/bots/heuristic.py \
-  src/garboid_pocketrocks/bots/__init__.py \
+  src/garboid_pocketrocks/bots/__init__.py src/garboid_pocketrocks/bots/base.py \
   tests/bots/test_heuristic_bots.py
-git commit -m "feat: expose versioned heuristic bots"
+git commit -m "feat: expose versioned heuristic simulations"
 ```
 
 ### Task 3: Expose versions in simulation, not the live launcher
 
 **Files:**
 - Modify: `tests/simulator/test_cli.py`
-- Modify: `tests/bots/test_launcher.py`
 - Modify: `src/garboid_pocketrocks/simulator/cli.py`
 - Modify: `README.md`
 
 **Interfaces:**
-- Consumes: six explicit versioned `BotSpec` constants
+- Consumes: six explicit versioned brain classes
 - Preserves: `bots.launcher.BOT_REGISTRY` latest-only order
 - Extends: simulator `_BOT_REGISTRY` with `*-v1` and `*-v2`
 
@@ -256,24 +243,24 @@ assert tuple(BOT_REGISTRY) == ("random", "aggressive", "balanced", "passive")
 
 Add a six-game, three-player mixed-generation CLI simulation with
 `balanced-v1,balanced-v2,passive-v2`, two workers, and assert all fault counts
-are zero and result names remain versioned.
+are zero and result names remain versioned. Assert each historical registry
+entry uses its name as its local `bot_id`.
 
 - [ ] **Step 2: Run CLI and launcher tests and verify RED**
 
 Run:
 
 ```bash
-PYTHONPATH=src .venv/bin/pytest \
-  tests/simulator/test_cli.py \
-  tests/bots/test_launcher.py -q
+PYTHONPATH=src .venv/bin/pytest tests/simulator/test_cli.py -q
 ```
 
 Expected: `_bot_names` rejects versioned names.
 
 - [ ] **Step 3: Register explicit versions in the simulator**
 
-Import the six versioned specs into `simulator/cli.py`, add each by its
-`spec.name`, and generate help text from the registry keys. Do not modify
+Import the six versioned brain classes into `simulator/cli.py`, construct each
+registry entry with `BotSpec.for_simulation`, and generate help text from the
+registry keys. Do not import the prebuilt spec constants and do not modify
 `bots/launcher.py`.
 
 Document:
@@ -293,7 +280,7 @@ Expected: PASS, including the two-worker mixed-generation simulation.
 
 ```bash
 git add src/garboid_pocketrocks/simulator/cli.py \
-  tests/simulator/test_cli.py tests/bots/test_launcher.py README.md
+  tests/simulator/test_cli.py README.md
 git commit -m "feat: select heuristic generations in simulations"
 ```
 
