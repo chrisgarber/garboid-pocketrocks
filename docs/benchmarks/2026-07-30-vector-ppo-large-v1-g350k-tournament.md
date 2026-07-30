@@ -72,4 +72,3 @@ The machine-readable and interactive reports are committed under
 - [`ratings.csv`](tournaments/2026-07-30-vector-ppo-large-v1-g350k-default/ratings.csv)
 - [`summary.json`](tournaments/2026-07-30-vector-ppo-large-v1-g350k-default/summary.json)
 - [`report.html`](tournaments/2026-07-30-vector-ppo-large-v1-g350k-default/report.html)
-

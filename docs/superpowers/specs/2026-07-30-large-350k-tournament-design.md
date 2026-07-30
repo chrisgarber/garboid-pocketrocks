@@ -88,4 +88,3 @@ Add focused tests that verify:
 Run the focused neural/tournament tests, formatting, lint, and type checking.
 Then run the full fixed-seed tournament and inspect the report for faults and
 throughput.
-
