@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import numpy as np
 import pytest
 
 torch = pytest.importorskip("torch")
@@ -22,30 +23,65 @@ from garboid_pocketrocks.neural.vector_collector import (  # noqa: E402
 from garboid_pocketrocks.training.rewards import RewardConfig  # noqa: E402
 
 
-def _records(
-    rollout: RolloutBatch,
-) -> tuple[tuple[int, int, int, float], ...]:
-    return tuple(
-        (
-            transition.metadata.environment_seed,
-            transition.metadata.learner_seat,
-            transition.action,
-            transition.reward,
-        )
-        for transition in rollout.transitions
+def _assert_rollouts_equal(vector: RolloutBatch, scalar: RolloutBatch) -> None:
+    assert tuple(episode.plan for episode in vector.episodes) == tuple(
+        episode.plan for episode in scalar.episodes
     )
-
-
-def _scores(
-    rollout: RolloutBatch,
-) -> tuple[tuple[int, tuple[tuple[int, int, int], ...]], ...]:
-    return tuple(
-        (
-            episode.plan.episode_index,
-            tuple((score.seat, score.final_money, score.rank) for score in episode.result.scores),
-        )
-        for episode in rollout.episodes
-    )
+    for vector_episode, scalar_episode in zip(
+        vector.episodes,
+        scalar.episodes,
+        strict=True,
+    ):
+        assert vector_episode.result.scores == scalar_episode.result.scores
+        assert len(vector_episode.trajectories) == len(scalar_episode.trajectories)
+        for vector_trajectory, scalar_trajectory in zip(
+            vector_episode.trajectories,
+            scalar_episode.trajectories,
+            strict=True,
+        ):
+            assert (
+                vector_trajectory.seat,
+                vector_trajectory.policy_identity,
+                vector_trajectory.trainable,
+            ) == (
+                scalar_trajectory.seat,
+                scalar_trajectory.policy_identity,
+                scalar_trajectory.trainable,
+            )
+            assert len(vector_trajectory.transitions) == len(scalar_trajectory.transitions)
+            for vector_transition, scalar_transition in zip(
+                vector_trajectory.transitions,
+                scalar_trajectory.transitions,
+                strict=True,
+            ):
+                assert vector_transition.action == scalar_transition.action
+                assert vector_transition.reward == pytest.approx(scalar_transition.reward)
+                assert vector_transition.reward_breakdown == pytest.approx(
+                    scalar_transition.reward_breakdown
+                )
+                assert (
+                    vector_transition.terminated,
+                    vector_transition.truncated,
+                ) == (
+                    scalar_transition.terminated,
+                    scalar_transition.truncated,
+                )
+                np.testing.assert_array_equal(
+                    vector_transition.observation.history_ids,
+                    scalar_transition.observation.history_ids,
+                )
+                np.testing.assert_array_equal(
+                    vector_transition.observation.history_numeric,
+                    scalar_transition.observation.history_numeric,
+                )
+                np.testing.assert_array_equal(
+                    vector_transition.observation.history_valid,
+                    scalar_transition.observation.history_valid,
+                )
+                np.testing.assert_array_equal(
+                    vector_transition.observation.action_mask,
+                    scalar_transition.observation.action_mask,
+                )
 
 
 def test_vector_plan_batches_use_homogeneous_groups_of_sixty_four() -> None:
@@ -108,15 +144,7 @@ def test_vector_collector_matches_scalar_sdk_self_play() -> None:
         max_inference_batch=512,
     )
 
-    vector_records = _records(vector)
-    scalar_records = _records(scalar)
-    assert tuple(record[:3] for record in vector_records) == tuple(
-        record[:3] for record in scalar_records
-    )
-    assert tuple(record[3] for record in vector_records) == pytest.approx(
-        tuple(record[3] for record in scalar_records)
-    )
-    assert _scores(vector) == _scores(scalar)
+    _assert_rollouts_equal(vector, scalar)
     assert metrics.games == 15
     assert metrics.decisions == len(vector.transitions)
     assert metrics.ipc_seconds == 0.0

@@ -15,21 +15,19 @@ import torch
 from garboid_pocketrocks.neural.collector import (
     CollectorMetrics,
     _freeze_policies,
+    _infer_policy_requests,
     _percentile,
     _restore_policy_modes,
     _validate_collection,
 )
 from garboid_pocketrocks.neural.config import NeuralEncoderConfig
-from garboid_pocketrocks.neural.encoding import batch_observations
 from garboid_pocketrocks.neural.model import NeuralPolicy
 from garboid_pocketrocks.neural.planning import SelfPlayEpisodePlan
-from garboid_pocketrocks.neural.policy import evaluate_row_seeded_policy
 from garboid_pocketrocks.neural.rollout import (
     MultiSeatEpisode,
     RolloutBatch,
 )
 from garboid_pocketrocks.neural.self_play import (
-    PendingPolicyRequest,
     PolicyResponse,
 )
 from garboid_pocketrocks.neural.worker import (
@@ -159,12 +157,12 @@ def collect_self_play_parallel(
                     request for _, message in inference_messages for request in message.requests
                 )
                 decisions += len(requests)
-                responses = _infer(
+                responses = _infer_policy_requests(
                     policies,
                     requests,
                     device=device,
                     max_inference_batch=max_inference_batch,
-                    inference_sizes=inference_sizes,
+                    inference_batch_sizes=inference_sizes,
                 )
                 inference_seconds += responses[1]
                 by_worker: dict[int, list[PolicyResponse]] = defaultdict(list)
@@ -231,55 +229,3 @@ def collect_self_play_parallel(
         inference_batch_p95=_percentile(inference_sizes, 0.95),
     )
     return RolloutBatch.from_multi_seat(completed), metrics
-
-
-def _infer(
-    policies: Mapping[str, NeuralPolicy],
-    requests: tuple[PendingPolicyRequest, ...],
-    *,
-    device: torch.device,
-    max_inference_batch: int,
-    inference_sizes: list[int],
-) -> tuple[tuple[PolicyResponse, ...], float]:
-    by_policy: dict[str, list[PendingPolicyRequest]] = defaultdict(list)
-    for request in requests:
-        by_policy[request.policy_identity].append(request)
-    responses: list[PolicyResponse] = []
-    elapsed = 0.0
-    for identity in sorted(by_policy):
-        ordered = sorted(
-            by_policy[identity],
-            key=lambda item: (
-                item.episode_index,
-                item.seat,
-                item.decision_index,
-            ),
-        )
-        for offset in range(0, len(ordered), max_inference_batch):
-            chunk = ordered[offset : offset + max_inference_batch]
-            started = time.perf_counter()
-            batch = batch_observations(
-                tuple(item.observation for item in chunk),
-                device,
-            )
-            with torch.no_grad():
-                output = policies[identity](batch)
-                selection = evaluate_row_seeded_policy(
-                    output,
-                    batch,
-                    row_seeds=tuple(item.sampling_seed for item in chunk),
-                )
-            elapsed += time.perf_counter() - started
-            inference_sizes.append(len(chunk))
-            for row, request in enumerate(chunk):
-                responses.append(
-                    PolicyResponse(
-                        request.episode_index,
-                        request.seat,
-                        request.decision_index,
-                        int(selection.actions[row].item()),
-                        float(selection.log_probability[row].item()),
-                        float(selection.value[row].item()),
-                    )
-                )
-    return tuple(responses), elapsed
