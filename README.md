@@ -87,6 +87,18 @@ uv run --extra neural garboid-promote \
 See the [promotion runbook](src/garboid_pocketrocks/promotion/README.md) for
 the matched-game contract, evidence, and failure reasons.
 
+Search fixed heuristic coefficient grids on development games:
+
+```bash
+uv run garboid-evolve-heuristic \
+  --manifest configs/evolution/balanced-v3-search-v1.json \
+  --output-dir evolution-results/balanced-v3-search-v1
+```
+
+See the [heuristic evolution runbook](src/garboid_pocketrocks/evolution/README.md)
+for the development-only boundary, deterministic evidence, and frozen-candidate
+handoff to held-out promotion.
+
 Install the optional neural dependencies and run the production-backed smoke:
 
 ```bash
@@ -114,5 +126,6 @@ runbooks live beside the
 [simulator](src/garboid_pocketrocks/simulator/README.md),
 [tournament](src/garboid_pocketrocks/tournament/README.md),
 [promotion](src/garboid_pocketrocks/promotion/README.md),
+[heuristic evolution](src/garboid_pocketrocks/evolution/README.md),
 [heuristics](src/garboid_pocketrocks/heuristics/README.md), and
 [neural](src/garboid_pocketrocks/neural/README.md) packages.

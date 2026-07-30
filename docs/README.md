@@ -13,6 +13,9 @@ Package READMEs are the current operational truth:
   ratings, artifacts, and reproduction.
 - [Promotion](../src/garboid_pocketrocks/promotion/README.md): matched
   held-out games, promotion decisions, and evidence.
+- [Heuristic evolution](../src/garboid_pocketrocks/evolution/README.md):
+  development-only coefficient search, transactional evidence, and frozen
+  candidate handoff.
 - [Heuristics](../src/garboid_pocketrocks/heuristics/README.md): public belief,
   valuation, profiles, and released generations.
 - [Neural](../src/garboid_pocketrocks/neural/README.md): self-play training,
@@ -45,6 +48,10 @@ architecture transcripts.
 - [`docs/benchmarks/promotions`](benchmarks/promotions/) contains immutable
   promotion reports, paired game summaries, and corpus snapshots referenced by
   dated promotion notes.
+- Evolution evidence directories contain immutable manifests, candidate
+  evaluations, selection logs, development games, corpus snapshots, and
+  optional frozen-candidate records as documented by the
+  [evolution runbook](../src/garboid_pocketrocks/evolution/README.md).
 
 Reports and artifacts are historical evidence. Do not silently rewrite them
 when current behavior changes; add a newly dated result instead.
