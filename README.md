@@ -99,6 +99,18 @@ uv run garboid-simulate \
   --format json
 ```
 
+Unversioned heuristic names track the latest generation. Use explicit names
+to reproduce or compare historical generations:
+
+```bash
+uv run garboid-simulate \
+  --bots balanced-v1,balanced-v2,passive-v2 \
+  --games 1000 \
+  --players 3 \
+  --seed 42 \
+  --workers 4
+```
+
 Evaluation reports games, outright wins, first-place ties, rank counts, final
 money samples, first-place margins, seat buckets, ruleset buckets, decision
 counts, and faults. Distribution helpers provide mean, median, population
@@ -139,20 +151,22 @@ resource lot = sum(offered card count * expected terminal price)
 
 auction win = resource lot + objective value - bid
               + option(cash - bid) - option(cash)
+              + future(cash - bid) - future(cash)
 
 loan win = -bid
            + option(cash + principal - bid) - option(cash)
+           + future(cash + principal - bid) - future(cash)
 
 investment win = fixed payout
                  + option(cash - bid) - option(cash)
+                 + future(cash - bid) - future(cash)
 ```
 
 The `option(...)` term is an increasing, concave value for cash that remains
 available for later auctions. It shrinks with the fraction of biddable
 resources remaining and reaches zero at the end of the game. Terminal-dollar
-accounting stays exact: auction and loan bids are spent, loan principal is
-repaid, and an investment bid is returned at scoring while its fixed payout is
-profit.
+accounting stays exact. The v2 `future(...)` term separately protects cash up
+to the public remaining-resource horizon; v1 sets its weight to zero.
 
 An objective completed by the offered lot receives its full payout. Incomplete
 progress receives a smaller shaped value based on the positive change in
@@ -161,15 +175,19 @@ when opponents are at least as close to the same objective. This progress term
 is heuristic option value, not predicted cash.
 
 Every legal integer bid is evaluated. The reservation bid is the largest bid
-with nonnegative win value, and each profile shades that reservation bid:
+with nonnegative win value, and each profile shades that reservation bid.
+Released generations are immutable:
 
-| Profile | Liquidity strength | Objective progress | Bid shading | Behavior |
-| --- | ---: | ---: | ---: | --- |
-| aggressive | 0.75 | 0.25 | 0.05 | Preserves early liquidity, pursues progress, and bids near its limit |
-| balanced | 0.40 | 0.20 | 0.25 | Uses middle settings |
-| passive | 0.15 | 0.15 | 0.50 | Waits for larger margins and inexpensive actions |
+| Generation | Profile | Liquidity | Future cash | Objective progress | Bid shading |
+| --- | --- | ---: | ---: | ---: | ---: |
+| v1 | aggressive | 0.75 | 0.00 | 0.25 | 0.05 |
+| v1 | balanced | 0.40 | 0.00 | 0.20 | 0.25 |
+| v1 | passive | 0.15 | 0.00 | 0.15 | 0.50 |
+| v2 | aggressive | 0.75 | 1.50 | 0.25 | 0.05 |
+| v2 | balanced | 0.40 | 0.75 | 0.20 | 0.25 |
+| v2 | passive | 0.15 | 0.60 | 0.15 | 0.30 |
 
-The simulator-ready identities are:
+The remote-capable heuristic identities are:
 
 | CLI name | Brain | Bot wrapper | `BotSpec` | Bot ID |
 | --- | --- | --- | --- | --- |
@@ -178,12 +196,23 @@ The simulator-ready identities are:
 | `passive` | `PassiveHeuristicBrain` | `PassiveHeuristicBot` | `PASSIVE_HEURISTIC_BOT_SPEC` | `bot_00000000-0000-4000-8000-00000000000c` |
 
 These three IDs are development-only placeholders, not registered live bot
-IDs. Replace the relevant class constant before connecting any heuristic bot
-wrapper to the live service. Fast bot wrappers reconcile the chart, starting
-cash, private-card count, and objective state exposed by each SDK context with
-their configured ruleset knowledge. Pass an explicit `Ruleset` when a game
-uses different resource or action deck counts, because the SDK context does
-not expose those initial counts.
+IDs. Replace the relevant class constant before connecting one of these
+wrappers to the live service.
+
+Historical `*-v1` and `*-v2` generations are local brain/spec pairs, not
+remote bot wrappers. Their versioned name is also their internal simulation
+identity (`BotSpec.bot_id`), so they do not pretend to have a server-issued
+bot ID. The CLI constructs those local specs from the versioned brain
+classes. Python callers that need the prebuilt specs import them from
+`garboid_pocketrocks.bots.heuristic`; configured spec instances are not
+re-exported from the `bots` package. `aggressive`, `balanced`, and `passive`
+remain aliases to v2.
+
+Fast bot wrappers reconcile the chart, starting cash, private-card count, and
+objective state exposed by each SDK context with their configured ruleset
+knowledge. Pass an explicit `Ruleset` when a game uses different resource or
+action deck counts, because the SDK context does not expose those initial
+counts.
 
 Reveal decisions use the same finite-population model from an observer's
 perspective, without access to the bot's hand. For each candidate suit, the

@@ -1,6 +1,6 @@
 from importlib import import_module
 
-from garboid_pocketrocks import __version__
+from garboid_pocketrocks import __version__, bots
 
 NAMESPACES = (
     "garboid_pocketrocks.adapters",
@@ -17,6 +17,10 @@ def test_package_version() -> None:
 def test_planned_namespaces_are_importable() -> None:
     for namespace in NAMESPACES:
         assert import_module(namespace).__name__ == namespace
+
+
+def test_bots_namespace_does_not_reexport_prebuilt_specs() -> None:
+    assert not {name for name in vars(bots) if name.endswith("_BOT_SPEC")}
 
 
 if __name__ == "__main__":
