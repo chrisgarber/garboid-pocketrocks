@@ -85,6 +85,15 @@ _BOUNDARY_SLICES_PATH = (
     "2026-07-30-heuristic-v3-phase-boundaries-development/phase-boundary-slices.csv"
 )
 _BOUNDARY_SLICES_DIGEST = "4f8aa60edf31b28c746cb8004a4dd5468ee8ab1b26462550c914b2e3fa50d7ae"
+_FIXED_DEVELOPMENT_CORPUS_NAME = "development-v1"
+_FIXED_DEVELOPMENT_CORPUS_DIGEST = (
+    "17c016350dbe717641b8cd499b0908e3bc0faa811a3b4f5e574f8713a5bf2b3d"
+)
+_FIXED_PHASE_SEARCH_SEEDS: dict[Personality, int] = {
+    "aggressive": 12001,
+    "balanced": 12002,
+    "passive": 12003,
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -489,7 +498,7 @@ def _decode_phase_search_manifest(
         expert_coefficient_grids=expert_grids,
         digest="",
     )
-    return PhaseSearchManifest(
+    manifest = PhaseSearchManifest(
         schema_version=without_digest.schema_version,
         name=without_digest.name,
         personality=without_digest.personality,
@@ -503,6 +512,8 @@ def _decode_phase_search_manifest(
         expert_coefficient_grids=without_digest.expert_coefficient_grids,
         digest=recompute_phase_search_manifest_digest(without_digest),
     )
+    validate_phase_search_manifest_contract(manifest)
+    return manifest
 
 
 def search_manifest_payload(manifest: SearchManifest) -> dict[str, object]:
@@ -580,6 +591,59 @@ def recompute_phase_search_manifest_digest(manifest: PhaseSearchManifest) -> str
 
     payload_bytes = _canonical_json_bytes(phase_search_manifest_payload(manifest))
     return hashlib.sha256(payload_bytes).hexdigest()
+
+
+def validate_phase_search_manifest_contract(manifest: PhaseSearchManifest) -> None:
+    """Require the complete precommitted schema-v2 development search contract."""
+
+    expected_personalities = ("aggressive", "balanced", "passive")
+    if manifest.personality not in expected_personalities:
+        _raise_invalid_phase_search_contract()
+    personality = manifest.personality
+    expected_profile = _profile_coefficient_values(getattr(HEURISTIC_V3, personality))
+    expected_experts = PhaseCoefficientValues(
+        early=expected_profile,
+        middle=expected_profile,
+        late=expected_profile,
+    )
+    expected_grids = PhaseCoefficientGrids(
+        early=_ESTABLISHED_COEFFICIENT_GRIDS,
+        middle=_ESTABLISHED_COEFFICIENT_GRIDS,
+        late=_ESTABLISHED_COEFFICIENT_GRIDS,
+    )
+    expected_selector = PhaseSelector(
+        kind=PHASE_SELECTOR_NAME,
+        early=_PHASE_SELECTOR_EARLY_RULE,
+        middle=_PHASE_SELECTOR_MIDDLE_RULE,
+        late=_PHASE_SELECTOR_LATE_RULE,
+    )
+    expected_evidence = BoundaryEvidence(
+        report_path=_BOUNDARY_REPORT_PATH,
+        report_digest=_BOUNDARY_REPORT_DIGEST,
+        slices_path=_BOUNDARY_SLICES_PATH,
+        slices_digest=_BOUNDARY_SLICES_DIGEST,
+    )
+    if (
+        manifest.schema_version != 2
+        or manifest.name != f"{personality}-v4-search-v2"
+        or manifest.predecessor_name != f"{personality}-v3"
+        or manifest.development_corpus.name != _FIXED_DEVELOPMENT_CORPUS_NAME
+        or manifest.development_corpus.digest != _FIXED_DEVELOPMENT_CORPUS_DIGEST
+        or manifest.search_seed != _FIXED_PHASE_SEARCH_SEEDS[personality]
+        or manifest.algorithm != _FIXED_PHASE_SEARCH_ALGORITHM
+        or manifest.phase_selector != expected_selector
+        or manifest.boundary_evidence != expected_evidence
+        or manifest.initial_experts != expected_experts
+        or manifest.expert_coefficient_grids != expected_grids
+    ):
+        _raise_invalid_phase_search_contract()
+
+
+def _raise_invalid_phase_search_contract() -> NoReturn:
+    raise SearchManifestError(
+        "invalid_phase_search_contract",
+        "Schema-v2 evolution requires the exact committed v4 development-search contract.",
+    )
 
 
 def decimal_grid_index(

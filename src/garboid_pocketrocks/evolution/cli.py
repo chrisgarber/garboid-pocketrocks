@@ -12,7 +12,7 @@ from typing import NoReturn
 from garboid_pocketrocks.bots import BOT_SPECS_BY_NAME
 from garboid_pocketrocks.evolution.manifest import (
     SearchManifestError,
-    load_search_manifest,
+    load_search_recipe,
 )
 from garboid_pocketrocks.evolution.reporting import (
     build_search_report,
@@ -109,7 +109,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.development_corpus,
             registry=_BOT_REGISTRY,
         )
-        manifest = load_search_manifest(
+        manifest = load_search_recipe(
             args.manifest,
             development_corpus=corpus,
         )

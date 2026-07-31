@@ -1,16 +1,23 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import os
 import subprocess
+from copy import deepcopy
 from dataclasses import replace
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
+from unittest.mock import patch
 
 import pytest
 
+import garboid_pocketrocks.evolution.reporting as reporting_module
 from garboid_pocketrocks.bots import BOT_SPECS_BY_NAME
+from garboid_pocketrocks.evolution.candidates import candidate_bot_spec
+from garboid_pocketrocks.evolution.manifest import PhaseSearchManifest
+from garboid_pocketrocks.evolution.planning import DevelopmentPlan
 from garboid_pocketrocks.evolution.reporting import (
     SearchReport,
     build_search_report,
@@ -20,9 +27,17 @@ from garboid_pocketrocks.evolution.reporting import (
     write_search_artifacts,
 )
 from garboid_pocketrocks.evolution.runner import SearchRun, run_search
-from garboid_pocketrocks.promotion.corpus import corpus_snapshot_payload
+from garboid_pocketrocks.promotion.corpus import (
+    corpus_snapshot_payload,
+    recompute_promotion_corpus_digest,
+)
 
-from .test_runner import _small_inputs
+from .test_runner import (
+    _phase_run_with_recomputed_positive_evidence,
+    _run_small_phase_search,
+    _small_inputs,
+    _small_phase_inputs,
+)
 
 _REQUIRED_ARTIFACTS = (
     "search-manifest.json",
@@ -47,6 +62,38 @@ def search_run() -> SearchRun:
     )
 
 
+@pytest.fixture(scope="module")
+def phase_search_runs() -> tuple[SearchRun, SearchRun, SearchRun]:
+    manifest, corpus = _small_phase_inputs(generations=1, cases=1)
+    return (
+        _run_small_phase_search(
+            manifest,
+            corpus,
+            workers=1,
+            batch_size=None,
+        ),
+        _run_small_phase_search(
+            manifest,
+            corpus,
+            workers=1,
+            batch_size=1,
+        ),
+        _run_small_phase_search(
+            manifest,
+            corpus,
+            workers=2,
+            batch_size=1,
+        ),
+    )
+
+
+@pytest.fixture(scope="module")
+def phase_search_run(
+    phase_search_runs: tuple[SearchRun, SearchRun, SearchRun],
+) -> SearchRun:
+    return phase_search_runs[0]
+
+
 def _report(run: SearchRun, *, frozen: bool = False) -> SearchReport:
     selected = run.selected_candidate
     assert selected is not None
@@ -59,6 +106,41 @@ def _report(run: SearchRun, *, frozen: bool = False) -> SearchReport:
         repository_commit="0123456789abcdef",
         workers=1,
         batch_size=1,
+    )
+
+
+def _phase_report(
+    run: SearchRun,
+    *,
+    repository_commit: str = "0123456789abcdef",
+    workers: int = 1,
+    batch_size: int = 1,
+) -> SearchReport:
+    """Build a tiny schema-v2 fixture while bypassing only the fixed-budget contract."""
+
+    with patch.object(
+        reporting_module,
+        "_validate_fixed_phase_manifest_for_report",
+        return_value=None,
+    ):
+        return build_search_report(
+            run,
+            repository_commit=repository_commit,
+            workers=workers,
+            batch_size=batch_size,
+        )
+
+
+def _replace_first_phase_plan(run: SearchRun, plan: DevelopmentPlan) -> SearchRun:
+    return replace(
+        run,
+        candidate_runs=(
+            replace(
+                run.candidate_runs[0],
+                plan=plan,
+            ),
+            *run.candidate_runs[1:],
+        ),
     )
 
 
@@ -194,6 +276,522 @@ def test_writes_byte_identical_complete_artifact_generations(
     assert frozen["repository_commit"] == report.repository_commit
     assert frozen["source_evidence"]["search_report_sha256"]
     assert frozen["source_evidence"]["candidate_evaluations_sha256"]
+
+
+def test_schema_v1_complete_artifact_hashes_are_frozen(
+    tmp_path: Path,
+    search_run: SearchRun,
+) -> None:
+    artifacts = write_search_artifacts(
+        tmp_path,
+        report=_report(search_run, frozen=True),
+    )
+    expected = {
+        "search-manifest.json": (
+            1131,
+            "60679253fa068cbaaa49ba1609f33724bb1d42ff436f3e2bcc9ac3c3914fad8b",
+        ),
+        "search-report.json": (
+            1504,
+            "79887bd72be2f2cba892edfb8ea865f75702aef8a0e50dd9d6ab3354bdad3bf5",
+        ),
+        "candidate-evaluations.jsonl": (
+            1833,
+            "79379a1093538cf5b56a8dde405d611682e6bb876a8ffa1c92ab2ba17e7267fe",
+        ),
+        "selection-log.jsonl": (
+            1090,
+            "df81b9f4e619ad516a6f5980c6f01e4951b5588ff9c8f51310b52d3cb1646167",
+        ),
+        "development-games.jsonl": (
+            1940,
+            "033eb766de10aa08753b2932b4efa4fe1e8e9b06306e2d1b4e1ac2293e3203f6",
+        ),
+        "development-corpus-snapshot.json": (
+            778,
+            "0460d0975a6286bdc9676054df911bd21cf24f02a483d63fdef916793bebcf38",
+        ),
+        "frozen-candidate.json": (
+            1136,
+            "2bcddd2d923ce1e0253344b3cf16f7f99b57451466fd309a9bd1d9e192993cba",
+        ),
+    }
+
+    assert set(path.name for path in artifacts.paths) == set(expected)
+    for path in artifacts.paths:
+        content = path.read_bytes()
+        expected_size, expected_digest = expected[path.name]
+        assert len(content) == expected_size
+        assert hashlib.sha256(content).hexdigest() == expected_digest
+
+
+def test_phase_report_normalizes_selector_evidence_and_all_twelve_coefficients(
+    tmp_path: Path,
+    phase_search_run: SearchRun,
+) -> None:
+    report = _phase_report(
+        phase_search_run,
+        repository_commit="0123456789abcdef",
+        workers=1,
+        batch_size=1,
+    )
+    first = write_search_artifacts(tmp_path / "first", report=report)
+    second = write_search_artifacts(tmp_path / "second", report=report)
+
+    assert report.schema_version == 2
+    assert isinstance(phase_search_run.manifest, PhaseSearchManifest)
+    assert [path.read_bytes() for path in first.paths] == [
+        path.read_bytes() for path in second.paths
+    ]
+    expected_artifacts = {
+        "search-manifest.json": (
+            3057,
+            "a6ac63169b4c8dcdb8f5e9a6bdf08ba9524987897d6141e3a10f55fbd9e4428b",
+        ),
+        "search-report.json": (
+            3106,
+            "97615c85dc8f55993588ce209068b095c23649dd5f77f84be774df71e9e42dac",
+        ),
+        "candidate-evaluations.jsonl": (
+            21587,
+            "72be5e37b50f4ce56d9c61426e9838694d253ce887a30fcaedcb5fd443430267",
+        ),
+        "selection-log.jsonl": (
+            8526,
+            "568468bbe4156f374ed3fa0ddcef06c53fc7e43d276cdbf7a1ed065d9e3bffdc",
+        ),
+        "development-games.jsonl": (
+            11479,
+            "2567af9b6a30cb6a8c80a821bf6a2e59ba9473033b0e383317fb2b0b1d9f2f86",
+        ),
+        "development-corpus-snapshot.json": (
+            778,
+            "0460d0975a6286bdc9676054df911bd21cf24f02a483d63fdef916793bebcf38",
+        ),
+    }
+    assert {path.name for path in first.paths} == set(expected_artifacts)
+    for path in first.paths:
+        content = path.read_bytes()
+        expected_size, expected_digest = expected_artifacts[path.name]
+        assert len(content) == expected_size
+        assert hashlib.sha256(content).hexdigest() == expected_digest
+    search_payload = json.loads(first.search_report_json.read_text())
+    assert search_payload["schema_version"] == 2
+    assert search_payload["search"]["phase_selector"] == {
+        "kind": "public-resource-horizon-v1",
+        "early": "3*future>=2*total",
+        "middle": "3*future>=total",
+        "late": "otherwise",
+    }
+    assert search_payload["search"]["boundary_evidence"] == {
+        "report_path": phase_search_run.manifest.boundary_evidence.report_path,
+        "report_digest": phase_search_run.manifest.boundary_evidence.report_digest,
+        "slices_path": phase_search_run.manifest.boundary_evidence.slices_path,
+        "slices_digest": phase_search_run.manifest.boundary_evidence.slices_digest,
+    }
+    evaluations = [
+        json.loads(line) for line in first.candidate_evaluations_jsonl.read_text().splitlines()
+    ]
+    assert phase_search_run.selected_candidate is not None
+    assert (
+        phase_search_run.selected_candidate.identity
+        == "balanced-v4-candidate-g000-s008-d4f1f74b21cf"
+    )
+    selected_evaluation = next(
+        item
+        for item in evaluations
+        if item["candidate"]["identity"] == phase_search_run.selected_candidate.identity
+    )
+    assert selected_evaluation["candidate"]["profile_digest"] == (
+        "d4f1f74b21cf64da670e62c9482d45cc9df9b9630f4589a21b209da862618a83"
+    )
+    assert selected_evaluation["scores"] == {
+        "rating_delta": 0.0,
+        "normalized_finish_delta": 0.0,
+        "final_money_delta": 2,
+    }
+    first_candidate = evaluations[0]["candidate"]
+    assert first_candidate["phase_selector"] == search_payload["search"]["phase_selector"]
+    assert tuple(first_candidate["experts"]) == ("early", "late", "middle")
+    assert sum(len(values) for values in first_candidate["experts"].values()) == 12
+    expected_expert = {
+        "liquidity_strength": "0.25",
+        "future_cash_weight": "1.55",
+        "objective_progress_weight": "0.3",
+        "bid_shading": "0.35",
+    }
+    assert first_candidate["experts"] == {
+        "early": expected_expert,
+        "middle": expected_expert,
+        "late": expected_expert,
+    }
+    assert evaluations[0]["ranking_key"]["fields"] == [
+        "negative_rating_delta",
+        "negative_normalized_finish_delta",
+        "negative_final_money_delta",
+        "coefficient_values",
+        "candidate_identity",
+    ]
+    assert len(evaluations[0]["ranking_key"]["values"][3]) == 12
+
+
+def test_phase_artifacts_are_byte_identical_across_execution_modes(
+    tmp_path: Path,
+    phase_search_runs: tuple[SearchRun, SearchRun, SearchRun],
+) -> None:
+    rendered: list[dict[str, bytes]] = []
+    for index, run in enumerate(phase_search_runs):
+        report = _phase_report(
+            run,
+            repository_commit="0123456789abcdef",
+            workers=2,
+            batch_size=1,
+        )
+        artifacts = write_search_artifacts(tmp_path / str(index), report=report)
+        rendered.append({path.name: path.read_bytes() for path in artifacts.paths})
+
+    assert rendered[0] == rendered[1] == rendered[2]
+
+
+def test_phase_execution_modes_have_identical_run_outcomes(
+    phase_search_runs: tuple[SearchRun, SearchRun, SearchRun],
+) -> None:
+    reference = phase_search_runs[0]
+    for run in phase_search_runs[1:]:
+        assert run.baseline_result == reference.baseline_result
+        assert tuple(item.candidate for item in run.candidate_runs) == tuple(
+            item.candidate for item in reference.candidate_runs
+        )
+        assert tuple(item.evaluation for item in run.candidate_runs) == tuple(
+            item.evaluation for item in reference.candidate_runs
+        )
+        assert tuple(item.result for item in run.candidate_runs) == tuple(
+            item.result for item in reference.candidate_runs
+        )
+        assert run.selections == reference.selections
+        assert run.selected_candidate == reference.selected_candidate
+        assert run.frozen_candidate == reference.frozen_candidate
+
+
+def test_phase_report_revalidates_the_fixed_manifest_contract(
+    phase_search_run: SearchRun,
+) -> None:
+    with pytest.raises(ValueError, match="exact committed v4 development-search contract"):
+        build_search_report(
+            phase_search_run,
+            repository_commit="0123456789abcdef",
+            workers=1,
+            batch_size=1,
+        )
+
+
+def test_phase_report_revalidates_corpus_digest_and_manifest_binding(
+    phase_search_run: SearchRun,
+) -> None:
+    stale_corpus = replace(
+        phase_search_run.development_corpus,
+        digest="0" * 64,
+    )
+    renamed_corpus = replace(
+        phase_search_run.development_corpus,
+        recipe=replace(
+            phase_search_run.development_corpus.recipe,
+            name="development-forged",
+        ),
+    )
+    renamed_corpus = replace(
+        renamed_corpus,
+        digest=recompute_promotion_corpus_digest(renamed_corpus),
+    )
+    for corpus, expected_message in (
+        (stale_corpus, "corpus digest"),
+        (renamed_corpus, "manifest binding"),
+    ):
+        with pytest.raises(ValueError, match=expected_message):
+            _phase_report(
+                replace(phase_search_run, development_corpus=corpus),
+            )
+
+
+@pytest.mark.parametrize("corpus_field", ("name", "digest"))
+def test_phase_report_rejects_forged_plan_corpus_binding(
+    phase_search_run: SearchRun,
+    corpus_field: str,
+) -> None:
+    plan = phase_search_run.candidate_runs[0].plan
+    if corpus_field == "name":
+        forged_corpus = replace(
+            plan.corpus,
+            recipe=replace(plan.corpus.recipe, name="development-forged"),
+        )
+    else:
+        forged_corpus = replace(plan.corpus, digest="0" * 64)
+    forged = _replace_first_phase_plan(
+        phase_search_run,
+        replace(plan, corpus=forged_corpus),
+    )
+
+    with pytest.raises(ValueError, match="plan corpus"):
+        _phase_report(forged)
+
+
+def test_phase_report_rejects_forged_candidate_factory_profile(
+    phase_search_run: SearchRun,
+) -> None:
+    candidate_run = phase_search_run.candidate_runs[0]
+    other_spec = candidate_bot_spec(phase_search_run.candidate_runs[1].candidate)
+    forged_spec = replace(
+        other_spec,
+        name=candidate_run.candidate.identity,
+        bot_id=candidate_run.candidate.identity,
+    )
+    forged = _replace_first_phase_plan(
+        phase_search_run,
+        replace(candidate_run.plan, candidate=forged_spec),
+    )
+
+    with pytest.raises(ValueError, match="candidate identity and profile"):
+        _phase_report(forged)
+
+
+@pytest.mark.parametrize("binding", ("incumbent", "opponents"))
+def test_phase_report_rejects_forged_incumbent_or_opponents(
+    phase_search_run: SearchRun,
+    binding: str,
+) -> None:
+    plan = phase_search_run.candidate_runs[0].plan
+    forged_plan = (
+        replace(plan, incumbent=BOT_SPECS_BY_NAME["balanced-v2"])
+        if binding == "incumbent"
+        else replace(plan, opponents=tuple(reversed(plan.opponents)))
+    )
+    forged = _replace_first_phase_plan(phase_search_run, forged_plan)
+
+    with pytest.raises(ValueError, match=binding):
+        _phase_report(forged)
+
+
+@pytest.mark.parametrize(
+    "evidence",
+    ("baseline_config", "candidate_config", "candidate_job", "bool_as_int"),
+)
+def test_phase_report_rejects_forged_plan_config_or_jobs(
+    phase_search_run: SearchRun,
+    evidence: str,
+) -> None:
+    plan = phase_search_run.candidate_runs[0].plan
+    if evidence == "baseline_config":
+        forged_plan = replace(
+            plan,
+            baseline_config=replace(
+                plan.baseline_config,
+                root_seed=plan.baseline_config.root_seed + 1,
+            ),
+        )
+    elif evidence == "candidate_config":
+        forged_plan = replace(
+            plan,
+            candidate_config=replace(
+                plan.candidate_config,
+                capture_replays=True,
+            ),
+        )
+    else:
+        candidate_job = plan.candidate_jobs[0]
+        forged_job = (
+            replace(candidate_job, seed=candidate_job.seed + 1)
+            if evidence == "candidate_job"
+            else replace(
+                candidate_job,
+                objectives_enabled=cast(Any, 1),
+            )
+        )
+        forged_plan = replace(
+            plan,
+            candidate_jobs=(forged_job, *plan.candidate_jobs[1:]),
+        )
+    forged = _replace_first_phase_plan(phase_search_run, forged_plan)
+
+    with pytest.raises(ValueError, match="config and jobs"):
+        _phase_report(forged)
+
+
+def test_phase_freeze_requires_complete_fault_free_positive_evidence(
+    phase_search_run: SearchRun,
+) -> None:
+    selected = phase_search_run.selected_candidate
+    assert selected is not None
+    forged = replace(phase_search_run, frozen_candidate=selected)
+
+    with pytest.raises(ValueError, match="complete fault-free positive evidence"):
+        _phase_report(
+            forged,
+            repository_commit="0123456789abcdef",
+            workers=1,
+            batch_size=1,
+        )
+
+
+@pytest.mark.parametrize("partial_field", ("candidate_runs", "selections"))
+def test_phase_freeze_rejects_partial_search_evidence(
+    phase_search_run: SearchRun,
+    partial_field: str,
+) -> None:
+    frozen_run = _phase_run_with_recomputed_positive_evidence(phase_search_run)
+    partial = replace(
+        frozen_run,
+        **{partial_field: getattr(frozen_run, partial_field)[:-1]},
+    )
+
+    with pytest.raises(ValueError, match="complete"):
+        _phase_report(
+            partial,
+            repository_commit="0123456789abcdef",
+            workers=1,
+            batch_size=1,
+        )
+
+
+def test_phase_freeze_rejects_forged_positive_stored_evaluation(
+    phase_search_run: SearchRun,
+) -> None:
+    selected = phase_search_run.selected_candidate
+    assert selected is not None
+    candidate_runs = tuple(
+        replace(
+            candidate_run,
+            evaluation=replace(
+                candidate_run.evaluation,
+                rating_delta=1.0,
+                normalized_finish_delta=1.0,
+                final_money_delta=1,
+                valid=True,
+                eligible=True,
+            ),
+        )
+        if candidate_run.candidate == selected
+        else candidate_run
+        for candidate_run in phase_search_run.candidate_runs
+    )
+    forged = replace(
+        phase_search_run,
+        candidate_runs=candidate_runs,
+        frozen_candidate=selected,
+    )
+
+    with pytest.raises(ValueError, match="evaluations recomputed"):
+        _phase_report(
+            forged,
+            repository_commit="0123456789abcdef",
+            workers=1,
+            batch_size=1,
+        )
+
+
+def test_phase_freeze_rejects_coherently_forged_final_selection_and_record(
+    phase_search_run: SearchRun,
+) -> None:
+    selection = phase_search_run.selections[0]
+    original_winner = selection.elites[0]
+    forged_winner = next(
+        item for item in selection.ranked_pool if item.candidate != original_winner.candidate
+    )
+    forged_ranked_pool = (
+        forged_winner,
+        *(item for item in selection.ranked_pool if item != forged_winner),
+    )
+    forged_elites = (
+        forged_winner,
+        *(item for item in selection.elites if item != forged_winner),
+    )[: phase_search_run.manifest.algorithm.elite_count]
+    forged_record = replace(
+        selection.record,
+        ranked_pool_identities=tuple(item.candidate.identity for item in forged_ranked_pool),
+        elite_identities=tuple(item.candidate.identity for item in forged_elites),
+        ranking_keys=tuple(
+            (item.candidate.identity, item.ranking_key) for item in forged_ranked_pool
+        ),
+    )
+    forged_selection = replace(
+        selection,
+        ranked_pool=forged_ranked_pool,
+        elites=forged_elites,
+        record=forged_record,
+    )
+    forged = replace(
+        phase_search_run,
+        selections=(forged_selection,),
+        selected_candidate=forged_winner.candidate,
+        frozen_candidate=forged_winner.candidate,
+    )
+
+    with pytest.raises(ValueError, match="selections recomputed"):
+        _phase_report(
+            forged,
+            repository_commit="0123456789abcdef",
+            workers=1,
+            batch_size=1,
+        )
+
+
+def test_phase_report_rejects_candidate_family_personality_and_selector_tampering(
+    phase_search_run: SearchRun,
+    search_run: SearchRun,
+) -> None:
+    phase_candidate = phase_search_run.candidate_runs[0].candidate
+    scalar_candidate = search_run.candidate_runs[0].candidate
+    wrong_personality = replace(phase_candidate, personality="aggressive")
+    wrong_selector = deepcopy(phase_candidate)
+    object.__setattr__(wrong_selector.genome, "phase_selector", "forged-selector")
+    for forged_candidate, expected_message in (
+        (scalar_candidate, "phase-aware candidates"),
+        (wrong_personality, "personality"),
+        (wrong_selector, "selector"),
+    ):
+        forged_runs = (
+            replace(
+                phase_search_run.candidate_runs[0],
+                candidate=forged_candidate,
+            ),
+            *phase_search_run.candidate_runs[1:],
+        )
+        forged = replace(phase_search_run, candidate_runs=forged_runs)
+
+        with pytest.raises(ValueError, match=expected_message):
+            _phase_report(
+                forged,
+                repository_commit="0123456789abcdef",
+                workers=1,
+                batch_size=1,
+            )
+
+
+def test_valid_phase_frozen_payload_binds_selector_and_boundary_evidence(
+    tmp_path: Path,
+    phase_search_run: SearchRun,
+) -> None:
+    frozen_run = _phase_run_with_recomputed_positive_evidence(phase_search_run)
+    assert isinstance(frozen_run.manifest, PhaseSearchManifest)
+    report = _phase_report(
+        frozen_run,
+        repository_commit="0123456789abcdef",
+        workers=1,
+        batch_size=1,
+    )
+
+    artifacts = write_search_artifacts(tmp_path, report=report)
+
+    assert artifacts.frozen_candidate_json is not None
+    payload = json.loads(artifacts.frozen_candidate_json.read_text())
+    assert payload["schema_version"] == 2
+    assert payload["phase_selector"]["kind"] == "public-resource-horizon-v1"
+    assert sum(len(values) for values in payload["experts"].values()) == 12
+    assert payload["boundary_evidence"] == {
+        "report_path": frozen_run.manifest.boundary_evidence.report_path,
+        "report_digest": frozen_run.manifest.boundary_evidence.report_digest,
+        "slices_path": frozen_run.manifest.boundary_evidence.slices_path,
+        "slices_digest": frozen_run.manifest.boundary_evidence.slices_digest,
+    }
 
 
 def test_nonfinite_evidence_fails_before_creating_output(

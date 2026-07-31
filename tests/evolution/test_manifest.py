@@ -916,10 +916,13 @@ def test_loads_schema_v2_as_explicit_phase_recipe(
     normalized_payload = manifest_module.phase_search_manifest_payload(recipe)
     assert normalized_payload["phase_selector"] == payload["phase_selector"]
     assert normalized_payload["boundary_evidence"] == payload["boundary_evidence"]
+    initial_experts = payload["initial_experts"]
+    assert isinstance(initial_experts, dict)
+    assert all(isinstance(initial_experts[phase], dict) for phase in PHASES)
     assert normalized_payload["initial_experts"] == {
         phase: {
             coefficient: str(Decimal(value).normalize())
-            for coefficient, value in payload["initial_experts"][phase].items()
+            for coefficient, value in initial_experts[phase].items()
         }
         for phase in PHASES
     }
@@ -1085,6 +1088,80 @@ def test_committed_schema_v2_manifests_bind_v3_and_fixed_evidence(
         assert recipe.initial_experts.middle == recipe.initial_experts.late
         assert recipe.boundary_evidence.report_digest == BOUNDARY_REPORT_DIGEST
         assert recipe.boundary_evidence.slices_digest == BOUNDARY_SLICES_DIGEST
+
+
+def test_public_phase_contract_validator_rejects_forged_dataclass_fields(
+    development_corpus: PromotionCorpus,
+) -> None:
+    recipe = manifest_module.load_search_recipe(
+        EVOLUTION_CONFIG_DIRECTORY / "balanced-v4-search-v2.json",
+        development_corpus=development_corpus,
+    )
+    assert isinstance(recipe, manifest_module.PhaseSearchManifest)
+    forged_recipes = (
+        replace(recipe, schema_version=1),
+        replace(recipe, name="balanced-v4-search-custom"),
+        replace(recipe, personality="passive"),
+        replace(recipe, predecessor_name="balanced-v2"),
+        replace(
+            recipe,
+            development_corpus=replace(
+                recipe.development_corpus,
+                name="development-custom",
+            ),
+        ),
+        replace(
+            recipe,
+            development_corpus=replace(
+                recipe.development_corpus,
+                digest="0" * 64,
+            ),
+        ),
+        replace(recipe, search_seed=999),
+        replace(
+            recipe,
+            algorithm=replace(recipe.algorithm, generation_count=1),
+        ),
+        replace(
+            recipe,
+            phase_selector=replace(recipe.phase_selector, kind="custom-selector"),
+        ),
+        replace(
+            recipe,
+            boundary_evidence=replace(
+                recipe.boundary_evidence,
+                report_digest="0" * 64,
+            ),
+        ),
+        replace(
+            recipe,
+            initial_experts=replace(
+                recipe.initial_experts,
+                early=replace(
+                    recipe.initial_experts.early,
+                    liquidity_strength=Decimal("0.30"),
+                ),
+            ),
+        ),
+        replace(
+            recipe,
+            expert_coefficient_grids=replace(
+                recipe.expert_coefficient_grids,
+                late=replace(
+                    recipe.expert_coefficient_grids.late,
+                    liquidity_strength=replace(
+                        recipe.expert_coefficient_grids.late.liquidity_strength,
+                        maximum=Decimal("1.45"),
+                    ),
+                ),
+            ),
+        ),
+    )
+
+    for forged in forged_recipes:
+        with pytest.raises(SearchManifestError) as captured:
+            manifest_module.validate_phase_search_manifest_contract(forged)
+        assert captured.value.code == "invalid_phase_search_contract"
 
 
 @pytest.mark.parametrize(
