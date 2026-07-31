@@ -172,8 +172,7 @@ or failed games. The
 [dated benchmark note](../../../docs/benchmarks/2026-07-30-vector-ppo-large-v1-g350k-promotion.md)
 explains the result, its limits, and checkpoint provenance. The immutable
 [promotion artifacts](../../../docs/benchmarks/promotions/2026-07-30-vector-ppo-large-v1-g350k-vs-small-v1-g1500/)
-contain the authoritative report, all paired game summaries, and the expanded
-corpora.
+contain the authoritative report and all paired game summaries.
 
 The evidence supports the large v1 checkpoint over the small v1 checkpoint on
 that held-out corpus. The promotion gate does not move aliases, and this result

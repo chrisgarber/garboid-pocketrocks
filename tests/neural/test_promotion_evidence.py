@@ -10,43 +10,11 @@ EVIDENCE_DIRECTORY = Path(
 )
 REPORT_PATH = EVIDENCE_DIRECTORY / "promotion-report.json"
 PAIRED_GAMES_PATH = EVIDENCE_DIRECTORY / "paired-games.jsonl"
-CORPUS_SNAPSHOT_PATH = EVIDENCE_DIRECTORY / "corpus-snapshot.json"
 EVIDENCE_NOTE_PATH = Path("docs/benchmarks/2026-07-30-vector-ppo-large-v1-g350k-promotion.md")
 NEURAL_README_PATH = Path("src/garboid_pocketrocks/neural/README.md")
 
 CANDIDATE_IDENTITY = "vector_ppo_large_v1_g350k"
 INCUMBENT_IDENTITY = "vector_ppo_small_v1_g1500"
-
-
-class CorpusRecipe(TypedDict):
-    schema_version: int
-    name: str
-    purpose: str
-    root_seed: int
-    repetitions_per_seat_cell: int
-    charts: list[str]
-    player_counts: list[int]
-    opponent_names: list[str]
-
-
-class PromotionCase(TypedDict):
-    case_id: str
-    chart: str
-    player_count: int
-    focal_seat: int
-    engine_seed: int
-    opponent_names_by_seat: list[str | None]
-
-
-class CorpusSnapshotEntry(TypedDict):
-    digest: str
-    recipe: CorpusRecipe
-    cases: list[PromotionCase]
-
-
-class CorpusSnapshot(TypedDict):
-    development: CorpusSnapshotEntry
-    held_out: CorpusSnapshotEntry
 
 
 class GameSummary(TypedDict):
@@ -70,13 +38,6 @@ def _load_json(path: Path) -> dict[str, Any]:
     return _parse_json_object(path.read_text(encoding="utf-8"))
 
 
-def _load_corpus_snapshot() -> CorpusSnapshot:
-    return cast(
-        CorpusSnapshot,
-        _parse_json_object(CORPUS_SNAPSHOT_PATH.read_text(encoding="utf-8")),
-    )
-
-
 def _load_game_summaries() -> list[GameSummary]:
     return [
         cast(GameSummary, _parse_json_object(line))
@@ -88,32 +49,10 @@ def _without_focal_seat(values: list[str], focal_seat: int) -> list[str]:
     return values[:focal_seat] + values[focal_seat + 1 :]
 
 
-def _report_corpus_metadata(snapshot: CorpusSnapshotEntry) -> dict[str, object]:
-    recipe = snapshot["recipe"]
-    return {
-        "charts": recipe["charts"],
-        "digest": snapshot["digest"],
-        "engine_seeds": [case["engine_seed"] for case in snapshot["cases"]],
-        "name": recipe["name"],
-        "opponent_names": recipe["opponent_names"],
-        "player_counts": recipe["player_counts"],
-        "purpose": recipe["purpose"],
-        "repetitions_per_seat_cell": recipe["repetitions_per_seat_cell"],
-        "root_seed": recipe["root_seed"],
-    }
-
-
-def _bot_names_for_case(case: PromotionCase, focal_identity: str) -> list[str]:
-    return [
-        focal_identity if opponent_name is None else opponent_name
-        for opponent_name in case["opponent_names_by_seat"]
-    ]
-
-
 def test_promotion_report_pins_the_held_out_neural_decision() -> None:
     report = _load_json(REPORT_PATH)
-    snapshot = _load_corpus_snapshot()
 
+    assert report["artifacts"] == ["promotion-report.json", "paired-games.jsonl"]
     assert report["repository_commit"] == "5852176ff3c28b3f469a85a349be40ce41c05aa8"
     assert report["candidate"] == {
         "bot_id": CANDIDATE_IDENTITY,
@@ -123,14 +62,12 @@ def test_promotion_report_pins_the_held_out_neural_decision() -> None:
         "bot_id": INCUMBENT_IDENTITY,
         "name": INCUMBENT_IDENTITY,
     }
-    assert snapshot["development"]["digest"] == (
+    assert report["corpora"]["development"]["digest"] == (
         "17c016350dbe717641b8cd499b0908e3bc0faa811a3b4f5e574f8713a5bf2b3d"
     )
-    assert snapshot["held_out"]["digest"] == (
+    assert report["corpora"]["held_out"]["digest"] == (
         "de686b97e9318d840554514d71158e7d30e4b1603c6692d68b73bc77947b10da"
     )
-    assert report["corpora"]["development"] == _report_corpus_metadata(snapshot["development"])
-    assert report["corpora"]["held_out"] == _report_corpus_metadata(snapshot["held_out"])
     assert report["execution"] == {
         "batch_size": 64,
         "bot_ids": [
@@ -176,13 +113,24 @@ def test_promotion_report_pins_the_held_out_neural_decision() -> None:
     assert report["promoted"] is True
 
 
-def test_held_out_snapshot_covers_every_requested_seat_with_distinct_seeds() -> None:
-    held_out = _load_corpus_snapshot()["held_out"]
-    recipe = held_out["recipe"]
-    cases = held_out["cases"]
+def test_report_and_games_cover_every_requested_seat_with_distinct_seeds() -> None:
+    report = _load_json(REPORT_PATH)
+    held_out = report["corpora"]["held_out"]
+    summaries = _load_game_summaries()
+    candidate_games = summaries[::2]
 
-    assert recipe == {
-        "schema_version": 1,
+    assert {
+        field: held_out[field]
+        for field in (
+            "name",
+            "purpose",
+            "root_seed",
+            "repetitions_per_seat_cell",
+            "charts",
+            "player_counts",
+            "opponent_names",
+        )
+    } == {
         "name": "held-out-v1",
         "purpose": "held_out",
         "root_seed": 90001,
@@ -191,10 +139,18 @@ def test_held_out_snapshot_covers_every_requested_seat_with_distinct_seeds() -> 
         "player_counts": [3, 4, 5],
         "opponent_names": ["random", "aggressive-v1", "balanced-v1", "passive-v1"],
     }
-    assert len(cases) == 480
-    assert len({case["engine_seed"] for case in cases}) == 480
+    assert len(candidate_games) == 480
+    assert len(set(held_out["engine_seeds"])) == 480
+    assert {game["seed"] for game in candidate_games} == set(held_out["engine_seeds"])
 
-    coverage = Counter((case["chart"], case["player_count"], case["focal_seat"]) for case in cases)
+    coverage = Counter(
+        (
+            game["ruleset_name"].removeprefix("live-"),
+            game["player_count"],
+            game["bot_ids"].index(CANDIDATE_IDENTITY),
+        )
+        for game in candidate_games
+    )
     requested_seats = {
         (chart, player_count, focal_seat)
         for chart in "ABCDE"
@@ -207,40 +163,33 @@ def test_held_out_snapshot_covers_every_requested_seat_with_distinct_seeds() -> 
 
 def test_paired_game_evidence_contains_480_ordered_fault_free_twins() -> None:
     summaries = _load_game_summaries()
-    held_out = _load_corpus_snapshot()["held_out"]
-    cases = held_out["cases"]
 
-    assert len(summaries) == 2 * len(cases) == 960
-    for pair_index, case in enumerate(cases):
+    assert len(summaries) == 960
+    for pair_index in range(480):
         candidate_game = summaries[2 * pair_index]
         incumbent_game = summaries[2 * pair_index + 1]
 
         assert candidate_game["game_index"] == 2 * pair_index
         assert incumbent_game["game_index"] == 2 * pair_index + 1
 
-        focal_seat = case["focal_seat"]
+        focal_seat = candidate_game["bot_ids"].index(CANDIDATE_IDENTITY)
         assert candidate_game["bot_ids"][focal_seat] == CANDIDATE_IDENTITY
         assert incumbent_game["bot_ids"][focal_seat] == INCUMBENT_IDENTITY
-        assert candidate_game["bot_names"] == _bot_names_for_case(case, CANDIDATE_IDENTITY)
-        assert incumbent_game["bot_names"] == _bot_names_for_case(case, INCUMBENT_IDENTITY)
+        assert candidate_game["bot_names"][focal_seat] == CANDIDATE_IDENTITY
+        assert incumbent_game["bot_names"][focal_seat] == INCUMBENT_IDENTITY
 
-        assert candidate_game["seed"] == incumbent_game["seed"] == case["engine_seed"]
+        assert candidate_game["seed"] == incumbent_game["seed"]
         assert candidate_game["root_seed"] == incumbent_game["root_seed"] == 90001
-        assert (
-            candidate_game["ruleset_name"]
-            == incumbent_game["ruleset_name"]
-            == (f"live-{case['chart']}")
-        )
-        assert (
-            candidate_game["player_count"] == incumbent_game["player_count"] == case["player_count"]
-        )
-        assert _without_focal_seat(
-            candidate_game["bot_ids"],
-            focal_seat,
-        ) == _without_focal_seat(
-            incumbent_game["bot_ids"],
-            focal_seat,
-        )
+        assert candidate_game["ruleset_name"] == incumbent_game["ruleset_name"]
+        assert candidate_game["player_count"] == incumbent_game["player_count"]
+        for field in ("bot_ids", "bot_names"):
+            assert _without_focal_seat(
+                candidate_game[field],
+                focal_seat,
+            ) == _without_focal_seat(
+                incumbent_game[field],
+                focal_seat,
+            )
 
         assert candidate_game["fault_counts"] == [0] * candidate_game["player_count"]
         assert incumbent_game["fault_counts"] == [0] * incumbent_game["player_count"]
