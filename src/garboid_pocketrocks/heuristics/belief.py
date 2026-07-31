@@ -251,7 +251,7 @@ def _validate_context(
     return action
 
 
-def _terminal_price_pmf(
+def terminal_price_pmf(
     *,
     known_reveals: int,
     unseen_population: int,
@@ -391,7 +391,7 @@ def _build_suit_beliefs(
         accounting.unseen_by_suit,
         strict=True,
     ):
-        terminal_price_pmf = _terminal_price_pmf(
+        price_pmf = terminal_price_pmf(
             known_reveals=known,
             unseen_population=accounting.unseen_population,
             unseen_suit_count=unseen,
@@ -404,9 +404,9 @@ def _build_suit_beliefs(
                 unseen_suit_count=unseen,
                 unseen_population=accounting.unseen_population,
                 opponent_hidden_slots=accounting.opponent_hidden_slots,
-                terminal_price_pmf=terminal_price_pmf,
+                terminal_price_pmf=price_pmf,
                 expected_terminal_price=_expected_terminal_price(
-                    terminal_price_pmf,
+                    price_pmf,
                     value_chart,
                 ),
             )

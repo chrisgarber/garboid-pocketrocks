@@ -31,6 +31,7 @@ htmlcov/
 /evolution-results/
 /promotion-results/
 /tournament-results/
+/docs/benchmarks/tournaments/
 *.onnx
 *.pt
 *.pth

@@ -101,20 +101,19 @@ def test_bot_filters_use_curated_defaults_when_include_is_omitted() -> None:
     )
 
     assert tuple(spec.name for spec in selected) == (
-        "random",
-        "fixed-bid",
-        "aggressive-v1",
-        "balanced-v1",
-        "passive-v1",
+        "fixed-objective-overlay-v2",
+        "fixed-objective-overlay-v1",
+        "fixed-bid-tuned-v1",
         "aggressive-v2",
+        "fixed-bid-diverse-v1",
         "balanced-v2",
+        "fixed-bid",
+        "vector_ppo_large_v1_g350k",
         "passive-v2",
+        "passive-v1",
         "aggressive-v3",
         "balanced-v3",
         "passive-v3",
-        "sdk-greedy-value-v1",
-        "vector_ppo_small_v1_g1500",
-        "vector_ppo_large_v1_g350k",
     )
 
 
@@ -156,6 +155,14 @@ def test_cli_runs_all_conditions_with_current_registry(tmp_path: Path) -> None:
     assert (tmp_path / "ratings.csv").is_file()
     assert (tmp_path / "summary.json").is_file()
     assert (tmp_path / "report.html").is_file()
+    summary = json.loads((tmp_path / "summary.json").read_text(encoding="utf-8"))
+    configured_names = tuple(item["name"] for item in summary["configuration"]["bots"])
+    overlay_v2_row = next(
+        row for row in summary["leaderboard"] if row["bot_name"] == "fixed-objective-overlay-v2"
+    )
+
+    assert "fixed-objective-overlay-v2" in configured_names
+    assert overlay_v2_row["faults"] == 0
 
 
 def test_cli_writes_and_prints_decision_reports_only_when_requested(

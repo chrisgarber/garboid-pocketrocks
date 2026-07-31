@@ -131,6 +131,8 @@ def _report_inputs() -> tuple[
         candidate=plan.candidate,
         incumbent=plan.incumbent,
         opponents=plan.opponents,
+        opponent_pool=plan.opponent_pool,
+        plan=plan,
         development=development,
         held_out=held_out,
         bootstrap_samples=1_000,
@@ -206,6 +208,8 @@ def test_report_payload_has_complete_explicit_schema() -> None:
         "candidate",
         "incumbent",
         "opponents",
+        "opponent_pool",
+        "effective_plan",
         "execution",
         "corpora",
         "coverage",
@@ -221,11 +225,27 @@ def test_report_payload_has_complete_explicit_schema() -> None:
     assert payload["candidate"] == {"name": "candidate", "bot_id": "candidate"}
     assert payload["incumbent"] == {"name": "incumbent", "bot_id": "incumbent"}
     assert payload["opponents"] == [
-        {"name": "opponent-a", "bot_id": "opponent-a"},
         {"name": "opponent-b", "bot_id": "opponent-b"},
+        {"name": "opponent-a", "bot_id": "opponent-a"},
     ]
+    assert payload["opponent_pool"] == {
+        "configured": [
+            {"name": "opponent-a", "bot_id": "opponent-a"},
+            {"name": "opponent-b", "bot_id": "opponent-b"},
+        ],
+        "exclusions": [],
+        "remaining": [
+            {"name": "opponent-a", "bot_id": "opponent-a"},
+            {"name": "opponent-b", "bot_id": "opponent-b"},
+        ],
+    }
+    effective_plan = payload["effective_plan"]
+    assert isinstance(effective_plan, dict)
+    assert report.plan is not None
+    assert effective_plan["digest"] == report.plan.digest
+    assert len(effective_plan["pairs"]) == 2
     assert payload["execution"] == {
-        "bot_ids": ["candidate", "incumbent", "opponent-a", "opponent-b"],
+        "bot_ids": ["candidate", "incumbent", "opponent-b", "opponent-a"],
         "games": 4,
         "player_counts": [3],
         "value_charts": [case.chart for case in held_out.cases],

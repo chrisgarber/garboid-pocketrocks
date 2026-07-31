@@ -19,7 +19,14 @@ from garboid_pocketrocks.promotion.runner import (
 )
 
 _REPOSITORY_COMMIT = "integration-test-commit"
-_OPPONENT_NAMES = ("random", "aggressive-v1", "balanced-v1", "passive-v1")
+_OPPONENT_NAMES = (
+    "aggressive-v1",
+    "balanced-v1",
+    "passive-v1",
+    "aggressive-v2",
+    "balanced-v2",
+    "passive-v2",
+)
 
 
 class _IllegalBidBrain:
@@ -146,6 +153,11 @@ def test_real_paired_gate_is_deterministic_across_serial_parallel_and_repeat_run
     assert serial.plan is not None
     assert serial.monte_carlo_result is not None
     assert serial.plan == parallel.plan == repeated.plan
+    assert serial.plan.digest == parallel.plan.digest == repeated.plan.digest
+    assert tuple(
+        (exclusion.opponent.name, exclusion.reason)
+        for exclusion in serial.plan.opponent_pool.exclusions
+    ) == (("aggressive-v2", "candidate"), ("balanced-v2", "incumbent"))
     assert serial.monte_carlo_result == parallel.monte_carlo_result
     assert serial.report.analysis == parallel.report.analysis
     assert serial.report == replace(parallel.report, workers=serial.report.workers)
@@ -205,6 +217,13 @@ def test_real_paired_gate_is_deterministic_across_serial_parallel_and_repeat_run
             == pair.incumbent_game.lineup[: pair.case.focal_seat]
             + pair.incumbent_game.lineup[pair.case.focal_seat + 1 :]
         )
+        non_focal_ids = {
+            spec.bot_id
+            for seat, spec in enumerate(pair.candidate_game.lineup)
+            if seat != pair.case.focal_seat
+        }
+        assert serial.plan.candidate.bot_id not in non_focal_ids
+        assert serial.plan.incumbent.bot_id not in non_focal_ids
 
 
 def test_changing_the_held_out_root_seed_changes_the_digest_and_executed_seeds(

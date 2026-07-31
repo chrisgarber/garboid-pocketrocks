@@ -643,6 +643,64 @@ def test_runner_recomputes_and_rebinds_the_development_corpus_before_simulation(
     assert not tuple(tmp_path.iterdir())
 
 
+def test_insufficient_filtered_opponents_preserve_pool_evidence(tmp_path: Path) -> None:
+    config, registry = _run_inputs(pair_count=1)
+    held_out = replace(
+        config.held_out,
+        recipe=replace(
+            config.held_out.recipe,
+            opponent_names=(
+                config.candidate.name,
+                config.incumbent.name,
+                "opponent-a",
+            ),
+        ),
+        cases=(
+            replace(
+                config.held_out.cases[0],
+                opponent_names_by_seat=(
+                    None,
+                    config.candidate.name,
+                    config.incumbent.name,
+                ),
+            ),
+        ),
+    )
+
+    run = PromotionRunner.run(
+        replace(config, held_out=held_out),
+        registry=registry,
+        workers=1,
+        output_dir=tmp_path,
+        repository_commit="test-commit",
+    )
+
+    assert run.plan is None
+    assert [failure.code for failure in run.report.analysis.failures] == [
+        "insufficient_eligible_opponents"
+    ]
+    payload = json.loads(run.artifacts.report_json.read_bytes())
+    assert payload["effective_plan"] is None
+    assert payload["opponent_pool"] == {
+        "configured": [
+            {"name": "candidate", "bot_id": "candidate"},
+            {"name": "incumbent", "bot_id": "incumbent"},
+            {"name": "opponent-a", "bot_id": "opponent-a"},
+        ],
+        "exclusions": [
+            {
+                "opponent": {"name": "candidate", "bot_id": "candidate"},
+                "reason": "candidate",
+            },
+            {
+                "opponent": {"name": "incumbent", "bot_id": "incumbent"},
+                "reason": "incumbent",
+            },
+        ],
+        "remaining": [{"name": "opponent-a", "bot_id": "opponent-a"}],
+    }
+
+
 @pytest.mark.parametrize(
     ("name", "brain_factory"),
     (

@@ -23,7 +23,7 @@ from garboid_pocketrocks.promotion.runner import PromotionRun, PromotionRunConfi
 
 from .test_runner import _run_inputs
 
-_DEVELOPMENT_CORPUS_DIGEST = "17c016350dbe717641b8cd499b0908e3bc0faa811a3b4f5e574f8713a5bf2b3d"
+_DEVELOPMENT_CORPUS_DIGEST = "3baf37660bb33ac2571ba62a09873a74cccbe6d7491f063e5d4a3e641fd24f4c"
 
 
 @dataclass(frozen=True, slots=True)
@@ -109,6 +109,8 @@ def _completed_run(tmp_path: Path, *, promoted: bool) -> PromotionRun:
         candidate=plan_candidate,
         incumbent=plan_incumbent,
         opponents=(registry["opponent-a"], registry["opponent-b"]),
+        opponent_pool=None,
+        plan=None,
         development=config.development,
         held_out=config.held_out,
         bootstrap_samples=1_000,
