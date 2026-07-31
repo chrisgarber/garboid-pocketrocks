@@ -19,6 +19,7 @@ from pocketrocks.sim.constants import (
     ACTION_WIRE_IDS,
     INVEST_PAYOUT,
     LOAN_PRINCIPAL,
+    VALUE_CHARTS,
     objective_pattern_met,
 )
 
@@ -32,7 +33,10 @@ from garboid_pocketrocks.adapters.public_history import (
 )
 from garboid_pocketrocks.heuristics.belief import BeliefState, build_belief
 from garboid_pocketrocks.heuristics.errors import HeuristicInputError
-from garboid_pocketrocks.knowledge import RulesetKnowledge, knowledge_for_context
+from garboid_pocketrocks.knowledge import (
+    RulesetKnowledge,
+    canonical_knowledge,
+)
 
 LATE_GAME_PUBLIC_BELIEF_V1_DEV_IDENTITY = "late-game-public-belief-v1-dev"
 """Development-only identity; it is intentionally absent from bot registries."""
@@ -75,7 +79,9 @@ class PublicSearchPosition:
     remaining_action_counts: tuple[int, ...]
     unseen_resource_counts: tuple[int, ...]
     opponent_hidden_slots_by_seat: tuple[int, ...]
+    public_future_resource_prefix: tuple[int, ...]
     belief: BeliefState
+    public_history: PublicHistory
     canonical_input_digest: str
 
 
@@ -94,8 +100,15 @@ class SampledWorld:
     search_seed: int
     sample_index: int
     hand_suits_by_seat: tuple[tuple[int, ...], ...]
-    future_resource_suits: tuple[int, ...]
+    public_future_resource_prefix: tuple[int, ...]
+    hidden_future_resource_suits: tuple[int, ...]
     future_action_ids: tuple[int, ...]
+
+    @property
+    def future_resource_suits(self) -> tuple[int, ...]:
+        """Return the known carried prefix followed by sampled hidden cards."""
+
+        return self.public_future_resource_prefix + self.hidden_future_resource_suits
 
 
 @dataclass(slots=True)
@@ -122,10 +135,7 @@ def reconstruct_public_search_position(
 ) -> PublicSearchPosition:
     """Validate and canonicalize exactly the information a live bot can know."""
 
-    try:
-        canonical_ruleset = knowledge_for_context(context)
-    except ValueError as error:
-        raise HeuristicInputError(str(error)) from error
+    canonical_ruleset = _canonical_ruleset_for_context(context)
     if ruleset != canonical_ruleset:
         raise HeuristicInputError("ruleset knowledge is not canonical for the public context")
     belief = build_belief(context, ruleset)
@@ -138,14 +148,16 @@ def reconstruct_public_search_position(
     if any(count < 0 for count in remaining_action_counts):
         raise HeuristicInputError("public history uses more actions than the ruleset contains")
 
-    # During a reveal request the latest turn's resources have already moved
-    # into the winner's public holdings. They remain in the SDK context as the
-    # latest turn description, so count them as visible only before bids resolve.
-    visible_counts = (
-        _count_suits(context.current_resource_ids)
+    public_future_resource_prefix = _public_future_resource_prefix(context)
+    # Before resolution both upcoming cards are still in the live position.
+    # During a reveal, awarded cards are already in public holdings and only
+    # the action-aware carried prefix remains face up.
+    visible_resource_ids = (
+        tuple(suit_id for suit_id in context.current_resource_ids if suit_id)
         if context.decision_kind == "submitBid"
-        else (0,) * _SUIT_COUNT
+        else public_future_resource_prefix
     )
+    visible_counts = _count_suits(visible_resource_ids)
     known_counts = tuple(
         sum(row[suit_index] for row in context.won_resource_counts_by_seat)
         + sum(row[suit_index] for row in context.revealed_info_counts_by_seat)
@@ -195,6 +207,7 @@ def reconstruct_public_search_position(
         "remaining_action_counts": remaining_action_counts,
         "unseen_resource_counts": unseen_resource_counts,
         "opponent_hidden_slots_by_seat": opponent_hidden_slots_by_seat,
+        "public_future_resource_prefix": public_future_resource_prefix,
     }
     digest = _canonical_digest(canonical_fields, history)
     assert context.current_action_id is not None
@@ -221,7 +234,9 @@ def reconstruct_public_search_position(
         remaining_action_counts=remaining_action_counts,
         unseen_resource_counts=unseen_resource_counts,
         opponent_hidden_slots_by_seat=opponent_hidden_slots_by_seat,
+        public_future_resource_prefix=public_future_resource_prefix,
         belief=belief,
+        public_history=history,
         canonical_input_digest=digest,
     )
 
@@ -234,6 +249,7 @@ def sample_compatible_worlds(
 ) -> tuple[SampledWorld, ...]:
     """Return a deterministic, prefix-stable sequence of compatible worlds."""
 
+    position = _revalidate_public_search_position(position)
     if candidate_identity != LATE_GAME_PUBLIC_BELIEF_V1_DEV_IDENTITY:
         raise ValueError(
             "public-belief samples require the explicit development candidate identity"
@@ -286,11 +302,82 @@ def sample_compatible_worlds(
                 search_seed=_FIXED_SEARCH_SEED,
                 sample_index=sample_index,
                 hand_suits_by_seat=tuple(hands),
-                future_resource_suits=tuple(resource_order[cursor:]),
+                public_future_resource_prefix=position.public_future_resource_prefix,
+                hidden_future_resource_suits=tuple(resource_order[cursor:]),
                 future_action_ids=action_order,
             )
         )
     return tuple(worlds)
+
+
+def _canonical_ruleset_for_context(context: DecisionContext) -> RulesetKnowledge:
+    """Return pinned SDK rules without trusting context-derived rule counts."""
+
+    try:
+        chart_name = next(
+            name for name, values in VALUE_CHARTS.items() if values == context.value_chart
+        )
+    except StopIteration as error:
+        raise HeuristicInputError("SDK context contains an unknown value chart") from error
+    try:
+        return canonical_knowledge(
+            context.player_count,
+            value_chart=chart_name,
+            objectives_enabled=bool(context.objective_ids),
+        )
+    except ValueError as error:
+        raise HeuristicInputError(str(error)) from error
+
+
+def _public_future_resource_prefix(context: DecisionContext) -> tuple[int, ...]:
+    """Return cards publicly known to remain after the active action."""
+
+    assert context.current_action_id is not None
+    action = ActionId(context.current_action_id)
+    if action is ActionId.AUCTION2:
+        return ()
+    if action is ActionId.AUCTION1:
+        return tuple(suit_id for suit_id in context.current_resource_ids[1:] if suit_id)
+    return tuple(suit_id for suit_id in context.current_resource_ids if suit_id)
+
+
+def _revalidate_public_search_position(
+    position: PublicSearchPosition,
+) -> PublicSearchPosition:
+    """Rebuild a position so copied or replaced dataclasses cannot forge trust."""
+
+    context = DecisionContext(
+        request_id="canonical-public-search-position",
+        deadline_at=2**63 - 1,
+        received_at=0,
+        decision_kind=position.decision_kind,
+        player_count=position.player_count,
+        starting_cash=position.starting_cash,
+        value_chart=position.value_chart,
+        objective_ids=position.objective_ids,
+        current_action_id=position.current_action_id,
+        current_resource_ids=position.current_resource_ids,
+        cash_by_seat=position.cash_by_seat,
+        tiebreak_seat=position.tiebreak_seat,
+        won_resource_counts_by_seat=position.won_resource_counts_by_seat,
+        revealed_info_counts_by_seat=position.revealed_info_counts_by_seat,
+        owned_objective_ids_by_seat=position.owned_objective_ids_by_seat,
+        bot_seat=position.bot_seat,
+        current_hand_suit_ids=position.current_hand_suit_ids,
+        legal_max_amount=position.legal_max_amount,
+        revealable_count=len(position.current_hand_suit_ids),
+    )
+    try:
+        rebuilt = reconstruct_public_search_position(
+            context,
+            _canonical_ruleset_for_context(context),
+            position.public_history,
+        )
+    except HeuristicInputError as error:
+        raise ValueError("public search position does not match canonical public input") from error
+    if position != rebuilt:
+        raise ValueError("public search position does not match canonical public input")
+    return rebuilt
 
 
 def _replay_history(
@@ -536,6 +623,10 @@ def _validated_resources(values: tuple[int, int], index: int) -> tuple[int, int]
         raise HeuristicInputError(f"public history event {index} resource ID is unknown")
     if values[0] == 0 and values[1] != 0:
         raise HeuristicInputError(f"public history event {index} resources are not zero-padded")
+    if values[0] == 0:
+        raise HeuristicInputError(
+            f"public history event {index} opens a turn after resources are exhausted"
+        )
     return values
 
 

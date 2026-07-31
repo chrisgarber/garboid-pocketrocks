@@ -3,13 +3,15 @@ from __future__ import annotations
 import hashlib
 import json
 from collections import Counter
+from collections.abc import Callable
 from dataclasses import asdict, fields, replace
 
 import pytest
-from pocketrocks import BotDecision, DecisionContext
+from pocketrocks import ActionId, BotDecision, DecisionContext
 
 from garboid_pocketrocks.adapters.public_history import (
     PublicEventKind,
+    PublicGameSetup,
     PublicHistory,
     PublicInformationRevealed,
     PublicTurnOpened,
@@ -65,10 +67,10 @@ def _assert_world_conserves(
         for suit_id, total in enumerate(ruleset.resource_counts, start=1)
         for _ in range(total)
     )
-    visible = (
+    visible_or_carried = (
         [suit_id for suit_id in context.current_resource_ids if suit_id]
         if context.decision_kind == "submitBid"
-        else []
+        else list(position.public_future_resource_prefix)
     )
     public_cards = (
         [
@@ -83,12 +85,16 @@ def _assert_world_conserves(
             for suit_id, count in enumerate(row, start=1)
             for _ in range(count)
         ]
-        + visible
+        + visible_or_carried
     )
     sampled_cards = [suit_id for hand in world.hand_suits_by_seat for suit_id in hand] + list(
-        world.future_resource_suits
+        world.hidden_future_resource_suits
     )
     assert Counter(public_cards + sampled_cards) == expected_resources
+    assert world.public_future_resource_prefix == position.public_future_resource_prefix
+    assert world.future_resource_suits == (
+        position.public_future_resource_prefix + world.hidden_future_resource_suits
+    )
 
     expected_actions = Counter(
         action_id
@@ -143,7 +149,9 @@ def test_public_position_is_a_closed_immutable_allowlist() -> None:
         "remaining_action_counts",
         "unseen_resource_counts",
         "opponent_hidden_slots_by_seat",
+        "public_future_resource_prefix",
         "belief",
+        "public_history",
         "canonical_input_digest",
     }
     assert not names & {
@@ -157,6 +165,62 @@ def test_public_position_is_a_closed_immutable_allowlist() -> None:
         "request_id",
     }
     assert hasattr(PublicSearchPosition, "__slots__")
+
+
+def test_reveal_samples_preserve_action_aware_public_resource_prefixes() -> None:
+    positions_by_action: dict[str, tuple[DecisionContext, PublicHistory, PublicSearchPosition]] = {}
+    for seed in range(32):
+        session = SdkGameSession.start(player_count=3, seed=f"reveal-prefix-{seed}")
+        while not session.terminated and len(positions_by_action) < 3:
+            history = public_history_from_sdk_events(session.events)
+            if session.pending.decision_kind == "selectInfoToReveal":
+                context = session.pending.contexts[0][1]
+                assert context.current_action_id is not None
+                action = ActionId(context.current_action_id)
+                category = (
+                    "auction1"
+                    if action is ActionId.AUCTION1
+                    else "auction2"
+                    if action is ActionId.AUCTION2
+                    else "non-resource"
+                )
+                positions_by_action.setdefault(
+                    category, (context, history, _reconstruct(context, history))
+                )
+
+            if session.pending.decision_kind == "submitBid":
+                decisions = {seat: BotDecision.pass_turn() for seat in session.pending.acting_seats}
+            else:
+                reveal_seat = session.pending.acting_seats[0]
+                decisions = {reveal_seat: BotDecision.select_info_to_reveal(0)}
+            session.step(decisions)
+        if len(positions_by_action) == 3:
+            break
+
+    assert set(positions_by_action) == {"auction1", "auction2", "non-resource"}
+    for category, (context, history, position) in positions_by_action.items():
+        visible_resources = tuple(suit_id for suit_id in context.current_resource_ids if suit_id)
+        if category == "auction1":
+            expected_prefix = visible_resources[1:]
+        elif category == "auction2":
+            expected_prefix = ()
+        else:
+            expected_prefix = visible_resources
+        world = sample_compatible_worlds(
+            position,
+            candidate_identity=LATE_GAME_PUBLIC_BELIEF_V1_DEV_IDENTITY,
+            sample_count=1,
+        )[0]
+
+        assert position.public_future_resource_prefix == expected_prefix
+        assert world.future_resource_suits[: len(expected_prefix)] == expected_prefix
+        assert tuple(suit.unseen_suit_count for suit in position.belief.suits) == (
+            position.unseen_resource_counts
+        )
+        assert sum(position.belief.expected_future_biddable_counts) == pytest.approx(
+            len(world.future_resource_suits)
+        )
+        _assert_world_conserves(context, history, position, world)
 
 
 @pytest.mark.parametrize("player_count", (3, 4, 5))
@@ -241,12 +305,12 @@ def test_sampling_is_reproducible_prefix_stable_and_identity_bound() -> None:
     assert tuple(world.sample_index for world in long) == tuple(range(8))
     assert (
         position.canonical_input_digest
-        == "bc24b6b9a3176b47d1ecaa6da832b11998b536a5941b89c780b698725d732183"
+        == "6bf846b175921fc79b1afd4c192ea98204ebb0a9b1f8cf635350b499ba8b3fbb"
     )
     encoded_world = json.dumps(asdict(short[0]), sort_keys=True, separators=(",", ":")).encode()
     assert (
         hashlib.sha256(encoded_world).hexdigest()
-        == "4fef75ef0026a162c12c2cff68ac6db38bba41c6429c98167a66bdac0d4b153e"
+        == "167a8ed7c50b2f76abc85a3485908ca28132f955261dd409410bebe6a19d79a2"
     )
     with pytest.raises(ValueError, match="explicit development candidate identity"):
         sample_compatible_worlds(
@@ -379,3 +443,119 @@ def test_noncanonical_ruleset_and_invalid_sample_counts_fail_closed() -> None:
                 candidate_identity=LATE_GAME_PUBLIC_BELIEF_V1_DEV_IDENTITY,
                 sample_count=invalid,  # type: ignore[arg-type]
             )
+
+
+def test_correlated_starting_cash_tamper_cannot_redefine_sdk_rules() -> None:
+    _session, context, history, _position = _first_position()
+    setup = history[0]
+    assert isinstance(setup, PublicGameSetup)
+    changed_context = replace(
+        context,
+        starting_cash=31,
+        cash_by_seat=(31, 31, 31),
+        legal_max_amount=31,
+    )
+    changed_history = (replace(setup, starting_cash=31), *history[1:])
+    context_derived_rules = knowledge_for_context(changed_context)
+
+    with pytest.raises(HeuristicInputError, match="not canonical"):
+        reconstruct_public_search_position(
+            changed_context,
+            context_derived_rules,
+            changed_history,
+        )
+
+
+def test_correlated_private_hand_size_tamper_cannot_redefine_sdk_rules() -> None:
+    _session, context, history, _position = _first_position()
+    changed_context = replace(
+        context,
+        current_hand_suit_ids=context.current_hand_suit_ids[:-1],
+        revealable_count=context.revealable_count - 1,
+    )
+    context_derived_rules = knowledge_for_context(changed_context)
+
+    assert context_derived_rules.private_cards_per_player == 4
+    with pytest.raises(HeuristicInputError, match="not canonical"):
+        reconstruct_public_search_position(
+            changed_context,
+            context_derived_rules,
+            history,
+        )
+
+
+def test_correlated_objective_count_tamper_cannot_redefine_sdk_rules() -> None:
+    _session, context, history, _position = _first_position()
+    setup = history[0]
+    assert isinstance(setup, PublicGameSetup)
+    changed_objectives = context.objective_ids[:-1]
+    changed_context = replace(context, objective_ids=changed_objectives)
+    changed_history = (replace(setup, objective_ids=changed_objectives), *history[1:])
+    context_derived_rules = knowledge_for_context(changed_context)
+
+    assert context_derived_rules.active_objective_count == 3
+    with pytest.raises(HeuristicInputError, match="not canonical"):
+        reconstruct_public_search_position(
+            changed_context,
+            context_derived_rules,
+            changed_history,
+        )
+
+
+def test_turn_cannot_open_after_public_resources_are_exhausted() -> None:
+    _session, context, history, _position = _first_position()
+    turn = history[-1]
+    assert isinstance(turn, PublicTurnOpened)
+    exhausted_turn = replace(
+        turn,
+        action_id=int(ActionId.LOAN10),
+        resource_ids=(0, 0),
+    )
+    changed_context = replace(
+        context,
+        current_action_id=int(ActionId.LOAN10),
+        current_resource_ids=(0, 0),
+        legal_max_amount=context.cash_by_seat[context.bot_seat] + 10,
+    )
+
+    with pytest.raises(HeuristicInputError, match="resources are exhausted"):
+        reconstruct_public_search_position(
+            changed_context,
+            knowledge_for_context(changed_context),
+            (*history[:-1], exhausted_turn),
+        )
+
+
+@pytest.mark.parametrize(
+    "forged_position",
+    (
+        lambda position: replace(
+            position,
+            unseen_resource_counts=(
+                position.unseen_resource_counts[0] + 1,
+                *position.unseen_resource_counts[1:],
+            ),
+        ),
+        lambda position: replace(
+            position,
+            remaining_action_counts=(
+                position.remaining_action_counts[0] + 1,
+                *position.remaining_action_counts[1:],
+            ),
+        ),
+        lambda position: replace(position, public_future_resource_prefix=(5,)),
+        lambda position: replace(position, canonical_input_digest="0" * 64),
+    ),
+)
+def test_sampling_revalidates_replaced_positions_before_using_old_digest(
+    forged_position: Callable[[PublicSearchPosition], PublicSearchPosition],
+) -> None:
+    _session, _context, _history, position = _first_position()
+    forged = forged_position(position)
+
+    with pytest.raises(ValueError, match="does not match canonical public input"):
+        sample_compatible_worlds(
+            forged,
+            candidate_identity=LATE_GAME_PUBLIC_BELIEF_V1_DEV_IDENTITY,
+            sample_count=1,
+        )

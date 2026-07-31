@@ -143,10 +143,26 @@ def _count_resources(resource_ids: Iterable[int]) -> tuple[int, ...]:
     return tuple(counts)
 
 
-def _visible_resource_counts(context: DecisionContext) -> tuple[int, ...]:
-    if context.decision_kind != "submitBid":
-        return (0,) * _SUIT_COUNT
-    return _count_resources(context.current_resource_ids)
+def _visible_resource_counts(
+    context: DecisionContext,
+    action: ActionId,
+) -> tuple[int, ...]:
+    """Count cards still visible in the live position.
+
+    A reveal request arrives after the active action resolved. Auction2 moved
+    both cards to the winner, Auction1 left its second card face up, and a
+    non-resource action left both cards face up. The SDK context continues to
+    describe the resolved turn, so the decision kind and action together are
+    required to avoid treating those carried public cards as hidden again.
+    """
+
+    resource_ids: tuple[int, ...] = context.current_resource_ids
+    if context.decision_kind == "selectInfoToReveal":
+        if action is ActionId.AUCTION2:
+            resource_ids = ()
+        elif action is ActionId.AUCTION1:
+            resource_ids = resource_ids[1:]
+    return _count_resources(resource_ids)
 
 
 def offered_resource_counts(
@@ -292,7 +308,7 @@ def _account_public_cards(
         sum(row[index] for row in context.won_resource_counts_by_seat)
         for index in range(_SUIT_COUNT)
     )
-    visible_by_suit = _visible_resource_counts(context)
+    visible_by_suit = _visible_resource_counts(context, action)
     offered_by_suit = offered_resource_counts(context, action)
     known_future_by_suit = tuple(
         visible - offered for visible, offered in zip(visible_by_suit, offered_by_suit, strict=True)

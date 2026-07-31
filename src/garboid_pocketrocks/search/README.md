@@ -11,11 +11,20 @@ the current turn, and legal bid limits. Contradictions fail closed. Request
 IDs, deadlines, metadata, simulator seeds, private decks, and real opponent
 hands are not accepted as position inputs.
 
+Ruleset validation is anchored to `canonical_knowledge` from the pinned SDK
+constants. A context and caller-supplied rules object cannot agree on a made-up
+starting cash, private hand size, objective count, or exhausted-resource turn
+and thereby redefine the game. Sampling also reconstructs the position from
+its stored canonical public history and compares every field, belief, and
+digest before use, so copying a position with `dataclasses.replace` does not
+preserve trust.
+
 `sample_compatible_worlds` fills the genuinely unknown parts of a validated
 position:
 
 - each opponent's remaining hand slots;
-- the still-hidden resource order; and
+- the action-aware public resource prefix followed by the still-hidden
+  resource order; and
 - the still-hidden action order.
 
 It uniformly permutes the exact finite multisets that remain after public card
@@ -24,6 +33,12 @@ existing heuristic belief. SHA-256 ranking makes samples deterministic from
 the explicit development identity, canonical public-input digest, fixed
 search seed, and sample index. Asking for more work extends the same sample
 prefix instead of changing earlier samples.
+
+The public resource prefix describes what remains after the active action:
+Auction2 carries no cards, Auction1 carries its second visible card, and loans
+or investments carry both visible cards. This is true during a bid and during
+the following reveal. The sampled hidden order begins only after that prefix,
+so a publicly seen card can never be silently resampled.
 
 The only identity allowed by this foundation is
 `late-game-public-belief-v1-dev`. It is deliberately absent from bot
