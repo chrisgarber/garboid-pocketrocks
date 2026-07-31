@@ -57,12 +57,12 @@ def _context(
 @pytest.mark.parametrize(
     ("action_id", "expected"),
     (
-        (ActionId.AUCTION1, 6),
-        (ActionId.AUCTION2, 12),
-        (ActionId.LOAN10, 1),
-        (ActionId.LOAN20, 1),
-        (ActionId.INVEST5, 7),
-        (ActionId.INVEST10, 7),
+        (ActionId.AUCTION1, 5),
+        (ActionId.AUCTION2, 10),
+        (ActionId.LOAN10, 2),
+        (ActionId.LOAN20, 4),
+        (ActionId.INVEST5, 4),
+        (ActionId.INVEST10, 9),
     ),
 )
 def test_fixed_bid_brain_uses_action_target(action_id: ActionId, expected: int) -> None:
