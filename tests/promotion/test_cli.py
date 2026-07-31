@@ -7,12 +7,18 @@ from pathlib import Path
 import pytest
 
 from garboid_pocketrocks.bots import BOT_SPECS_BY_NAME, BotSpec, RandomBot
-from garboid_pocketrocks.heuristics.frozen import FROZEN_CANDIDATES_BY_NAME
+from garboid_pocketrocks.heuristics.frozen import (
+    FROZEN_CANDIDATES_BY_NAME,
+    FrozenPhaseAwareCandidate,
+)
 from garboid_pocketrocks.promotion import cli
 from garboid_pocketrocks.promotion.analysis import (
     PromotionAnalysis,
     PromotionFailure,
     RatingDifferenceInterval,
+)
+from garboid_pocketrocks.promotion.candidates import (
+    FrozenPhaseAwareCandidateProvenance,
 )
 from garboid_pocketrocks.promotion.corpus import PromotionCorpus, load_promotion_corpus
 from garboid_pocketrocks.promotion.reporting import (
@@ -24,10 +30,12 @@ from garboid_pocketrocks.promotion.runner import PromotionRun, PromotionRunConfi
 from .test_runner import _run_inputs
 
 _DEVELOPMENT_CORPUS_DIGEST = "17c016350dbe717641b8cd499b0908e3bc0faa811a3b4f5e574f8713a5bf2b3d"
+_BALANCED_V4_IDENTITY = "balanced-v4-candidate-g009-s000-4d391ce068d7"
 
 
 @dataclass(frozen=True, slots=True)
 class _FrozenCandidateFixture:
+    identity: str
     bot_spec: BotSpec
     predecessor_name: str
     development_corpus_name: str
@@ -42,9 +50,11 @@ class _FrozenCandidateFixture:
 
 
 def _frozen_candidate() -> _FrozenCandidateFixture:
+    identity = "balanced-v3-candidate-test"
     return _FrozenCandidateFixture(
+        identity=identity,
         bot_spec=BotSpec.for_simulation(
-            "balanced-v3-candidate-test",
+            identity,
             RandomBot.build_brain,
         ),
         predecessor_name="balanced-v2",
@@ -251,6 +261,110 @@ def test_frozen_candidate_is_passed_to_the_runner_with_complete_provenance(
         == frozen.candidate_evaluations_digest
     )
     assert registry is BOT_SPECS_BY_NAME
+
+
+def test_phase_aware_frozen_candidate_is_passed_to_runner_with_schema_v2_provenance(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    frozen = FROZEN_CANDIDATES_BY_NAME[_BALANCED_V4_IDENTITY]
+    assert type(frozen) is FrozenPhaseAwareCandidate
+    completed_run = _completed_run(tmp_path, promoted=True)
+    calls: list[PromotionRunConfig] = []
+
+    def record_run(
+        config: PromotionRunConfig,
+        *,
+        registry: object,
+        **kwargs: object,
+    ) -> PromotionRun:
+        assert registry is BOT_SPECS_BY_NAME
+        assert "frozen_candidates" not in kwargs
+        calls.append(config)
+        return completed_run
+
+    monkeypatch.setattr(cli, "load_frozen_candidate_catalog", lambda: FROZEN_CANDIDATES_BY_NAME)
+    monkeypatch.setattr(
+        "garboid_pocketrocks.promotion.candidates.load_frozen_candidate_catalog",
+        lambda: FROZEN_CANDIDATES_BY_NAME,
+    )
+    monkeypatch.setattr(
+        "garboid_pocketrocks.promotion.cli.PromotionRunner.run",
+        record_run,
+    )
+    args = _required_args(tmp_path)
+    args[args.index("--candidate") + 1] = frozen.identity
+    args[args.index("--incumbent") + 1] = frozen.predecessor_name
+
+    assert cli.main(args) == 0
+
+    assert len(calls) == 1
+    config = calls[0]
+    assert config.candidate is frozen.bot_spec
+    assert config.incumbent is BOT_SPECS_BY_NAME["balanced-v3"]
+    assert type(config.candidate_provenance) is FrozenPhaseAwareCandidateProvenance
+    assert config.candidate_provenance.freeze_schema_version == 2
+    assert config.candidate_provenance.personality == "balanced"
+    assert config.candidate_provenance.phase_selector_rules == frozen.phase_selector_rules
+    assert config.candidate_provenance.expert_digests == frozen.expert_digests
+    assert (
+        config.candidate_provenance.winner_diagnostics_digests == frozen.winner_diagnostics_digests
+    )
+
+
+def test_shape_valid_phase_aware_tampering_exits_two_before_loading_held_out(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    frozen = FROZEN_CANDIDATES_BY_NAME[_BALANCED_V4_IDENTITY]
+    assert type(frozen) is FrozenPhaseAwareCandidate
+    tampered = replace(
+        frozen,
+        phase_selector_rules=(
+            *frozen.phase_selector_rules[:-1],
+            ("late", "changed-public-rule"),
+        ),
+    )
+    development = load_promotion_corpus(
+        Path("configs/promotion/development-v1.json"),
+        registry=BOT_SPECS_BY_NAME,
+    )
+    loaded_paths: list[Path] = []
+
+    def load_development_only(path: Path, *, registry: object) -> PromotionCorpus:
+        assert registry is BOT_SPECS_BY_NAME
+        loaded_paths.append(path)
+        if path == Path("configs/promotion/held-out-v1.json"):
+            raise AssertionError("held-out corpus loaded with tampered v4 provenance")
+        return development
+
+    def forbidden(*args: object, **kwargs: object) -> None:
+        del args, kwargs
+        raise AssertionError("held-out runner invoked with tampered v4 provenance")
+
+    monkeypatch.setattr(
+        cli,
+        "load_frozen_candidate_catalog",
+        lambda: {tampered.identity: tampered},
+    )
+    monkeypatch.setattr(
+        "garboid_pocketrocks.promotion.candidates.load_frozen_candidate_catalog",
+        lambda: FROZEN_CANDIDATES_BY_NAME,
+    )
+    monkeypatch.setattr(cli, "load_promotion_corpus", load_development_only)
+    monkeypatch.setattr(
+        "garboid_pocketrocks.promotion.cli.PromotionRunner.run",
+        forbidden,
+    )
+    args = _required_args(tmp_path)
+    args[args.index("--candidate") + 1] = tampered.identity
+    args[args.index("--incumbent") + 1] = tampered.predecessor_name
+
+    assert cli.main(args) == 2
+    assert "trusted frozen candidate record" in capsys.readouterr().err
+    assert loaded_paths == [Path("configs/promotion/development-v1.json")]
+    assert not tuple(tmp_path.iterdir())
 
 
 @pytest.mark.parametrize(

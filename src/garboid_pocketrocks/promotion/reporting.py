@@ -13,7 +13,9 @@ from garboid_pocketrocks.bots import BotSpec
 from garboid_pocketrocks.promotion.analysis import PromotionAnalysis
 from garboid_pocketrocks.promotion.candidates import (
     FrozenCandidateProvenance,
+    FrozenPhaseAwareCandidateProvenance,
     ResolvedPromotionCandidate,
+    validate_frozen_candidate_provenance,
     validate_frozen_promotion_opponents,
     validate_promotion_candidate,
 )
@@ -96,7 +98,9 @@ def build_promotion_report(
     """Collect immutable inputs and analysis into the authoritative report model."""
 
     return PromotionReport(
-        schema_version=1,
+        schema_version=(
+            2 if type(candidate_provenance) is FrozenPhaseAwareCandidateProvenance else 1
+        ),
         repository_commit=repository_commit,
         candidate=candidate,
         incumbent=incumbent,
@@ -184,6 +188,7 @@ def write_promotion_artifacts(
 def promotion_report_payload(report: PromotionReport) -> dict[str, object]:
     """Convert a report to its explicit public JSON schema."""
 
+    _validate_report_schema(report)
     analysis = report.analysis
     interval_payload: dict[str, object] | None = None
     if analysis.interval is not None:
@@ -263,10 +268,38 @@ def _bot_identity_payload(bot: BotSpec) -> dict[str, object]:
 def _frozen_candidate_provenance_payload(
     provenance: FrozenCandidateProvenance,
 ) -> dict[str, object]:
-    return {
-        "kind": "frozen_heuristic_candidate",
+    if type(provenance) is FrozenPhaseAwareCandidateProvenance:
+        return _phase_aware_candidate_provenance_payload(provenance)
+    if type(provenance) is FrozenCandidateProvenance:
+        return {
+            "kind": "frozen_heuristic_candidate",
+            "candidate_name": provenance.candidate_name,
+            "candidate_bot_id": provenance.candidate_bot_id,
+            "predecessor_name": provenance.predecessor_name,
+            "development_corpus_name": provenance.development_corpus_name,
+            "development_corpus_digest": provenance.development_corpus_digest,
+            "search_name": provenance.search_name,
+            "repository_commit": provenance.repository_commit,
+            "freeze_digest": provenance.freeze_digest,
+            "profile_digest": provenance.profile_digest,
+            "manifest_digest": provenance.manifest_digest,
+            "search_report_digest": provenance.search_report_digest,
+            "candidate_evaluations_digest": provenance.candidate_evaluations_digest,
+        }
+    raise ValueError("Promotion reports require an exact frozen provenance type.")
+
+
+def _phase_aware_candidate_provenance_payload(
+    provenance: FrozenPhaseAwareCandidateProvenance,
+) -> dict[str, object]:
+    """Render the complete schema-v2 freeze and development evidence."""
+
+    common = {
+        "kind": "frozen_phase_aware_heuristic_candidate",
+        "freeze_schema_version": provenance.freeze_schema_version,
         "candidate_name": provenance.candidate_name,
         "candidate_bot_id": provenance.candidate_bot_id,
+        "personality": provenance.personality,
         "predecessor_name": provenance.predecessor_name,
         "development_corpus_name": provenance.development_corpus_name,
         "development_corpus_digest": provenance.development_corpus_digest,
@@ -278,6 +311,70 @@ def _frozen_candidate_provenance_payload(
         "search_report_digest": provenance.search_report_digest,
         "candidate_evaluations_digest": provenance.candidate_evaluations_digest,
     }
+    expert_digests = dict(provenance.expert_digests)
+    experts = {
+        phase: {
+            "profile": dict(coefficients),
+            "profile_digest": expert_digests[phase],
+        }
+        for phase, coefficients in provenance.expert_profiles
+    }
+    return {
+        **common,
+        "phase_selector": dict(provenance.phase_selector_rules),
+        "experts": experts,
+        "boundary_evidence": {
+            "report_path": provenance.boundary_report_path,
+            "report_digest": provenance.boundary_report_digest,
+            "slices_path": provenance.boundary_slices_path,
+            "slices_digest": provenance.boundary_slices_digest,
+        },
+        "selection_log_digest": provenance.selection_log_digest,
+        "development_games_digest": provenance.development_games_digest,
+        "winner_diagnostics_digests": dict(provenance.winner_diagnostics_digests),
+    }
+
+
+def _validate_report_schema(report: PromotionReport) -> None:
+    """Require the report version that corresponds to its provenance type."""
+
+    if type(report.schema_version) is not int or report.schema_version not in (1, 2):
+        raise ValueError(f"Unsupported promotion report schema version {report.schema_version!r}.")
+    if (
+        report.schema_version == 2
+        and type(report.candidate_provenance) is not FrozenPhaseAwareCandidateProvenance
+    ):
+        raise ValueError("Promotion report schema version 2 requires exact phase-aware provenance.")
+    if (
+        report.schema_version == 1
+        and report.candidate_provenance is not None
+        and type(report.candidate_provenance) is not FrozenCandidateProvenance
+    ):
+        raise ValueError(
+            "Promotion report schema version 1 requires exact legacy frozen provenance."
+        )
+    if report.schema_version == 2:
+        provenance = report.candidate_provenance
+        assert type(provenance) is FrozenPhaseAwareCandidateProvenance
+        validate_frozen_candidate_provenance(provenance)
+        if (
+            report.candidate.name != provenance.candidate_name
+            or report.candidate.bot_id != provenance.candidate_bot_id
+        ):
+            raise ValueError(
+                "The phase-aware report candidate does not match its frozen provenance."
+            )
+        if report.incumbent.name != provenance.predecessor_name:
+            raise ValueError(
+                "The phase-aware report incumbent does not match its frozen predecessor."
+            )
+        if (
+            report.development.recipe.name != provenance.development_corpus_name
+            or report.development.digest != provenance.development_corpus_digest
+        ):
+            raise ValueError(
+                "The phase-aware report development corpus does not match its frozen provenance."
+            )
 
 
 def _corpus_report_payload(corpus: PromotionCorpus) -> dict[str, object]:

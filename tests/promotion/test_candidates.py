@@ -2,14 +2,20 @@ from __future__ import annotations
 
 from dataclasses import dataclass, fields, replace
 from pathlib import Path
+from types import SimpleNamespace
+from typing import Any, cast
 
 import pytest
 
 from garboid_pocketrocks.bots import BOT_SPECS_BY_NAME, BotSpec
 from garboid_pocketrocks.bots.random_bot import RandomBot
-from garboid_pocketrocks.heuristics.frozen import FROZEN_CANDIDATES_BY_NAME
+from garboid_pocketrocks.heuristics.frozen import (
+    FROZEN_CANDIDATES_BY_NAME,
+    FrozenPhaseAwareCandidate,
+)
 from garboid_pocketrocks.promotion.candidates import (
     FrozenCandidateProvenance,
+    FrozenPhaseAwareCandidateProvenance,
     PromotionCandidateError,
     ResolvedPromotionCandidate,
     resolve_promotion_candidate,
@@ -24,10 +30,29 @@ from .helpers import EvilFactory, EvilString, evil_provenance
 from .test_runner import _corpora
 
 _DIGESTS = tuple(character * 64 for character in "abcde")
+_BALANCED_V4_IDENTITY = "balanced-v4-candidate-g009-s000-4d391ce068d7"
+_V4_IDENTITIES = (
+    "aggressive-v4-candidate-g011-s004-000d194163fa",
+    _BALANCED_V4_IDENTITY,
+    "passive-v4-candidate-g005-s005-cf4f7b924ee3",
+)
+_PHASES = ("early", "middle", "late")
+_COEFFICIENTS = (
+    "liquidity_strength",
+    "future_cash_weight",
+    "objective_progress_weight",
+    "bid_shading",
+)
+_DIAGNOSTIC_NAMES = (
+    "winner-decision-slices.csv",
+    "winner-diagnostics.json",
+    "winner-diagnostics.md",
+)
 
 
 @dataclass(frozen=True, slots=True)
 class _FrozenCandidateFixture:
+    identity: str
     bot_spec: BotSpec
     predecessor_name: str
     development_corpus_name: str
@@ -41,11 +66,18 @@ class _FrozenCandidateFixture:
     candidate_evaluations_digest: str
 
 
+@dataclass(frozen=True, slots=True)
+class _PhaseAwareProvenanceSubclass(FrozenPhaseAwareCandidateProvenance):
+    pass
+
+
 def _frozen_candidate() -> _FrozenCandidateFixture:
     development, _ = _corpora(pair_count=1)
+    identity = "balanced-v3-candidate-test"
     return _FrozenCandidateFixture(
+        identity=identity,
         bot_spec=BotSpec.for_simulation(
-            "balanced-v3-candidate-test",
+            identity,
             RandomBot.build_brain,
         ),
         predecessor_name="balanced-v2",
@@ -99,6 +131,448 @@ def test_frozen_candidate_resolution_records_all_bound_provenance() -> None:
         search_report_digest=_DIGESTS[3],
         candidate_evaluations_digest=_DIGESTS[4],
     )
+
+
+def test_phase_aware_frozen_candidate_resolution_records_exact_schema_v2_provenance() -> None:
+    frozen = FROZEN_CANDIDATES_BY_NAME[_BALANCED_V4_IDENTITY]
+    assert type(frozen) is FrozenPhaseAwareCandidate
+
+    resolved = resolve_promotion_candidate(
+        frozen.bot_spec.name,
+        registry=BOT_SPECS_BY_NAME,
+        frozen_candidates=FROZEN_CANDIDATES_BY_NAME,
+    )
+
+    assert resolved.bot_spec is frozen.bot_spec
+    assert resolved.frozen_provenance == FrozenPhaseAwareCandidateProvenance(
+        candidate_name=_BALANCED_V4_IDENTITY,
+        candidate_bot_id=_BALANCED_V4_IDENTITY,
+        predecessor_name="balanced-v3",
+        development_corpus_name="development-v1",
+        development_corpus_digest=(
+            "17c016350dbe717641b8cd499b0908e3bc0faa811a3b4f5e574f8713a5bf2b3d"
+        ),
+        search_name="balanced-v4-search-v2",
+        repository_commit="a66c49e559849b35a290827b51b2e5098524e2d1",
+        freeze_digest="126fbbd3d7d20dc66a239c0e7608365352c5077fee81c6b0d88c4410c5b28df3",
+        profile_digest="4d391ce068d794767aff27aaa2782a63f57255402d41fe3ee7b0196edaed036e",
+        manifest_digest="e1f1bed8f09aef9193ffeb0ed3e0be822be96df7fd69985c9e4111f5c725933c",
+        search_report_digest=("3c84573a97def0068bc417714232d8c7870a331029037aede73235c8d7b6efab"),
+        candidate_evaluations_digest=(
+            "1756519cb83597435fb395a569950f9f4a022c7aa3af48e9c2cc366c2a16b8e5"
+        ),
+        freeze_schema_version=2,
+        personality="balanced",
+        phase_selector_rules=(
+            ("kind", "public-resource-horizon-v1"),
+            ("early", "3*future>=2*total"),
+            ("middle", "3*future>=total"),
+            ("late", "otherwise"),
+        ),
+        expert_profiles=(
+            (
+                "early",
+                (
+                    ("liquidity_strength", 0.25),
+                    ("future_cash_weight", 1.35),
+                    ("objective_progress_weight", 0.3),
+                    ("bid_shading", 0.35),
+                ),
+            ),
+            (
+                "middle",
+                (
+                    ("liquidity_strength", 0.3),
+                    ("future_cash_weight", 1.55),
+                    ("objective_progress_weight", 0.35),
+                    ("bid_shading", 0.35),
+                ),
+            ),
+            (
+                "late",
+                (
+                    ("liquidity_strength", 0.45),
+                    ("future_cash_weight", 1.45),
+                    ("objective_progress_weight", 0.25),
+                    ("bid_shading", 0.35),
+                ),
+            ),
+        ),
+        expert_digests=(
+            (
+                "early",
+                "5b1be14a38ee161a169548dab0d87083ebacd1c9df09275b1a0b3b52ac0572de",
+            ),
+            (
+                "middle",
+                "44d8d005cca8deb5f7154905bb8aa33da893cdaa8256d5880e48596095f14660",
+            ),
+            (
+                "late",
+                "56710dde4f85a1af41e78f6e1ebbc50507f5a8d8382592a2e8e81e1c43ff73c8",
+            ),
+        ),
+        boundary_report_path="docs/benchmarks/2026-07-30-heuristic-v4-phase-boundaries.md",
+        boundary_report_digest=("9961f26f32270dcebc98df443588e96cbde2f953858cd131c66a37aeecaa9b01"),
+        boundary_slices_path=(
+            "docs/benchmarks/tournaments/"
+            "2026-07-30-heuristic-v3-phase-boundaries-development/"
+            "phase-boundary-slices.csv"
+        ),
+        boundary_slices_digest=("4f8aa60edf31b28c746cb8004a4dd5468ee8ab1b26462550c914b2e3fa50d7ae"),
+        selection_log_digest=("bce530095669125a9e1162e93cc5a3c7df3ca2cba6a2393fa4fff9d467357cb6"),
+        development_games_digest=(
+            "54c38f79dc3690d1d0ef7eafa35d0f9cb4e8610ee166e19b37e9d053c409e273"
+        ),
+        winner_diagnostics_digests=(
+            (
+                "winner-decision-slices.csv",
+                "c6a6372898b25f26b7f34b14bca83743769492a68510f2f2f1aaf77c3f4a6e99",
+            ),
+            (
+                "winner-diagnostics.json",
+                "4ff4b1694b7807e39b58556a050a03d5ed77f825505dff08f70db857712e1029",
+            ),
+            (
+                "winner-diagnostics.md",
+                "7458b3e55f4efb352d14b09c79cb0907195625b9cd6aba004caa607f22d5b24d",
+            ),
+        ),
+    )
+
+
+@pytest.mark.parametrize(
+    ("identity", "personality", "predecessor_name"),
+    (
+        (_V4_IDENTITIES[0], "aggressive", "aggressive-v3"),
+        (_V4_IDENTITIES[1], "balanced", "balanced-v3"),
+        (_V4_IDENTITIES[2], "passive", "passive-v3"),
+    ),
+)
+def test_each_real_v4_candidate_resolves_and_validates_against_its_exact_v3_predecessor(
+    identity: str,
+    personality: str,
+    predecessor_name: str,
+) -> None:
+    frozen = FROZEN_CANDIDATES_BY_NAME[identity]
+    assert type(frozen) is FrozenPhaseAwareCandidate
+    resolved = resolve_promotion_candidate(
+        frozen.bot_spec.name,
+        registry=BOT_SPECS_BY_NAME,
+        frozen_candidates=FROZEN_CANDIDATES_BY_NAME,
+    )
+    assert resolved.bot_spec is frozen.bot_spec
+    assert type(resolved.frozen_provenance) is FrozenPhaseAwareCandidateProvenance
+    assert resolved.frozen_provenance.freeze_schema_version == 2
+    assert resolved.frozen_provenance.personality == personality
+    assert resolved.frozen_provenance.predecessor_name == predecessor_name
+    assert resolved.frozen_provenance.search_name == f"{personality}-v4-search-v2"
+    development = load_promotion_corpus(
+        Path("configs/promotion/development-v1.json"),
+        registry=BOT_SPECS_BY_NAME,
+    )
+
+    validate_promotion_candidate(
+        resolved,
+        incumbent=BOT_SPECS_BY_NAME[predecessor_name],
+        development=development,
+        registry=BOT_SPECS_BY_NAME,
+    )
+
+
+def _replace_first_expert_coefficient_with_integer(
+    provenance: FrozenPhaseAwareCandidateProvenance,
+) -> FrozenPhaseAwareCandidateProvenance:
+    phase, coefficients = provenance.expert_profiles[0]
+    coefficient_name, _ = coefficients[0]
+    return replace(
+        provenance,
+        expert_profiles=(
+            (phase, ((coefficient_name, 0), *coefficients[1:])),
+            *provenance.expert_profiles[1:],
+        ),
+    )
+
+
+@pytest.mark.parametrize(
+    ("tamper", "message"),
+    (
+        (
+            lambda provenance: replace(provenance, freeze_schema_version=True),
+            "schema version",
+        ),
+        (
+            lambda provenance: replace(provenance, personality="latest"),
+            "personality",
+        ),
+        (
+            lambda provenance: replace(
+                provenance,
+                phase_selector_rules=provenance.phase_selector_rules[:-1],
+            ),
+            "phase selector",
+        ),
+        (
+            lambda provenance: replace(
+                provenance,
+                phase_selector_rules=tuple(reversed(provenance.phase_selector_rules)),
+            ),
+            "phase selector",
+        ),
+        (_replace_first_expert_coefficient_with_integer, "expert profiles"),
+        (
+            lambda provenance: replace(
+                provenance,
+                expert_digests=provenance.expert_digests[:-1],
+            ),
+            "expert digests",
+        ),
+        (
+            lambda provenance: replace(provenance, boundary_report_path=""),
+            "boundary evidence",
+        ),
+        (
+            lambda provenance: replace(provenance, boundary_slices_digest=True),
+            "evidence digests",
+        ),
+        (
+            lambda provenance: replace(provenance, selection_log_digest="not-a-digest"),
+            "evidence digests",
+        ),
+        (
+            lambda provenance: replace(
+                provenance,
+                winner_diagnostics_digests=provenance.winner_diagnostics_digests[:-1],
+            ),
+            "winner diagnostics",
+        ),
+    ),
+)
+def test_nested_phase_aware_provenance_tampering_is_rejected(
+    monkeypatch: pytest.MonkeyPatch,
+    tamper: Any,
+    message: str,
+) -> None:
+    frozen = FROZEN_CANDIDATES_BY_NAME[_BALANCED_V4_IDENTITY]
+    assert type(frozen) is FrozenPhaseAwareCandidate
+    resolved = resolve_promotion_candidate(
+        frozen.bot_spec.name,
+        registry=BOT_SPECS_BY_NAME,
+        frozen_candidates=FROZEN_CANDIDATES_BY_NAME,
+    )
+    assert type(resolved.frozen_provenance) is FrozenPhaseAwareCandidateProvenance
+    monkeypatch.setattr(
+        "garboid_pocketrocks.promotion.candidates.load_frozen_candidate_catalog",
+        lambda: FROZEN_CANDIDATES_BY_NAME,
+    )
+    development = load_promotion_corpus(
+        Path("configs/promotion/development-v1.json"),
+        registry=BOT_SPECS_BY_NAME,
+    )
+    tampered = replace(
+        resolved,
+        frozen_provenance=tamper(resolved.frozen_provenance),
+    )
+
+    with pytest.raises(PromotionCandidateError, match=message):
+        validate_promotion_candidate(
+            tampered,
+            incumbent=BOT_SPECS_BY_NAME["balanced-v3"],
+            development=development,
+            registry=BOT_SPECS_BY_NAME,
+        )
+
+
+def _replace_named_pair(
+    pairs: tuple[tuple[str, str], ...],
+    *,
+    name: str,
+    value: str,
+) -> tuple[tuple[str, str], ...]:
+    return tuple(
+        (pair_name, value if pair_name == name else pair_value) for pair_name, pair_value in pairs
+    )
+
+
+def _shape_valid_phase_provenance_tamper(
+    provenance: FrozenPhaseAwareCandidateProvenance,
+    binding: str,
+) -> FrozenPhaseAwareCandidateProvenance:
+    if binding == "personality":
+        return replace(provenance, personality="aggressive")
+    if binding == "phase_selector":
+        return replace(
+            provenance,
+            phase_selector_rules=_replace_named_pair(
+                provenance.phase_selector_rules,
+                name="middle",
+                value="changed-public-rule",
+            ),
+        )
+    if binding.startswith("expert_profile:"):
+        _, target_phase, target_coefficient = binding.split(":")
+        changed_profiles = []
+        for phase, coefficients in provenance.expert_profiles:
+            changed_profiles.append(
+                (
+                    phase,
+                    tuple(
+                        (
+                            coefficient_name,
+                            coefficient_value + 0.05
+                            if phase == target_phase and coefficient_name == target_coefficient
+                            else coefficient_value,
+                        )
+                        for coefficient_name, coefficient_value in coefficients
+                    ),
+                )
+            )
+        return replace(provenance, expert_profiles=tuple(changed_profiles))
+    if binding.startswith("expert_digest:"):
+        _, phase = binding.split(":")
+        return replace(
+            provenance,
+            expert_digests=_replace_named_pair(
+                provenance.expert_digests,
+                name=phase,
+                value="0" * 64,
+            ),
+        )
+    if binding == "boundary_report_path":
+        return replace(provenance, boundary_report_path="docs/benchmarks/changed.md")
+    if binding == "boundary_slices_path":
+        return replace(provenance, boundary_slices_path="docs/benchmarks/changed.csv")
+    if binding == "boundary_report_digest":
+        return replace(provenance, boundary_report_digest="0" * 64)
+    if binding == "boundary_slices_digest":
+        return replace(provenance, boundary_slices_digest="0" * 64)
+    if binding == "selection_log_digest":
+        return replace(provenance, selection_log_digest="0" * 64)
+    if binding == "development_games_digest":
+        return replace(provenance, development_games_digest="0" * 64)
+    if binding.startswith("winner_diagnostic:"):
+        _, artifact_name = binding.split(":", maxsplit=1)
+        return replace(
+            provenance,
+            winner_diagnostics_digests=_replace_named_pair(
+                provenance.winner_diagnostics_digests,
+                name=artifact_name,
+                value="0" * 64,
+            ),
+        )
+    raise AssertionError(f"unknown phase-aware provenance binding {binding}")
+
+
+@pytest.mark.parametrize(
+    "binding",
+    (
+        "personality",
+        "phase_selector",
+        *(
+            f"expert_profile:{phase}:{coefficient}"
+            for phase in _PHASES
+            for coefficient in _COEFFICIENTS
+        ),
+        *(f"expert_digest:{phase}" for phase in _PHASES),
+        "boundary_report_path",
+        "boundary_report_digest",
+        "boundary_slices_path",
+        "boundary_slices_digest",
+        "selection_log_digest",
+        "development_games_digest",
+        *(f"winner_diagnostic:{name}" for name in _DIAGNOSTIC_NAMES),
+    ),
+)
+def test_every_shape_valid_phase_aware_binding_must_match_the_canonical_catalog(
+    binding: str,
+) -> None:
+    frozen = FROZEN_CANDIDATES_BY_NAME[_BALANCED_V4_IDENTITY]
+    assert type(frozen) is FrozenPhaseAwareCandidate
+    resolved = resolve_promotion_candidate(
+        frozen.bot_spec.name,
+        registry=BOT_SPECS_BY_NAME,
+        frozen_candidates=FROZEN_CANDIDATES_BY_NAME,
+    )
+    provenance = resolved.frozen_provenance
+    assert type(provenance) is FrozenPhaseAwareCandidateProvenance
+    tampered = replace(
+        resolved,
+        frozen_provenance=_shape_valid_phase_provenance_tamper(provenance, binding),
+    )
+    development = load_promotion_corpus(
+        Path("configs/promotion/development-v1.json"),
+        registry=BOT_SPECS_BY_NAME,
+    )
+
+    with pytest.raises(PromotionCandidateError, match="trusted frozen candidate record"):
+        validate_promotion_candidate(
+            tampered,
+            incumbent=BOT_SPECS_BY_NAME["balanced-v3"],
+            development=development,
+            registry=BOT_SPECS_BY_NAME,
+        )
+
+
+@pytest.mark.parametrize("kind", ("subclass", "lookalike"))
+def test_phase_aware_provenance_requires_the_exact_public_type(kind: str) -> None:
+    frozen = FROZEN_CANDIDATES_BY_NAME[_BALANCED_V4_IDENTITY]
+    assert type(frozen) is FrozenPhaseAwareCandidate
+    resolved = resolve_promotion_candidate(
+        frozen.bot_spec.name,
+        registry=BOT_SPECS_BY_NAME,
+        frozen_candidates=FROZEN_CANDIDATES_BY_NAME,
+    )
+    provenance = resolved.frozen_provenance
+    assert type(provenance) is FrozenPhaseAwareCandidateProvenance
+    values = {
+        field.name: getattr(provenance, field.name)
+        for field in fields(FrozenPhaseAwareCandidateProvenance)
+    }
+    forged = (
+        _PhaseAwareProvenanceSubclass(**values)
+        if kind == "subclass"
+        else cast(FrozenCandidateProvenance, SimpleNamespace(**values))
+    )
+    development = load_promotion_corpus(
+        Path("configs/promotion/development-v1.json"),
+        registry=BOT_SPECS_BY_NAME,
+    )
+
+    with pytest.raises(PromotionCandidateError, match="exact provenance type"):
+        validate_promotion_candidate(
+            replace(resolved, frozen_provenance=forged),
+            incumbent=BOT_SPECS_BY_NAME["balanced-v3"],
+            development=development,
+            registry=BOT_SPECS_BY_NAME,
+        )
+
+
+def test_alternate_phase_aware_catalog_record_cannot_impersonate_the_canonical_record() -> None:
+    frozen = FROZEN_CANDIDATES_BY_NAME[_BALANCED_V4_IDENTITY]
+    assert type(frozen) is FrozenPhaseAwareCandidate
+    alternate = replace(
+        frozen,
+        generation=0,
+        slot=15,
+        parent_identity=None,
+    )
+    resolved = resolve_promotion_candidate(
+        frozen.identity,
+        registry=BOT_SPECS_BY_NAME,
+        frozen_candidates={frozen.identity: alternate},
+    )
+    development = load_promotion_corpus(
+        Path("configs/promotion/development-v1.json"),
+        registry=BOT_SPECS_BY_NAME,
+    )
+
+    with pytest.raises(PromotionCandidateError, match="trusted frozen candidate record"):
+        validate_promotion_candidate(
+            resolved,
+            incumbent=BOT_SPECS_BY_NAME["balanced-v3"],
+            development=development,
+            registry=BOT_SPECS_BY_NAME,
+        )
 
 
 @pytest.mark.parametrize(
