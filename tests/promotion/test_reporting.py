@@ -33,6 +33,7 @@ from garboid_pocketrocks.promotion.corpus import (
     load_promotion_corpus,
     recompute_promotion_corpus_digest,
 )
+from garboid_pocketrocks.promotion.planning import plan_paired_games
 from garboid_pocketrocks.promotion.reporting import (
     PromotionReport,
     build_promotion_report,
@@ -58,6 +59,18 @@ _ARTIFACT_NAMES = (
     "corpus-snapshot.json",
 )
 _BALANCED_V4_IDENTITY = "balanced-v4-candidate-g009-s000-4d391ce068d7"
+
+
+def _development_for_frozen(frozen: Any) -> PromotionCorpus:
+    corpus_file = (
+        "development-heuristic-v4-v1.json"
+        if isinstance(frozen, FrozenPhaseAwareCandidate)
+        else f"development-{frozen.personality}-v3-broad-v1.json"
+    )
+    return load_promotion_corpus(
+        Path("configs/promotion") / corpus_file,
+        registry=BOT_SPECS_BY_NAME,
+    )
 
 
 def _corpus(
@@ -136,6 +149,8 @@ def _report_inputs() -> tuple[
         candidate=plan.candidate,
         incumbent=plan.incumbent,
         opponents=plan.opponents,
+        opponent_pool=plan.opponent_pool,
+        plan=plan,
         development=development,
         held_out=held_out,
         bootstrap_samples=1_000,
@@ -209,10 +224,7 @@ def _phase_aware_report_inputs() -> tuple[
     base_report, summaries, _, held_out = _report_inputs()
     frozen = FROZEN_CANDIDATES_BY_NAME[_BALANCED_V4_IDENTITY]
     assert type(frozen) is FrozenPhaseAwareCandidate
-    development = load_promotion_corpus(
-        Path("configs/promotion/development-v1.json"),
-        registry=BOT_SPECS_BY_NAME,
-    )
+    development = _development_for_frozen(frozen)
     opponents = (
         BOT_SPECS_BY_NAME["random"],
         BOT_SPECS_BY_NAME["aggressive-v1"],
@@ -223,6 +235,22 @@ def _phase_aware_report_inputs() -> tuple[
             held_out.recipe,
             opponent_names=tuple(opponent.name for opponent in opponents),
         ),
+        cases=tuple(
+            replace(
+                case,
+                opponent_names_by_seat=tuple(
+                    (
+                        None
+                        if opponent_name is None
+                        else opponents[0].name
+                        if opponent_name == "opponent-a"
+                        else opponents[1].name
+                    )
+                    for opponent_name in case.opponent_names_by_seat
+                ),
+            )
+            for case in held_out.cases
+        ),
     )
     resolved = resolve_promotion_candidate(
         frozen.bot_spec.name,
@@ -230,11 +258,19 @@ def _phase_aware_report_inputs() -> tuple[
         frozen_candidates=FROZEN_CANDIDATES_BY_NAME,
     )
     assert type(resolved.frozen_provenance) is FrozenPhaseAwareCandidateProvenance
-    report = build_promotion_report(
-        repository_commit=base_report.repository_commit,
+    plan = plan_paired_games(
+        held_out,
         candidate=frozen.bot_spec,
         incumbent=BOT_SPECS_BY_NAME["balanced-v3"],
-        opponents=opponents,
+        registry=BOT_SPECS_BY_NAME,
+    )
+    report = build_promotion_report(
+        repository_commit=base_report.repository_commit,
+        candidate=plan.candidate,
+        incumbent=plan.incumbent,
+        opponents=plan.opponents,
+        opponent_pool=plan.opponent_pool,
+        plan=plan,
         development=development,
         held_out=held_out,
         bootstrap_samples=base_report.bootstrap_samples,
@@ -258,6 +294,8 @@ def test_report_payload_has_complete_explicit_schema() -> None:
         "candidate",
         "incumbent",
         "opponents",
+        "opponent_pool",
+        "effective_plan",
         "execution",
         "corpora",
         "coverage",
@@ -273,11 +311,27 @@ def test_report_payload_has_complete_explicit_schema() -> None:
     assert payload["candidate"] == {"name": "candidate", "bot_id": "candidate"}
     assert payload["incumbent"] == {"name": "incumbent", "bot_id": "incumbent"}
     assert payload["opponents"] == [
-        {"name": "opponent-a", "bot_id": "opponent-a"},
         {"name": "opponent-b", "bot_id": "opponent-b"},
+        {"name": "opponent-a", "bot_id": "opponent-a"},
     ]
+    assert payload["opponent_pool"] == {
+        "configured": [
+            {"name": "opponent-a", "bot_id": "opponent-a"},
+            {"name": "opponent-b", "bot_id": "opponent-b"},
+        ],
+        "exclusions": [],
+        "remaining": [
+            {"name": "opponent-a", "bot_id": "opponent-a"},
+            {"name": "opponent-b", "bot_id": "opponent-b"},
+        ],
+    }
+    effective_plan = payload["effective_plan"]
+    assert isinstance(effective_plan, dict)
+    assert report.plan is not None
+    assert effective_plan["digest"] == report.plan.digest
+    assert len(effective_plan["pairs"]) == 2
     assert payload["execution"] == {
-        "bot_ids": ["candidate", "incumbent", "opponent-a", "opponent-b"],
+        "bot_ids": ["candidate", "incumbent", "opponent-b", "opponent-a"],
         "games": 4,
         "player_counts": [3],
         "value_charts": [case.chart for case in held_out.cases],
@@ -643,7 +697,7 @@ def test_writer_rejects_a_different_equal_frozen_bot_spec(
     )
     forged = replace(frozen.bot_spec, brain_factory=EvilFactory())
     development = load_promotion_corpus(
-        Path("configs/promotion/development-v1.json"),
+        Path(f"configs/promotion/development-{frozen.personality}-v3-broad-v1.json"),
         registry=BOT_SPECS_BY_NAME,
     )
     report, summaries, _, held_out = _report_inputs()
@@ -704,10 +758,7 @@ def test_writer_rejects_lying_provenance_string_subclasses(
         resolved.frozen_provenance,
         **{field_name: EvilString(forged_value)},
     )
-    development = load_promotion_corpus(
-        Path("configs/promotion/development-v1.json"),
-        registry=BOT_SPECS_BY_NAME,
-    )
+    development = _development_for_frozen(frozen)
     report, summaries, _, held_out = _report_inputs()
     held_out = replace(
         held_out,
@@ -753,10 +804,7 @@ def test_writer_rejects_a_lying_provenance_subclass(
     )
     assert resolved.frozen_provenance is not None
     forged_provenance = evil_provenance(resolved.frozen_provenance)
-    development = load_promotion_corpus(
-        Path("configs/promotion/development-v1.json"),
-        registry=BOT_SPECS_BY_NAME,
-    )
+    development = _development_for_frozen(frozen)
     report, summaries, _, held_out = _report_inputs()
     held_out = replace(
         held_out,
@@ -801,7 +849,7 @@ def test_frozen_writer_rejects_a_forged_canonical_name_opponent(
         frozen_candidates=FROZEN_CANDIDATES_BY_NAME,
     )
     development = load_promotion_corpus(
-        Path("configs/promotion/development-v1.json"),
+        Path(f"configs/promotion/development-{frozen.personality}-v3-broad-v1.json"),
         registry=BOT_SPECS_BY_NAME,
     )
     forged_opponent = BotSpec.for_simulation("random", RandomBot.build_brain)

@@ -1,0 +1,35 @@
+{
+  "coefficients": {
+    "bid_shading": "0.3",
+    "future_cash_weight": "1.1",
+    "liquidity_strength": "1.4",
+    "objective_progress_weight": "0.4"
+  },
+  "development_corpus": {
+    "digest": "64124822038895aa4048469244c99177c877271368cc246d2250b737a14bf658",
+    "name": "development-passive-v3-broad-v1"
+  },
+  "development_scores": {
+    "final_money_delta": 1886,
+    "normalized_finish_delta": 30.416666666666686,
+    "rating_delta": 136.71047270419922,
+    "worst_challenger_finish_delta": 0.10507246376811594
+  },
+  "generation": 6,
+  "identity": "passive-v3-candidate-g006-s000-739e30e8d844",
+  "parent_identity": "passive-v3-candidate-g005-s008-aa67a8d881c9",
+  "personality": "passive",
+  "predecessor_name": "passive-v2",
+  "profile_digest": "739e30e8d84482d3e165c230a8bb9f518eccb822adb55337e1f8abae82399dd7",
+  "repository_commit": "70c4bb87959a8012524e5e7460adb058ce0b78e7",
+  "schema_version": 2,
+  "search": {
+    "manifest_digest": "53a2927888b43aa17cbbc9fe7cd15a48b071054044aef557778dfc860fd1d8cd",
+    "name": "passive-v3-search-v1"
+  },
+  "slot": 0,
+  "source_evidence": {
+    "candidate_evaluations_sha256": "12c80080fec844c13f11bf310ba4c0df6e24f3c5ba09d34e8adb733b2b359492",
+    "search_report_sha256": "ba48cc835a6918f27cdba453fac9c2672c3b59b6ed53dc58a43519b01ddeb4d3"
+  }
+}

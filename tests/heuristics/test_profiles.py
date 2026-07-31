@@ -66,9 +66,23 @@ def test_versioned_profiles_have_exact_constants() -> None:
     assert HEURISTIC_V2.passive == HeuristicProfile("passive", 0.15, 0.60, 0.15, 0.30)
 
     assert HEURISTIC_V3.version == "v3"
-    assert HEURISTIC_V3.aggressive == HeuristicProfile("aggressive", 1.00, 1.95, 0.15, 0.40)
-    assert HEURISTIC_V3.balanced == HeuristicProfile("balanced", 0.25, 1.55, 0.30, 0.35)
-    assert HEURISTIC_V3.passive == HeuristicProfile("passive", 1.50, 1.80, 0.95, 0.45)
+    assert HEURISTIC_V3.aggressive == HeuristicProfile("aggressive", 1.50, 0.50, 1.00, 0.05)
+    assert HEURISTIC_V3.balanced == HeuristicProfile("balanced", 1.40, 1.05, 0.70, 0.30)
+    assert HEURISTIC_V3.passive == HeuristicProfile("passive", 0.25, 2.00, 0.10, 0.50)
+
+
+def test_v3_personality_coefficients_encode_distinct_risk_preferences() -> None:
+    aggressive = HEURISTIC_V3.aggressive
+    balanced = HEURISTIC_V3.balanced
+    passive = HEURISTIC_V3.passive
+
+    assert aggressive.objective_progress_weight > balanced.objective_progress_weight
+    assert balanced.objective_progress_weight > passive.objective_progress_weight
+    assert aggressive.future_cash_weight < balanced.future_cash_weight
+    assert balanced.future_cash_weight < passive.future_cash_weight
+    assert aggressive.bid_shading < balanced.bid_shading
+    assert balanced.bid_shading < passive.bid_shading
+    assert aggressive.liquidity_strength > passive.liquidity_strength
 
 
 def test_unversioned_profiles_alias_latest_generation() -> None:

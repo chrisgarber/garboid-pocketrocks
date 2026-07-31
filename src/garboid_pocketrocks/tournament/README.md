@@ -8,7 +8,7 @@ human- and machine-readable artifacts.
 
 ```bash
 uv run --extra neural garboid-tournament \
-  --output-dir tournament-results
+  --output-dir artifacts/tournaments/default
 ```
 
 Current defaults are 15,000 games, player counts three through five, value
@@ -18,16 +18,20 @@ omitted. Use `--bots` or `--exclude-bots` for an explicit field,
 `--bootstrap-samples 0` for a quick run, and `--overwrite` only when replacing
 an existing known artifact generation.
 
-The curated default field contains random, all six explicit heuristic v1/v2
-generations, and the two frozen neural policies. Moving unversioned heuristic
-aliases are omitted because they duplicate v2 behavior.
+The curated default field is the top ten from the 15-bot
+`fixed-objective-overlay-v2` benchmark: both objective-aware overlay
+generations, all three fixed-bid policies, aggressive-v2, balanced-v2,
+passive-v2, passive-v1, and the frozen large neural policy. The five lower
+finishers remain registered and explicitly selectable; pruning the default
+does not delete their immutable identities or historical evidence. Moving
+unversioned heuristic aliases are omitted because they duplicate v2 behavior.
 
 Decision diagnostics are opt-in:
 
 ```bash
 uv run --extra neural garboid-tournament \
   --decision-reports \
-  --output-dir tournament-results
+  --output-dir artifacts/tournaments/diagnostics
 ```
 
 The flag records each already-selected public decision while retaining batch
@@ -87,6 +91,8 @@ Each successful run writes:
 With `--decision-reports`, the same generation also writes:
 
 - `game-summaries.jsonl`: public per-game outcomes and decision counts;
+- `game-details.jsonl`: public resolved turns, objective claims, auction prices,
+  resource bundles, and terminal score components;
 - `decision-traces.jsonl`: one public row per policy decision;
 - `decision-slices.csv`: filterable additive decision aggregates.
 
@@ -96,13 +102,22 @@ could be used to reconstruct hidden state; games are identified only by their
 opaque `game_index`. Without the flag, output and the original three artifacts
 remain unchanged.
 
+Build the two-engine interactive report from any completed output directory:
+
+```bash
+uv run garboid-visualize tournament-results
+```
+
+See the [visualizer runbook](../visualizer/README.md) for data availability,
+metric definitions, and chart ideas.
+
 Writes are atomic. A bootstrap failure still preserves primary ratings and
 reports the missing uncertainty explicitly.
 
 For recorded evidence, see the
-[benchmark reports](../../../docs/benchmarks/) and their
-[tournament artifacts](../../../docs/benchmarks/tournaments/). Do not rewrite
-a dated report; create a new dated result with its seed, configuration,
+[benchmark reports](../../../docs/benchmarks/). Generated tournament artifacts
+are local analysis outputs and are excluded from version control. Do not
+rewrite a dated report; create a new dated result with its seed, configuration,
 repository revision, and runtime.
 
 ## Extension points

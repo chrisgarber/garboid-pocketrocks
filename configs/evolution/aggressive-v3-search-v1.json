@@ -4,8 +4,8 @@
   "personality": "aggressive",
   "predecessor_name": "aggressive-v2",
   "development_corpus": {
-    "name": "development-v1",
-    "digest": "17c016350dbe717641b8cd499b0908e3bc0faa811a3b4f5e574f8713a5bf2b3d"
+    "name": "development-aggressive-v3-broad-v1",
+    "digest": "6531e85f69f4e085b8ac789348be6c21614455dd77ba7ac791f5390479e17638"
   },
   "search_seed": 11001,
   "algorithm": {

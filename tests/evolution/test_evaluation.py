@@ -51,6 +51,14 @@ def test_computes_rating_and_exact_paired_tie_break_deltas() -> None:
     assert evaluation.completed_candidate_games == 3
     assert evaluation.rating_delta is not None
     assert evaluation.rating_delta > 0
+    assert evaluation.worst_challenger_finish_delta == 1.0
+    assert tuple(
+        (item.opponent_identity, item.shared_cases, item.normalized_finish_delta)
+        for item in evaluation.challenger_finish_deltas
+    ) == (
+        ("opponent-a", 3, 1.0),
+        ("opponent-b", 3, 1.0),
+    )
     assert evaluation.normalized_finish_delta == 3.0
     assert evaluation.final_money_delta == 300
     assert evaluation.candidate_faults == 0
@@ -73,8 +81,12 @@ def test_missing_evidence_invalidates_the_evaluation_without_partial_scores() ->
     assert evaluation.completed_baseline_games == 2
     assert evaluation.completed_candidate_games == 3
     assert evaluation.rating_delta is None
+    assert evaluation.worst_challenger_finish_delta is None
+    assert evaluation.challenger_finish_deltas == ()
     assert evaluation.normalized_finish_delta is None
     assert evaluation.final_money_delta is None
+    assert evaluation.worst_challenger_finish_delta is None
+    assert evaluation.challenger_finish_deltas == ()
     assert evaluation.valid is False
     assert evaluation.eligible is False
 
@@ -285,8 +297,13 @@ def test_malformed_rating_observation_is_invalid_evidence(
 def test_real_development_jobs_match_across_serial_batch_and_workers(
     manifest_name: str,
 ) -> None:
+    corpus_name = (
+        "development-heuristic-v4-v1.json"
+        if manifest_name.endswith("v4-search-v2.json")
+        else "development-balanced-v3-broad-v1.json"
+    )
     corpus = load_promotion_corpus(
-        REPOSITORY_ROOT / "configs/promotion/development-v1.json",
+        REPOSITORY_ROOT / "configs" / "promotion" / corpus_name,
         registry=BOT_SPECS_BY_NAME,
     )
     manifest = load_search_recipe(

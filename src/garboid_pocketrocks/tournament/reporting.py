@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any
 from garboid_pocketrocks.diagnostics.reporting import (
     DECISION_SLICES_NAME,
     DECISION_TRACES_NAME,
+    GAME_DETAILS_NAME,
     GAME_SUMMARIES_NAME,
     render_decision_artifacts,
 )
@@ -41,6 +42,7 @@ class TournamentArtifacts:
     summary_json: Path
     report_html: Path
     game_summaries_jsonl: Path | None = None
+    game_details_jsonl: Path | None = None
     decision_traces_jsonl: Path | None = None
     decision_slices_csv: Path | None = None
 
@@ -100,7 +102,7 @@ def write_tournament_artifacts(
         output_dir,
         tuple(contents.items()),
         remove_artifact_names=(
-            (GAME_SUMMARIES_NAME, DECISION_TRACES_NAME, DECISION_SLICES_NAME)
+            (GAME_SUMMARIES_NAME, GAME_DETAILS_NAME, DECISION_TRACES_NAME, DECISION_SLICES_NAME)
             if decision_report is None
             else ()
         ),
@@ -112,6 +114,9 @@ def write_tournament_artifacts(
         report_html=output_dir / "report.html",
         game_summaries_jsonl=(
             output_dir / GAME_SUMMARIES_NAME if decision_report is not None else None
+        ),
+        game_details_jsonl=(
+            output_dir / GAME_DETAILS_NAME if decision_report is not None else None
         ),
         decision_traces_jsonl=(
             output_dir / DECISION_TRACES_NAME if decision_report is not None else None
@@ -198,6 +203,7 @@ def _summary_payload(
         payload["artifacts"].update(
             {
                 "game_summaries_jsonl": GAME_SUMMARIES_NAME,
+                "game_details_jsonl": GAME_DETAILS_NAME,
                 "decision_traces_jsonl": DECISION_TRACES_NAME,
                 "decision_slices_csv": DECISION_SLICES_NAME,
             }
@@ -369,6 +375,7 @@ def _decision_diagnostics_html(report: DecisionReport) -> str:
         f"{reconciliation.game_count:,} games.</p>"
         "<ul>"
         f'<li><a href="{GAME_SUMMARIES_NAME}">Game summaries</a></li>'
+        f'<li><a href="{GAME_DETAILS_NAME}">Game details</a></li>'
         f'<li><a href="{DECISION_TRACES_NAME}">Decision traces</a></li>'
         f'<li><a href="{DECISION_SLICES_NAME}">Decision slices</a></li>'
         "</ul>"

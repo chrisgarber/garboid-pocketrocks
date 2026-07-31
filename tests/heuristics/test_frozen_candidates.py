@@ -35,9 +35,9 @@ REPOSITORY_ROOT = Path(__file__).parents[2]
 CATALOG_DIR = REPOSITORY_ROOT / "src" / "garboid_pocketrocks" / "heuristics" / "frozen_candidates"
 BENCHMARK_DIR = REPOSITORY_ROOT / "docs" / "benchmarks" / "evolution"
 EXPECTED_V3_IDENTITIES = (
-    "aggressive-v3-candidate-g007-s008-c70e11540db9",
-    "balanced-v3-candidate-g006-s010-e3971899626c",
-    "passive-v3-candidate-g006-s001-812832214cd5",
+    "aggressive-v3-candidate-g007-s009-9c43f610b2f0",
+    "balanced-v3-candidate-g005-s005-90544d0f26d2",
+    "passive-v3-candidate-g006-s000-739e30e8d844",
 )
 EXPECTED_V4_IDENTITIES = (
     "aggressive-v4-candidate-g011-s004-000d194163fa",
@@ -49,29 +49,32 @@ EXPECTED_V3_PROVENANCE: dict[str, dict[str, Any]] = {
     EXPECTED_V3_IDENTITIES[0]: {
         "predecessor": "aggressive-v2",
         "search_name": "aggressive-v3-search-v1",
-        "profile": "c70e11540db92d0c77ce5085670ff48105c91aede1ed52c4abb7874a64687b58",
-        "manifest": "627eb77836f8dceace745a8fb7f60573e2dad05aa47a423d902850c32a98f5e0",
-        "report": "01ca66301d633be7228c3bc535fa2d84b0c5ee3898b92f9d06e98c0fdf13b902",
-        "evaluations": "4140270b3fe1d744aef103b012ca85970aa561c3f36cb28d70e4e4aa39f9c7a5",
-        "freeze": "218e9682d8d174125d4b9e7550fec9afda01ddb4433084143968b6d525d335da",
+        "profile": "9c43f610b2f03b2e5d3cb71c2a3ce7a62f456f3fdce73d3a52c501bab9a81042",
+        "manifest": "b4e21379ebdcf9462330a1e55412993cf69273a257afc7bb9197cb2e7d89532f",
+        "report": "db53ccbe258e2a08969d43710f7979d2e3b16f18415c4c11b81654a6301abea2",
+        "evaluations": "47b82f973f36b3a21d7aa30d2872b542c23a55bfaf5666c715cc446fdb509139",
+        "freeze": "89b61c17485da34b0c496cd353f0ccd1c533ba843175e967e3af939528bf5735",
+        "development": "6531e85f69f4e085b8ac789348be6c21614455dd77ba7ac791f5390479e17638",
     },
     EXPECTED_V3_IDENTITIES[1]: {
         "predecessor": "balanced-v2",
         "search_name": "balanced-v3-search-v1",
-        "profile": "e3971899626ca3f651b2992d0cc429dc3ffd57fcdbb7cfac8249e6f0f9d9b03e",
-        "manifest": "da9e2162eec9dd934dc80e59d9950b49c74a3a4cd4d72e6273134b502e705152",
-        "report": "95fd24f688ed2bb18cd08d00483fbef2a42b2b66809afa26860f71deba2d3f87",
-        "evaluations": "fcf8985f40beddac274f5aa31523ec93b1cfecf0657047e30144ba97140b15e6",
-        "freeze": "05bcd898e7fc79062585cb989b67cb2e5641eed6cc59b1a60255de84c8ee2988",
+        "profile": "90544d0f26d20a9fc3b51013fd244908be1071a13eeef12fb0d4b2c4aef251de",
+        "manifest": "9333619e4d573f12736162065f02901d25fa5e267ea6fd1838371de4b9f04c07",
+        "report": "98056eda744f19d9f67dd763c64e5d5e2e97a3e0538534e933058d3a34227dfb",
+        "evaluations": "4b8c1ea06575971914d183cfcba99964b50b37d60c740b52fe417b8f80a85eb7",
+        "freeze": "2da90c344b4f573f83718faad717a9accea2768b21f1982d8f543a5f2bb25fa8",
+        "development": "d556cc940c92ebf3633fde83485d4ba776b6e582f34cf8d445a5c190824b3228",
     },
     EXPECTED_V3_IDENTITIES[2]: {
         "predecessor": "passive-v2",
         "search_name": "passive-v3-search-v1",
-        "profile": "812832214cd5a16115104c50d33e94cba9929a3cc355b4779d6002b52b25e734",
-        "manifest": "bf533a434a4208e7b018606c53488fcc3a09499b6da2fcb4b1d020346001a9c1",
-        "report": "46a1d7de4fed02520b384d119464ed7c0af239e1e8300fdb7485956ebc7203a2",
-        "evaluations": "582836d5beb184da26f8b5c27c9d96cea728a867017a9081e1bd137ce57f2b25",
-        "freeze": "0617870c8641e9d25237354b5fe5a1df4f15637af0e46e8c11b1c13e7054adee",
+        "profile": "739e30e8d84482d3e165c230a8bb9f518eccb822adb55337e1f8abae82399dd7",
+        "manifest": "53a2927888b43aa17cbbc9fe7cd15a48b071054044aef557778dfc860fd1d8cd",
+        "report": "ba48cc835a6918f27cdba453fac9c2672c3b59b6ed53dc58a43519b01ddeb4d3",
+        "evaluations": "12c80080fec844c13f11bf310ba4c0df6e24f3c5ba09d34e8adb733b2b359492",
+        "freeze": "dc64f303def70e1ef17d3ebddc8837c645941078bbb7b14bbfa211d0e7571fad",
+        "development": "64124822038895aa4048469244c99177c877271368cc246d2250b737a14bf658",
     },
 }
 DEVELOPMENT_DIGEST = "17c016350dbe717641b8cd499b0908e3bc0faa811a3b4f5e574f8713a5bf2b3d"
@@ -412,8 +415,12 @@ def test_catalog_exposes_exact_frozen_records_and_provenance() -> None:
         assert v3_candidate.bot_spec.bot_id == v3_candidate.identity
         assert v3_candidate.predecessor_name == expected["predecessor"]
         assert v3_candidate.search_name == expected["search_name"]
-        assert v3_candidate.development_corpus_name == "development-v1"
-        assert v3_candidate.development_corpus_digest == DEVELOPMENT_DIGEST
+        assert v3_candidate.development_corpus_name == (
+            f"development-{v3_candidate.personality}-v3-broad-v1"
+        )
+        assert v3_candidate.development_corpus_digest == expected["development"]
+        assert v3_candidate.worst_challenger_finish_delta is not None
+        assert v3_candidate.worst_challenger_finish_delta > 0.0
         assert v3_candidate.freeze_digest == expected["freeze"]
         assert v3_candidate.profile_digest == expected["profile"]
         assert v3_candidate.manifest_digest == expected["manifest"]
@@ -463,7 +470,7 @@ def test_catalog_exposes_exact_frozen_records_and_provenance() -> None:
                 assert getattr(expert, coefficient_name) == float(coefficient)
 
 
-def test_catalog_files_are_exact_copies_of_committed_development_freezes() -> None:
+def test_catalog_index_hashes_and_describes_packaged_freezes() -> None:
     index = json.loads((CATALOG_DIR / "index.json").read_text(encoding="utf-8"))
 
     assert set(index) == {"schema_version", "candidates"}
@@ -472,22 +479,35 @@ def test_catalog_files_are_exact_copies_of_committed_development_freezes() -> No
     for entry in index["candidates"]:
         identity = entry["identity"]
         installed = CATALOG_DIR / entry["file"]
-        search_dir = BENCHMARK_DIR / entry["search_name"]
+        assert hashlib.sha256(installed.read_bytes()).hexdigest() == entry["sha256"]
+        payload = json.loads(installed.read_text(encoding="utf-8"))
+        assert payload["identity"] == entry["identity"]
+        assert payload["personality"] == entry["personality"]
+        assert payload["predecessor_name"] == entry["predecessor_name"]
+        assert payload["repository_commit"] == entry["repository_commit"]
+        assert payload["profile_digest"] == entry["profile_digest"]
+        assert payload["search"]["name"] == entry["search_name"]
+        assert payload["search"]["manifest_digest"] == entry["manifest_digest"]
+        assert payload["development_corpus"]["name"] == entry["development_corpus_name"]
+        assert payload["development_corpus"]["digest"] == entry["development_corpus_digest"]
+        assert payload["source_evidence"]["search_report_sha256"] == entry["search_report_sha256"]
+        assert (
+            payload["source_evidence"]["candidate_evaluations_sha256"]
+            == entry["candidate_evaluations_sha256"]
+        )
+        if identity in EXPECTED_V3_PROVENANCE:
+            expected = EXPECTED_V3_PROVENANCE[identity]
+            assert entry["sha256"] == expected["freeze"]
+            continue
+
+        expected = EXPECTED_V4_PROVENANCE[identity]
+        search_dir = BENCHMARK_DIR / expected["search_name"]
         benchmark = search_dir / "frozen-candidate.json"
         assert installed.read_bytes() == benchmark.read_bytes()
-        assert hashlib.sha256(installed.read_bytes()).hexdigest() == entry["sha256"]
         report = json.loads((search_dir / "search-report.json").read_text(encoding="utf-8"))
         manifest = json.loads((search_dir / "search-manifest.json").read_text(encoding="utf-8"))
         corpus = json.loads(
             (search_dir / "development-corpus-snapshot.json").read_text(encoding="utf-8")
-        )
-        assert (
-            hashlib.sha256((search_dir / "search-report.json").read_bytes()).hexdigest()
-            == entry["search_report_sha256"]
-        )
-        assert (
-            hashlib.sha256((search_dir / "candidate-evaluations.jsonl").read_bytes()).hexdigest()
-            == entry["candidate_evaluations_sha256"]
         )
         assert report["status"] == "frozen_improvement"
         assert report["frozen_candidate_identity"] == identity
@@ -496,13 +516,6 @@ def test_catalog_files_are_exact_copies_of_committed_development_freezes() -> No
         assert corpus["recipe"]["purpose"] == "development"
         assert corpus["recipe"]["name"] == entry["development_corpus_name"]
         assert corpus["digest"] == entry["development_corpus_digest"]
-        if identity in EXPECTED_V3_PROVENANCE:
-            expected = EXPECTED_V3_PROVENANCE[identity]
-            assert entry["sha256"] == expected["freeze"]
-            continue
-
-        expected = EXPECTED_V4_PROVENANCE[identity]
-        payload = json.loads(installed.read_text(encoding="utf-8"))
         assert entry["sha256"] == expected["freeze"]
         assert payload["identity"] == identity
         assert payload["profile_digest"] == expected["profile"]
@@ -1131,18 +1144,18 @@ def test_schema_v1_catalog_rejects_unknown_entry_keys_before_file_checks(
     assert captured.value.code == "invalid_object_keys"
 
 
-def test_v3_identity_rejects_schema_v2_payload_before_payload_key_dispatch(
+def test_v3_identity_accepts_current_schema_v2_payload(
     tmp_path: Path,
 ) -> None:
     index_path = _write_modified_catalog(
         tmp_path,
-        payload_mutation=lambda payload: payload.update({"schema_version": 2}),
+        index_mutation=lambda index: index.update({"candidates": index["candidates"][:1]}),
     )
 
-    with pytest.raises(FrozenCandidateCatalogError) as captured:
-        load_frozen_candidates(index_path)
+    candidates = load_frozen_candidates(index_path)
 
-    assert captured.value.code == "candidate_schema_identity_mismatch"
+    assert len(candidates) == 1
+    assert candidates[0].identity == EXPECTED_V3_IDENTITIES[0]
 
 
 @pytest.mark.parametrize(
@@ -1187,13 +1200,18 @@ def test_catalog_rejects_tampered_frozen_payload(
 
 
 def test_frozen_candidates_complete_development_matrix_without_faults() -> None:
-    corpus = load_promotion_corpus(
-        REPOSITORY_ROOT / "configs" / "promotion" / "development-v1.json",
-        registry=BOT_SPECS_BY_NAME,
-    )
     expected_matrix = set(product(tuple("ABCDE"), (3, 4, 5)))
 
     for candidate in FROZEN_CANDIDATES:
+        corpus_name = (
+            "development-heuristic-v4-v1.json"
+            if isinstance(candidate, FrozenPhaseAwareCandidate)
+            else f"development-{candidate.personality}-v3-broad-v1.json"
+        )
+        corpus = load_promotion_corpus(
+            REPOSITORY_ROOT / "configs" / "promotion" / corpus_name,
+            registry=BOT_SPECS_BY_NAME,
+        )
         plan = plan_development_games(
             corpus,
             candidate=candidate.bot_spec,

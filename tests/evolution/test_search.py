@@ -13,6 +13,7 @@ from garboid_pocketrocks.evolution.candidates import (
 )
 from garboid_pocketrocks.evolution.evaluation import (
     CandidateEvaluation,
+    ChallengerFinishDelta,
     EvaluationFailure,
 )
 from garboid_pocketrocks.evolution.manifest import (
@@ -29,6 +30,15 @@ from garboid_pocketrocks.evolution.search import (
 
 
 def test_ranks_by_exact_fitness_then_coefficients_and_identity() -> None:
+    worst_slice_winner = _evaluated(
+        0,
+        6,
+        "0.35",
+        worst=0.6,
+        rating=1.0,
+        finish=0.0,
+        money=0,
+    )
     rating_winner = _evaluated(0, 0, "0.40", rating=11.0, finish=0.0, money=0)
     finish_winner = _evaluated(0, 1, "0.45", rating=10.0, finish=2.0, money=0)
     money_winner = _evaluated(0, 2, "0.50", rating=10.0, finish=1.0, money=20)
@@ -54,10 +64,12 @@ def test_ranks_by_exact_fitness_then_coefficients_and_identity() -> None:
             rating_winner,
             coefficient_winner,
             finish_winner,
+            worst_slice_winner,
         )
     )
 
     assert tuple(item.candidate.identity for item in ranked) == (
+        worst_slice_winner.candidate.identity,
         ineligible.candidate.identity,
         rating_winner.candidate.identity,
         finish_winner.candidate.identity,
@@ -68,6 +80,7 @@ def test_ranks_by_exact_fitness_then_coefficients_and_identity() -> None:
     )
     assert isinstance(rating_winner.candidate, HeuristicCandidate)
     assert rating_winner.ranking_key.as_tuple() == (
+        -0.5,
         -11.0,
         -0.0,
         0,
@@ -241,6 +254,8 @@ def test_selection_fails_closed_for_invalid_or_insufficient_evidence() -> None:
     (
         ({}, True),
         ({"rating": 0.0}, False),
+        ({"worst": 0.0}, False),
+        ({"worst": -0.01}, False),
         ({"rating": -0.01}, False),
         ({"eligible": False}, False),
         ({"valid": False, "eligible": False, "rating": None}, False),
@@ -311,6 +326,7 @@ def _evaluated(
     completed: int = 3,
     candidate_faults: int = 0,
     personality: str = "balanced",
+    worst: float | None = 0.5,
 ) -> EvaluatedCandidate:
     candidate = HeuristicCandidate(
         personality=personality,  # type: ignore[arg-type]
@@ -343,6 +359,18 @@ def _evaluated(
         requested_cases=3,
         completed_baseline_games=completed,
         completed_candidate_games=completed,
+        worst_challenger_finish_delta=worst,
+        challenger_finish_deltas=(
+            ()
+            if worst is None
+            else (
+                ChallengerFinishDelta(
+                    opponent_identity="challenger",
+                    shared_cases=completed,
+                    normalized_finish_delta=worst,
+                ),
+            )
+        ),
         rating_delta=rating,
         normalized_finish_delta=None if rating is None else finish,
         final_money_delta=None if rating is None else money,
@@ -396,6 +424,14 @@ def _phase_evaluated(
         requested_cases=3,
         completed_baseline_games=3,
         completed_candidate_games=3,
+        worst_challenger_finish_delta=0.5,
+        challenger_finish_deltas=(
+            ChallengerFinishDelta(
+                opponent_identity="challenger",
+                shared_cases=3,
+                normalized_finish_delta=0.5,
+            ),
+        ),
         rating_delta=1.0,
         normalized_finish_delta=1.0,
         final_money_delta=1,

@@ -47,8 +47,23 @@ uv run garboid-random-bot --seed 42
 Run all live bot wrappers together:
 
 ```bash
-uv run garboid-bots
+uv run --extra neural garboid-bots
 ```
+
+The command starts random, aggressive, balanced, passive, and
+`ppo-large-teen` in separate threads. Each bot uses its committed public ID and
+the shared SDK settings from `.env`. Press Ctrl+C to stop the local process.
+
+`ppo-large-teen` is the public latest alias for the large teen policy family.
+It currently runs the immutable `vector_ppo_large_v1_g350k` checkpoint (exactly
+349,860 self-play games) under public ID
+`bot_dd7807c1-93bc-4f70-80c8-a2f2d7d26429`. Historical checkpoints keep their
+versioned local identities; the public alias may advance to a later compatible
+large teen checkpoint.
+
+The SDK reads its server, capacity, logging, and API-key settings from the
+environment. The tests use its in-memory `FakeTransport` and never connect to
+the live service.
 
 Run deterministic local matches:
 
@@ -69,11 +84,23 @@ Rank the curated field with the deterministic tournament:
 
 ```bash
 uv run --extra neural garboid-tournament \
-  --output-dir tournament-results
+  --output-dir artifacts/tournaments/default
 ```
 
 See the [tournament runbook](src/garboid_pocketrocks/tournament/README.md) for
 scheduling, rating semantics, artifacts, and reproduction.
+
+Turn any tournament artifact directory into an interactive field and bot
+behavior report:
+
+```bash
+uv run garboid-visualize tournament-results
+```
+
+Use `--decision-reports` on the tournament command for objective, auction,
+loan, opponent, and cash-pressure insights. See the
+[visualizer runbook](src/garboid_pocketrocks/visualizer/README.md) for metric
+definitions and the visualization roadmap.
 
 Run the held-out final exam before promoting a candidate:
 
@@ -81,8 +108,12 @@ Run the held-out final exam before promoting a candidate:
 uv run --extra neural garboid-promote \
   --candidate vector_ppo_large_v1_g350k \
   --incumbent vector_ppo_small_v1_g1500 \
-  --output-dir promotion-results/neural-comparison
+  --output-dir artifacts/promotions/neural-comparison
 ```
+
+The committed opponent pool contains all v1/v2 heuristics and the frozen
+350k PPO policy. Compared identities are removed automatically from ordinary
+opponent seats before matched games are planned.
 
 See the [promotion runbook](src/garboid_pocketrocks/promotion/README.md) for
 the matched-game contract, evidence, and failure reasons.
@@ -92,12 +123,18 @@ Search fixed heuristic coefficient grids on development games:
 ```bash
 uv run garboid-evolve-heuristic \
   --manifest configs/evolution/balanced-v3-search-v1.json \
-  --output-dir evolution-results/balanced-v3-search-v1
+  --development-corpus configs/promotion/development-balanced-v3-broad-v1.json \
+  --output-dir artifacts/evolution/balanced-v3-search-v1
 ```
 
 See the [heuristic evolution runbook](src/garboid_pocketrocks/evolution/README.md)
 for the development-only boundary, deterministic evidence, and frozen-candidate
 handoff to held-out promotion.
+
+Full simulation, training, evolution, and promotion receipts belong under the
+gitignored `artifacts/` tree. Commit versioned inputs, released checkpoints or
+frozen candidates, and concise benchmark conclusions instead of raw per-game
+logs and repeated corpus snapshots.
 
 Install the optional neural dependencies and run the production-backed smoke:
 

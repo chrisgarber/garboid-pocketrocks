@@ -157,7 +157,7 @@ def run_winner_diagnostics(
             "diagnostic_execution_failed",
             "winner diagnostic simulation failed",
         ) from error
-    if replace(diagnostic_result, decision_traces=()) != winner_run.result:
+    if replace(diagnostic_result, decision_traces=(), game_details=()) != winner_run.result:
         raise WinnerDiagnosticsError(
             "diagnostic_result_mismatch",
             "winner diagnostics changed the winner's ordinary simulation result",
@@ -219,7 +219,12 @@ def validate_winner_diagnostics_evidence(
     _validate_trace_only_plan(rebuilt_plan, diagnostics.diagnostic_plan)
     if (
         diagnostics.winner_identity != run.frozen_candidate.identity
-        or replace(diagnostics.diagnostic_result, decision_traces=()) != winner_run.result
+        or replace(
+            diagnostics.diagnostic_result,
+            decision_traces=(),
+            game_details=(),
+        )
+        != winner_run.result
     ):
         raise WinnerDiagnosticsError(
             "diagnostic_result_mismatch",

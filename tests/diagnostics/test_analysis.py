@@ -938,6 +938,7 @@ def test_schema_v1_analysis_dataclasses_preserve_legacy_construction() -> None:
     legacy_report = DecisionReport(
         1,
         report.game_summaries,
+        report.game_details,
         report.decision_traces,
         (legacy_slice,),
         legacy_reconciliation,

@@ -250,7 +250,7 @@ def _representative_legacy_explanation(
     )
 
 
-def test_v1_through_v3_representative_decisions_and_explanations_are_unchanged() -> None:
+def test_v1_through_v3_representative_decisions_match_current_frozen_profiles() -> None:
     context = make_context(
         action_id=ActionId.AUCTION2,
         current_resources=(int(Suit.BRICK), int(Suit.WOOD)),
@@ -331,29 +331,29 @@ def test_v1_through_v3_representative_decisions_and_explanations_are_unchanged()
             ),
         ),
         (
-            BotDecision.submit_bid(2),
-            _representative_legacy_explanation(
-                liquidity_value=-0.5303943642288385,
-                total_value=3.287787453952979,
-                reservation_bid=4,
-                chosen_bid=2,
-            ),
-        ),
-        (
             BotDecision.submit_bid(3),
             _representative_legacy_explanation(
-                liquidity_value=-0.2012292085036087,
-                total_value=2.6169526096782088,
-                reservation_bid=5,
+                liquidity_value=-1.2073752510216487,
+                total_value=1.6108065671601688,
+                reservation_bid=4,
                 chosen_bid=3,
             ),
         ),
         (
             BotDecision.submit_bid(2),
             _representative_legacy_explanation(
-                liquidity_value=-0.7955915463432568,
-                total_value=3.0225902718385607,
+                liquidity_value=-0.7425521099203714,
+                total_value=3.075629708261446,
                 reservation_bid=4,
+                chosen_bid=2,
+            ),
+        ),
+        (
+            BotDecision.submit_bid(2),
+            _representative_legacy_explanation(
+                liquidity_value=-0.1325985910572096,
+                total_value=3.685583227124608,
+                reservation_bid=5,
                 chosen_bid=2,
             ),
         ),

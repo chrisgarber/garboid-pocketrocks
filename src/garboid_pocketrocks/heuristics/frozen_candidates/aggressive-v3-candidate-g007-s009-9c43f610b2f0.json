@@ -1,0 +1,35 @@
+{
+  "coefficients": {
+    "bid_shading": "0.3",
+    "future_cash_weight": "1.05",
+    "liquidity_strength": "1.4",
+    "objective_progress_weight": "0.7"
+  },
+  "development_corpus": {
+    "digest": "6531e85f69f4e085b8ac789348be6c21614455dd77ba7ac791f5390479e17638",
+    "name": "development-aggressive-v3-broad-v1"
+  },
+  "development_scores": {
+    "final_money_delta": 2103,
+    "normalized_finish_delta": 30.083333333333314,
+    "rating_delta": 153.82265656318077,
+    "worst_challenger_finish_delta": 0.10666666666666667
+  },
+  "generation": 7,
+  "identity": "aggressive-v3-candidate-g007-s009-9c43f610b2f0",
+  "parent_identity": "aggressive-v3-candidate-g005-s007-e633bc21125a",
+  "personality": "aggressive",
+  "predecessor_name": "aggressive-v2",
+  "profile_digest": "9c43f610b2f03b2e5d3cb71c2a3ce7a62f456f3fdce73d3a52c501bab9a81042",
+  "repository_commit": "70c4bb87959a8012524e5e7460adb058ce0b78e7",
+  "schema_version": 2,
+  "search": {
+    "manifest_digest": "b4e21379ebdcf9462330a1e55412993cf69273a257afc7bb9197cb2e7d89532f",
+    "name": "aggressive-v3-search-v1"
+  },
+  "slot": 9,
+  "source_evidence": {
+    "candidate_evaluations_sha256": "47b82f973f36b3a21d7aa30d2872b542c23a55bfaf5666c715cc446fdb509139",
+    "search_report_sha256": "db53ccbe258e2a08969d43710f7979d2e3b16f18415c4c11b81654a6301abea2"
+  }
+}

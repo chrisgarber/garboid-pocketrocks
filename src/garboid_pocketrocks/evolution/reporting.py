@@ -346,7 +346,7 @@ def _best_result_payload(run: SearchRun) -> dict[str, object] | None:
     if candidate is None:
         return None
     evaluation = _evaluation_for_identity(run, candidate.identity)
-    payload = {
+    payload: dict[str, object] = {
         "candidate_identity": candidate.identity,
         "generation": candidate.generation,
         "slot": candidate.slot,
@@ -354,6 +354,8 @@ def _best_result_payload(run: SearchRun) -> dict[str, object] | None:
         "normalized_finish_delta": evaluation.normalized_finish_delta,
         "final_money_delta": evaluation.final_money_delta,
     }
+    if not isinstance(run.manifest, PhaseSearchManifest):
+        payload["worst_challenger_finish_delta"] = evaluation.worst_challenger_finish_delta
     if isinstance(candidate, PhaseAwareHeuristicCandidate):
         assert isinstance(run.manifest, PhaseSearchManifest)
         payload["candidate"] = _candidate_payload(candidate, manifest=run.manifest)
@@ -378,7 +380,8 @@ def _render_artifacts(report: SearchReport) -> tuple[tuple[str, str | None], ...
         for candidate_run in report.run.candidate_runs
     )
     selections = _render_json_lines(
-        _selection_payload(selection) for selection in report.run.selection_records
+        _selection_payload(selection, manifest=manifest)
+        for selection in report.run.selection_records
     )
     games = _render_json_lines(_development_game_payloads(report.run))
     corpus = _render_json_document(corpus_snapshot_payload(report.run.development_corpus))
@@ -433,6 +436,24 @@ def _candidate_evaluation_payload(
         ranking_key = candidate_run.evaluated_candidate.ranking_key
     except SearchSelectionError:
         pass
+    scores: dict[str, object] = {
+        "rating_delta": evaluation.rating_delta,
+        "normalized_finish_delta": evaluation.normalized_finish_delta,
+        "final_money_delta": evaluation.final_money_delta,
+    }
+    if not isinstance(manifest, PhaseSearchManifest):
+        scores = {
+            "worst_challenger_finish_delta": evaluation.worst_challenger_finish_delta,
+            "challenger_finish_deltas": [
+                {
+                    "opponent_identity": item.opponent_identity,
+                    "shared_cases": item.shared_cases,
+                    "normalized_finish_delta": item.normalized_finish_delta,
+                }
+                for item in evaluation.challenger_finish_deltas
+            ],
+            **scores,
+        }
     return {
         "candidate": _candidate_payload(candidate, manifest=manifest),
         "coverage": {
@@ -440,11 +461,7 @@ def _candidate_evaluation_payload(
             "completed_baseline_games": evaluation.completed_baseline_games,
             "completed_candidate_games": evaluation.completed_candidate_games,
         },
-        "scores": {
-            "rating_delta": evaluation.rating_delta,
-            "normalized_finish_delta": evaluation.normalized_finish_delta,
-            "final_money_delta": evaluation.final_money_delta,
-        },
+        "scores": scores,
         "faults": {
             "candidate": evaluation.candidate_faults,
             "incumbent": evaluation.incumbent_faults,
@@ -465,7 +482,14 @@ def _candidate_evaluation_payload(
         ],
         "valid": evaluation.valid,
         "eligible": evaluation.eligible,
-        "ranking_key": (None if ranking_key is None else _ranking_key_payload(ranking_key)),
+        "ranking_key": (
+            None
+            if ranking_key is None
+            else _ranking_key_payload(
+                ranking_key,
+                include_challenger=not isinstance(manifest, PhaseSearchManifest),
+            )
+        ),
     }
 
 
@@ -516,26 +540,38 @@ def _candidate_payload(
     }
 
 
-def _ranking_key_payload(key: CandidateRankingKey) -> dict[str, object]:
-    return {
-        "fields": [
-            "negative_rating_delta",
-            "negative_normalized_finish_delta",
-            "negative_final_money_delta",
-            "coefficient_values",
-            "candidate_identity",
-        ],
-        "values": [
-            key.negative_rating_delta,
-            key.negative_normalized_finish_delta,
-            key.negative_final_money_delta,
-            [_decimal_text(value) for value in key.coefficient_values],
-            key.candidate_identity,
-        ],
-    }
+def _ranking_key_payload(
+    key: CandidateRankingKey,
+    *,
+    include_challenger: bool,
+) -> dict[str, object]:
+    fields = [
+        "negative_worst_challenger_finish_delta",
+        "negative_rating_delta",
+        "negative_normalized_finish_delta",
+        "negative_final_money_delta",
+        "coefficient_values",
+        "candidate_identity",
+    ]
+    values: list[object] = [
+        key.negative_worst_challenger_finish_delta,
+        key.negative_rating_delta,
+        key.negative_normalized_finish_delta,
+        key.negative_final_money_delta,
+        [_decimal_text(value) for value in key.coefficient_values],
+        key.candidate_identity,
+    ]
+    if not include_challenger:
+        del fields[0]
+        del values[0]
+    return {"fields": fields, "values": values}
 
 
-def _selection_payload(record: SelectionRecord) -> dict[str, object]:
+def _selection_payload(
+    record: SelectionRecord,
+    *,
+    manifest: SearchRecipe,
+) -> dict[str, object]:
     return {
         "generation": record.generation,
         "proposal_identities": list(record.proposal_identities),
@@ -545,7 +581,10 @@ def _selection_payload(record: SelectionRecord) -> dict[str, object]:
         "ranking_keys": [
             {
                 "candidate_identity": identity,
-                "key": _ranking_key_payload(key),
+                "key": _ranking_key_payload(
+                    key,
+                    include_challenger=not isinstance(manifest, PhaseSearchManifest),
+                ),
             }
             for identity, key in record.ranking_keys
         ],
@@ -641,7 +680,7 @@ def _frozen_candidate_payload(
     assert candidate is not None
     evaluation = _evaluation_for_identity(run, candidate.identity)
     payload = {
-        "schema_version": run.manifest.schema_version,
+        "schema_version": 2,
         **_candidate_payload(candidate, manifest=run.manifest),
         "predecessor_name": run.manifest.predecessor_name,
         "search": {
@@ -663,6 +702,13 @@ def _frozen_candidate_payload(
             "candidate_evaluations_sha256": candidate_evaluations_sha256,
         },
     }
+    if not isinstance(run.manifest, PhaseSearchManifest):
+        development_scores = payload["development_scores"]
+        assert isinstance(development_scores, dict)
+        payload["development_scores"] = {
+            "worst_challenger_finish_delta": evaluation.worst_challenger_finish_delta,
+            **development_scores,
+        }
     if isinstance(run.manifest, PhaseSearchManifest):
         payload["boundary_evidence"] = _boundary_evidence_payload(run.manifest)
         assert report.winner_diagnostics is not None

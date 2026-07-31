@@ -10,6 +10,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from garboid_pocketrocks.diagnostics.game_detail import PublicGameDetail
 from garboid_pocketrocks.diagnostics.trace import decision_trace_payload
 from garboid_pocketrocks.simulator.monte_carlo import GameSummary
 from garboid_pocketrocks.simulator.session import SessionScore
@@ -22,6 +23,7 @@ if TYPE_CHECKING:
     )
 
 GAME_SUMMARIES_NAME = "game-summaries.jsonl"
+GAME_DETAILS_NAME = "game-details.jsonl"
 DECISION_TRACES_NAME = "decision-traces.jsonl"
 DECISION_SLICES_NAME = "decision-slices.csv"
 
@@ -98,6 +100,7 @@ class RenderedDecisionArtifacts:
     """In-memory diagnostic contents ready for one transactional write."""
 
     game_summaries_jsonl: str
+    game_details_jsonl: str
     decision_traces_jsonl: str
     decision_slices_csv: str
 
@@ -106,6 +109,7 @@ class RenderedDecisionArtifacts:
 
         return (
             (GAME_SUMMARIES_NAME, self.game_summaries_jsonl),
+            (GAME_DETAILS_NAME, self.game_details_jsonl),
             (DECISION_TRACES_NAME, self.decision_traces_jsonl),
             (DECISION_SLICES_NAME, self.decision_slices_csv),
         )
@@ -122,6 +126,9 @@ def render_decision_artifacts(
         game_summaries_jsonl=_render_json_lines(
             _game_summary_payload(summary) for summary in decision_report.game_summaries
         ),
+        game_details_jsonl=_render_json_lines(
+            _game_detail_payload(detail) for detail in decision_report.game_details
+        ),
         decision_traces_jsonl=_render_json_lines(
             decision_trace_payload(trace) for trace in decision_report.decision_traces
         ),
@@ -130,6 +137,43 @@ def render_decision_artifacts(
             schema_version=decision_report.schema_version,
         ),
     )
+
+
+def _game_detail_payload(detail: PublicGameDetail) -> dict[str, object]:
+    return {
+        "schema_version": 1,
+        "game_index": detail.game_index,
+        "chart": detail.chart,
+        "player_count": detail.player_count,
+        "bot_names": list(detail.bot_names),
+        "bot_ids": list(detail.bot_ids),
+        "value_chart": list(detail.value_chart),
+        "turns": [
+            {
+                "turn_index": turn.turn_index,
+                "action": turn.action,
+                "raw_bids": list(turn.raw_bids),
+                "effective_bids": list(turn.effective_bids),
+                "winner_seat": turn.winner_seat,
+                "paid": turn.paid,
+                "bundle_suits": list(turn.bundle_suits),
+                "claimed_objective_ids": list(turn.claimed_objective_ids),
+            }
+            for turn in detail.turns
+        ],
+        "scores": [
+            {
+                "seat": score.seat,
+                "cash": score.cash,
+                "items_value": score.items_value,
+                "objectives_value": score.objectives_value,
+                "investments_value": score.investments_value,
+                "loans_value": score.loans_value,
+                "total": score.total,
+            }
+            for score in detail.scores
+        ],
+    }
 
 
 def _game_summary_payload(summary: GameSummary) -> dict[str, object]:
@@ -243,6 +287,7 @@ def _validate_report_schema(decision_report: DecisionReport) -> None:
     canonical = _canonical_decision_evidence(
         decision_report.decision_traces,
         game_summaries=decision_report.game_summaries,
+        game_details=decision_report.game_details,
     )
     expected_schema_version = 2 if canonical.reconciliation.selected_expert_decision_count else 1
     if schema_version != expected_schema_version:
@@ -250,6 +295,8 @@ def _validate_report_schema(decision_report: DecisionReport) -> None:
 
     if decision_report.game_summaries != canonical.game_summaries:
         raise ValueError("Decision report game summaries are not in canonical order.")
+    if decision_report.game_details != canonical.game_details:
+        raise ValueError("Decision report game details are not in canonical order.")
     if decision_report.decision_traces != canonical.decision_traces:
         raise ValueError("Decision report decision traces are not in canonical order.")
     if decision_report.slices != canonical.slices:

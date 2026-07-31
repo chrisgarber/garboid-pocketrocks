@@ -281,6 +281,11 @@ def test_report_payload_owns_complete_normalized_search_evidence(
         "candidate_identity": report.run.selected_candidate.identity,
         "generation": report.run.selected_candidate.generation,
         "slot": report.run.selected_candidate.slot,
+        "worst_challenger_finish_delta": next(
+            item.evaluation.worst_challenger_finish_delta
+            for item in report.run.candidate_runs
+            if item.candidate == report.run.selected_candidate
+        ),
         "rating_delta": next(
             item.evaluation.rating_delta
             for item in report.run.candidate_runs
@@ -334,6 +339,7 @@ def test_writes_byte_identical_complete_artifact_generations(
         item.candidate.identity for item in report.run.candidate_runs
     ]
     assert evaluations[0]["ranking_key"]["fields"] == [
+        "negative_worst_challenger_finish_delta",
         "negative_rating_delta",
         "negative_normalized_finish_delta",
         "negative_final_money_delta",
@@ -356,6 +362,7 @@ def test_writes_byte_identical_complete_artifact_generations(
 
     assert first.frozen_candidate_json is not None
     frozen = json.loads(first.frozen_candidate_json.read_text())
+    assert frozen["schema_version"] == 2
     assert frozen["identity"] == report.run.frozen_candidate.identity
     assert frozen["repository_commit"] == report.repository_commit
     assert frozen["source_evidence"]["search_report_sha256"]
@@ -372,32 +379,32 @@ def test_schema_v1_complete_artifact_hashes_are_frozen(
     )
     expected = {
         "search-manifest.json": (
-            1131,
-            "60679253fa068cbaaa49ba1609f33724bb1d42ff436f3e2bcc9ac3c3914fad8b",
+            1149,
+            "7ba503268ec3f50699f24b50f123f42565fc51b9ec5ea74dc1ff0299af63d79a",
         ),
         "search-report.json": (
-            1504,
-            "79887bd72be2f2cba892edfb8ea865f75702aef8a0e50dd9d6ab3354bdad3bf5",
+            1565,
+            "6b81c4890e972ba2ed3cb0e8a7b9de1db38a63e8b262686ba1ed93672972aee5",
         ),
         "candidate-evaluations.jsonl": (
-            1833,
-            "79379a1093538cf5b56a8dde405d611682e6bb876a8ffa1c92ab2ba17e7267fe",
+            2391,
+            "ee3fc58360afcb20eea21ea4654c85869116f27ada433fdc45af10e882470f81",
         ),
         "selection-log.jsonl": (
-            1090,
-            "df81b9f4e619ad516a6f5980c6f01e4951b5588ff9c8f51310b52d3cb1646167",
+            1182,
+            "6d8d1a0ccf969a8b0a94f48ffe5df90aa0418d4a7e0da9240d5cdd7b50754eef",
         ),
         "development-games.jsonl": (
-            1940,
-            "033eb766de10aa08753b2932b4efa4fe1e8e9b06306e2d1b4e1ac2293e3203f6",
+            1941,
+            "a9ed6414d049abafffe75b6d801fa23f12ed499307af4472df1c5446be43f805",
         ),
         "development-corpus-snapshot.json": (
-            778,
-            "0460d0975a6286bdc9676054df911bd21cf24f02a483d63fdef916793bebcf38",
+            914,
+            "6b37caa501838f48624670cb375053203c224aef6121f25074e3b8489c701335",
         ),
         "frozen-candidate.json": (
-            1136,
-            "2bcddd2d923ce1e0253344b3cf16f7f99b57451466fd309a9bd1d9e192993cba",
+            1196,
+            "959dccfafab01815dbef2af9c0bd470adfb7fbe2bc6d723d57307f91e66c2be8",
         ),
     }
 
@@ -434,19 +441,19 @@ def test_phase_report_normalizes_selector_evidence_and_all_twelve_coefficients(
         ),
         "search-report.json": (
             3106,
-            "97615c85dc8f55993588ce209068b095c23649dd5f77f84be774df71e9e42dac",
+            "25d26c062bd3e2955234a8c34f563cd6de4268540af91b1be4585cb4d735f1e7",
         ),
         "candidate-evaluations.jsonl": (
-            21587,
-            "72be5e37b50f4ce56d9c61426e9838694d253ce887a30fcaedcb5fd443430267",
+            21596,
+            "9f98e6974d8e93e9a5afa6c3ac71e17091a5aefd4bad5deafb24306c917605e1",
         ),
         "selection-log.jsonl": (
-            8526,
-            "568468bbe4156f374ed3fa0ddcef06c53fc7e43d276cdbf7a1ed065d9e3bffdc",
+            8537,
+            "1c8215835558d9ab9f5edf051d11d59db19cf4dbe03b4804b65cd8866979dfbd",
         ),
         "development-games.jsonl": (
             11479,
-            "2567af9b6a30cb6a8c80a821bf6a2e59ba9473033b0e383317fb2b0b1d9f2f86",
+            "32a1f0be56c51efc5e684b10f584518de4f09e3e6207ec026354bac7acb84445",
         ),
         "development-corpus-snapshot.json": (
             778,
@@ -492,7 +499,7 @@ def test_phase_report_normalizes_selector_evidence_and_all_twelve_coefficients(
     assert selected_evaluation["scores"] == {
         "rating_delta": 0.0,
         "normalized_finish_delta": 0.0,
-        "final_money_delta": 2,
+        "final_money_delta": 5,
     }
     first_candidate = evaluations[0]["candidate"]
     assert first_candidate["phase_selector"] == search_payload["search"]["phase_selector"]

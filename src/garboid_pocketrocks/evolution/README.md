@@ -10,7 +10,8 @@ Run a search from the repository root:
 ```bash
 uv run garboid-evolve-heuristic \
   --manifest configs/evolution/balanced-v3-search-v1.json \
-  --output-dir evolution-results/balanced-v3-search-v1
+  --development-corpus configs/promotion/development-balanced-v3-broad-v1.json \
+  --output-dir artifacts/evolution/balanced-v3-search-v1
 ```
 
 The manifest owns the search seed, generations, population and elite counts,
@@ -19,6 +20,15 @@ development-corpus binding. The CLI exposes only execution controls:
 `--development-corpus`, `--workers`, `--batch-size`, `--output-dir`, and
 `--overwrite`. There is no resume mode, held-out input, or promotion switch.
 Rerun the same immutable manifest from the beginning to reproduce a search.
+
+The v3 manifests use personality-specific broad fields. Each development
+field contains random and fixed-bid baselines, the SDK greedy sample, all
+three v1 heuristics, and both non-focal v2 personalities. Candidate selection
+first maximizes its worst matched normalized-finish improvement across those
+challengers, then uses overall rating, finish, and money as tie-breakers. A
+candidate freezes only if both its overall rating and every challenger slice
+improve on its v2 predecessor. Separate held-out corpora add both PPO policies
+without exposing those games to search.
 
 ## Exit codes
 
@@ -49,6 +59,12 @@ nonempty output directory is rejected. `--overwrite` replaces the known
 artifact generation transactionally, preserves unrelated files, and removes a
 stale `frozen-candidate.json` if the replacement run does not freeze a winner.
 If replacement fails, the prior known artifact generation is restored.
+
+These complete receipts are local working data and default to the gitignored
+`artifacts/evolution/` directory. Keep a concise dated benchmark note when a
+result matters historically, along with the versioned manifest and promoted
+`frozen-candidate.json`; do not commit per-game logs, repeated corpus snapshots,
+or complete candidate-evaluation streams.
 
 The frozen candidate must still pass the separate
 [promotion gate](../promotion/README.md) on held-out games before it can become

@@ -42,19 +42,19 @@ architecture transcripts.
   [heuristic visualization runbook](analysis/heuristic-bot-visualizations.md)
   records its datasets, transformations, and provenance requirements.
 - [`docs/benchmarks`](benchmarks/) contains dated benchmark reports.
-- [`docs/benchmarks/tournaments`](benchmarks/tournaments/) contains the
-  machine-readable CSV, JSON, and HTML artifacts referenced by tournament
-  reports.
-- [`docs/benchmarks/promotions`](benchmarks/promotions/) contains immutable
-  promotion reports, paired game summaries, and corpus snapshots referenced by
-  dated promotion notes.
-- Evolution evidence directories contain immutable manifests, candidate
-  evaluations, selection logs, development games, corpus snapshots, and
-  optional frozen-candidate records as documented by the
-  [evolution runbook](../src/garboid_pocketrocks/evolution/README.md).
+- Tournament CSV, JSON, and HTML outputs are local analysis artifacts and are
+  excluded from version control. Dated reports under
+  [`docs/benchmarks`](benchmarks/) retain the summarized results and
+  reproduction commands.
+- Promotion and evolution conclusions live in concise dated benchmark notes.
+  Their complete deterministic receipts stay in the gitignored `artifacts/`
+  tree; versioned inputs and released frozen candidates or checkpoints remain
+  in source control.
 
-Reports and artifacts are historical evidence. Do not silently rewrite them
-when current behavior changes; add a newly dated result instead.
+Benchmark notes and released artifacts are historical evidence. Do not
+silently rewrite them when current behavior changes; add a newly dated result
+instead. Raw per-game logs, bootstrap samples, repeated corpus snapshots, and
+failed-run receipts are reproducible working data rather than documentation.
 
 ## Review artifacts
 

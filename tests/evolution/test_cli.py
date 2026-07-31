@@ -135,7 +135,7 @@ def test_parser_has_only_execution_controls() -> None:
 
     assert args.development_corpus == Path("configs/promotion/development-v1.json")
     assert args.batch_size == 64
-    assert args.output_dir == Path("evolution-results")
+    assert args.output_dir == Path("artifacts/evolution")
     assert {
         "--manifest",
         "--development-corpus",

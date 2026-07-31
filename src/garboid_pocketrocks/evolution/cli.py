@@ -38,7 +38,7 @@ from garboid_pocketrocks.promotion.corpus import (
 
 _BOT_REGISTRY = BOT_SPECS_BY_NAME
 _DEFAULT_DEVELOPMENT_CORPUS = Path("configs/promotion/development-v1.json")
-_DEFAULT_OUTPUT_DIR = Path("evolution-results")
+_DEFAULT_OUTPUT_DIR = Path("artifacts/evolution")
 
 
 class _InvocationError(ValueError):
@@ -96,7 +96,10 @@ def _parser() -> argparse.ArgumentParser:
         "--output-dir",
         type=Path,
         default=_DEFAULT_OUTPUT_DIR,
-        help="output directory for search-report.json and supporting evidence",
+        help=(
+            "local output directory for search-report.json and supporting evidence; "
+            "defaults under the gitignored artifacts tree"
+        ),
     )
     parser.add_argument(
         "--overwrite",

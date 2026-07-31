@@ -96,10 +96,16 @@ _BOUNDARY_EVIDENCE_KEYS = {
     "slices_path",
 }
 _DEVELOPMENT_CORPUS_KEYS = {"digest", "name"}
-_DEVELOPMENT_SCORE_KEYS = {
+_DEVELOPMENT_SCORE_KEYS_V1 = {
     "final_money_delta",
     "normalized_finish_delta",
     "rating_delta",
+}
+_DEVELOPMENT_SCORE_KEYS_V2 = {
+    "final_money_delta",
+    "normalized_finish_delta",
+    "rating_delta",
+    "worst_challenger_finish_delta",
 }
 _SEARCH_KEYS = {"manifest_digest", "name"}
 _SOURCE_EVIDENCE_KEYS = {
@@ -171,6 +177,7 @@ class FrozenCandidate:
     search_report_digest: str
     candidate_evaluations_digest: str
     development_corpus_digest: str
+    worst_challenger_finish_delta: float | None
     rating_delta: float
     normalized_finish_delta: float
     final_money_delta: int
@@ -334,22 +341,22 @@ def _load_catalog_candidate(
         {"schema_version"},
         subject=f"frozen candidate {identity}",
     )
-    schema_version = _require_integer(
+    candidate_schema = _require_integer(
         payload["schema_version"],
         field="frozen candidate schema version",
     )
-    if schema_version not in (1, 2):
+    if candidate_schema not in (1, 2):
         raise FrozenCandidateCatalogError(
             "unsupported_candidate_schema",
             f"Frozen candidate {identity!r} must use schema version 1 or 2.",
         )
-    if schema_version != identity_schema:
+    if identity_schema is not None and candidate_schema != identity_schema:
         raise FrozenCandidateCatalogError(
             "candidate_schema_identity_mismatch",
-            f"Frozen candidate {identity!r} uses schema version {schema_version}, "
+            f"Frozen candidate {identity!r} uses schema version {candidate_schema}, "
             f"but its identity requires schema version {identity_schema}.",
         )
-    if identity_schema == 2:
+    if identity_schema is not None:
         _require_exact_keys(entry, _PHASE_ENTRY_KEYS, subject=f"catalog candidate {identity}")
         _require_exact_keys(payload, _FROZEN_V2_KEYS, subject=f"frozen candidate {identity}")
         return _load_phase_catalog_candidate(
@@ -535,12 +542,20 @@ def _load_catalog_candidate(
     )
     _require_exact_keys(
         scores,
-        _DEVELOPMENT_SCORE_KEYS,
+        (_DEVELOPMENT_SCORE_KEYS_V1 if candidate_schema == 1 else _DEVELOPMENT_SCORE_KEYS_V2),
         subject=f"development scores for {identity}",
     )
     rating_delta = _require_finite_number(
         scores["rating_delta"],
         field=f"rating delta for {identity}",
+    )
+    worst_challenger_finish_delta = (
+        None
+        if candidate_schema == 1
+        else _require_finite_number(
+            scores["worst_challenger_finish_delta"],
+            field=f"worst challenger finish delta for {identity}",
+        )
     )
     normalized_finish_delta = _require_finite_number(
         scores["normalized_finish_delta"],
@@ -550,10 +565,13 @@ def _load_catalog_candidate(
         scores["final_money_delta"],
         field=f"final money delta for {identity}",
     )
-    if rating_delta <= 0.0:
+    if rating_delta <= 0.0 or (
+        worst_challenger_finish_delta is not None and worst_challenger_finish_delta <= 0.0
+    ):
         raise FrozenCandidateCatalogError(
             "nonpositive_frozen_candidate",
-            f"Frozen candidate {identity!r} must have a positive development rating.",
+            f"Frozen candidate {identity!r} must improve its development rating "
+            "and every challenger slice.",
         )
 
     bot_spec = BotSpec.for_simulation(
@@ -578,6 +596,7 @@ def _load_catalog_candidate(
         search_report_digest=search_report_digest,
         candidate_evaluations_digest=candidate_evaluations_digest,
         development_corpus_digest=corpus_digest,
+        worst_challenger_finish_delta=worst_challenger_finish_delta,
         rating_delta=rating_delta,
         normalized_finish_delta=normalized_finish_delta,
         final_money_delta=final_money_delta,
@@ -845,7 +864,7 @@ def _load_phase_catalog_candidate(
     )
     _require_exact_keys(
         scores,
-        _DEVELOPMENT_SCORE_KEYS,
+        _DEVELOPMENT_SCORE_KEYS_V1,
         subject=f"development scores for {identity}",
     )
     rating_delta = _require_finite_number(
@@ -1051,11 +1070,11 @@ def _match_phase_identity(identity: str) -> dict[str, str]:
     return matched.groupdict()
 
 
-def _candidate_schema_from_identity(identity: str) -> int:
+def _candidate_schema_from_identity(identity: str) -> int | None:
     if _PHASE_IDENTITY_PATTERN.fullmatch(identity) is not None:
         return 2
     _match_identity(identity)
-    return 1
+    return None
 
 
 def _require_entry_match(

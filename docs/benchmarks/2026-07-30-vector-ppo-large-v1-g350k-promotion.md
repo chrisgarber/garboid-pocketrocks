@@ -66,5 +66,3 @@ added or replace `--output-dir` with a fresh path.
   authoritative identities, configuration, result, and decision
 - [`paired-games.jsonl`](promotions/2026-07-30-vector-ppo-large-v1-g350k-vs-small-v1-g1500/paired-games.jsonl):
   all 960 ordered game summaries
-- [`corpus-snapshot.json`](promotions/2026-07-30-vector-ppo-large-v1-g350k-vs-small-v1-g1500/corpus-snapshot.json):
-  the normalized development and held-out cases used by the run

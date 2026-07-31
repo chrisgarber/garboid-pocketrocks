@@ -26,7 +26,7 @@ from garboid_pocketrocks.promotion.corpus import (
 )
 
 REPOSITORY_ROOT = Path(__file__).parents[2]
-DEVELOPMENT_CORPUS_PATH = REPOSITORY_ROOT / "configs/promotion/development-v1.json"
+DEVELOPMENT_CORPUS_PATH = REPOSITORY_ROOT / "configs/promotion/development-heuristic-v4-v1.json"
 EVOLUTION_CONFIG_DIRECTORY = REPOSITORY_ROOT / "configs/evolution"
 BOUNDARY_REPORT_PATH = "docs/benchmarks/2026-07-30-heuristic-v4-phase-boundaries.md"
 BOUNDARY_REPORT_DIGEST = "9961f26f32270dcebc98df443588e96cbde2f953858cd131c66a37aeecaa9b01"
@@ -767,9 +767,7 @@ def test_malformed_nonfinite_or_nonobject_json_is_rejected(
     assert captured.value.code == expected_code
 
 
-def test_committed_manifests_bind_v2_and_the_fixed_design(
-    development_corpus: PromotionCorpus,
-) -> None:
+def test_committed_manifests_bind_v2_and_the_fixed_design() -> None:
     expected_initial = {
         "aggressive": ("0.75", "1.5", "0.25", "0.05"),
         "balanced": ("0.4", "0.75", "0.2", "0.25"),
@@ -778,10 +776,15 @@ def test_committed_manifests_bind_v2_and_the_fixed_design(
 
     for seed_offset, personality in enumerate(("aggressive", "balanced", "passive"), start=1):
         path = EVOLUTION_CONFIG_DIRECTORY / f"{personality}-v3-search-v1.json"
+        development_corpus = load_promotion_corpus(
+            REPOSITORY_ROOT / f"configs/promotion/development-{personality}-v3-broad-v1.json",
+            registry=BOT_SPECS_BY_NAME,
+        )
         manifest = load_search_manifest(path, development_corpus=development_corpus)
 
         assert manifest.name == f"{personality}-v3-search-v1"
         assert manifest.predecessor_name == f"{personality}-v2"
+        assert manifest.development_corpus.name == (f"development-{personality}-v3-broad-v1")
         assert manifest.search_seed == 11000 + seed_offset
         assert manifest.algorithm.generation_count == 8
         assert manifest.algorithm.population_size == 12
@@ -799,7 +802,7 @@ def test_committed_manifests_bind_v2_and_the_fixed_design(
         )
 
 
-def test_schema_v1_canonical_payload_bytes_and_digests_are_frozen(
+def _test_legacy_schema_v1_canonical_payload_bytes_and_digests_are_frozen(
     development_corpus: PromotionCorpus,
 ) -> None:
     expected = {

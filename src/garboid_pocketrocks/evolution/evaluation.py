@@ -33,6 +33,15 @@ class EvaluationFailure:
 
 
 @dataclass(frozen=True, slots=True)
+class ChallengerFinishDelta:
+    """Matched focal-finish improvement in lineups containing one challenger."""
+
+    opponent_identity: str
+    shared_cases: int
+    normalized_finish_delta: float
+
+
+@dataclass(frozen=True, slots=True)
 class CandidateEvaluation:
     """Complete validated development fitness for one candidate identity."""
 
@@ -44,6 +53,8 @@ class CandidateEvaluation:
     rating_delta: float | None
     normalized_finish_delta: float | None
     final_money_delta: int | None
+    worst_challenger_finish_delta: float | None
+    challenger_finish_deltas: tuple[ChallengerFinishDelta, ...]
     candidate_faults: int
     incumbent_faults: int
     opponent_faults: int
@@ -134,6 +145,8 @@ def evaluate_candidate(
     rating_delta: float | None = None
     normalized_finish_delta: float | None = None
     final_money_delta: int | None = None
+    worst_challenger_finish_delta: float | None = None
+    challenger_finish_deltas: tuple[ChallengerFinishDelta, ...] = ()
     if not any(failure.invalidates_run for failure in failures):
         (
             rating_delta,
@@ -143,6 +156,24 @@ def evaluate_candidate(
         ) = _score_evidence(plan, baseline.summaries, candidate.summaries)
         if score_failure is not None:
             failures.append(score_failure)
+        else:
+            challenger_finish_deltas = _challenger_finish_deltas(
+                plan,
+                baseline.summaries,
+                candidate.summaries,
+            )
+            if not challenger_finish_deltas:
+                failures.append(
+                    EvaluationFailure(
+                        "missing_challenger_coverage",
+                        "Development evidence did not contain any configured challenger.",
+                        True,
+                    )
+                )
+            else:
+                worst_challenger_finish_delta = min(
+                    item.normalized_finish_delta for item in challenger_finish_deltas
+                )
 
     ordered_failures = _ordered_failures(failures)
     valid = not any(failure.invalidates_run for failure in ordered_failures)
@@ -150,6 +181,8 @@ def evaluate_candidate(
         rating_delta = None
         normalized_finish_delta = None
         final_money_delta = None
+        worst_challenger_finish_delta = None
+        challenger_finish_deltas = ()
     return CandidateEvaluation(
         candidate_identity=plan.candidate.name,
         incumbent_identity=plan.incumbent.name,
@@ -159,6 +192,8 @@ def evaluate_candidate(
         rating_delta=rating_delta,
         normalized_finish_delta=normalized_finish_delta,
         final_money_delta=final_money_delta,
+        worst_challenger_finish_delta=worst_challenger_finish_delta,
+        challenger_finish_deltas=challenger_finish_deltas,
         candidate_faults=candidate_faults,
         incumbent_faults=incumbent_faults,
         opponent_faults=opponent_faults,
@@ -438,6 +473,49 @@ def _focal_totals(
         normalized_finishes.append((case.player_count - score.rank) / (case.player_count - 1))
         final_money += score.final_money
     return math.fsum(normalized_finishes), final_money
+
+
+def _challenger_finish_deltas(
+    plan: DevelopmentPlan,
+    baseline: tuple[GameSummary, ...],
+    candidate: tuple[GameSummary, ...],
+) -> tuple[ChallengerFinishDelta, ...]:
+    """Measure matched focal improvement for every challenger lineup slice."""
+
+    deltas_by_identity: defaultdict[str, list[float]] = defaultdict(list)
+    for case, baseline_summary, candidate_summary, candidate_job in zip(
+        plan.corpus.cases,
+        baseline,
+        candidate,
+        plan.candidate_jobs,
+        strict=True,
+    ):
+        baseline_scores = {score.seat: score for score in baseline_summary.scores}
+        candidate_scores = {score.seat: score for score in candidate_summary.scores}
+        denominator = case.player_count - 1
+        baseline_finish = (case.player_count - baseline_scores[case.focal_seat].rank) / denominator
+        candidate_finish = (
+            case.player_count - candidate_scores[case.focal_seat].rank
+        ) / denominator
+        matched_delta = candidate_finish - baseline_finish
+        for seat, opponent in enumerate(candidate_job.lineup):
+            if seat != case.focal_seat:
+                deltas_by_identity[opponent.bot_id].append(matched_delta)
+
+    results = tuple(
+        ChallengerFinishDelta(
+            opponent_identity=identity,
+            shared_cases=len(deltas),
+            normalized_finish_delta=math.fsum(deltas) / len(deltas),
+        )
+        for identity, deltas in sorted(deltas_by_identity.items())
+        if deltas
+    )
+    if not all(
+        math.isfinite(item.normalized_finish_delta) and item.shared_cases > 0 for item in results
+    ):
+        raise ValueError("challenger finish deltas must be finite and covered")
+    return results
 
 
 def _merge_faults(

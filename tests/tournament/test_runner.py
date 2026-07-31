@@ -95,7 +95,14 @@ def test_decision_reports_preserve_ordinary_tournament_results_and_batching(
         == ordinary.plan.monte_carlo_config
     )
     assert diagnostic.monte_carlo_result.decision_traces
-    assert replace(diagnostic.monte_carlo_result, decision_traces=()) == ordinary.monte_carlo_result
+    assert (
+        replace(
+            diagnostic.monte_carlo_result,
+            decision_traces=(),
+            game_details=(),
+        )
+        == ordinary.monte_carlo_result
+    )
     replayed = original_run_jobs(
         replace(ordinary.plan.monte_carlo_config, capture_replays=True),
         ordinary.plan.jobs,

@@ -50,6 +50,18 @@ _DIAGNOSTIC_NAMES = (
 )
 
 
+def _development_for_frozen(frozen: Any):
+    corpus_file = (
+        "development-heuristic-v4-v1.json"
+        if isinstance(frozen, FrozenPhaseAwareCandidate)
+        else f"development-{frozen.personality}-v3-broad-v1.json"
+    )
+    return load_promotion_corpus(
+        Path("configs/promotion") / corpus_file,
+        registry=BOT_SPECS_BY_NAME,
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class _FrozenCandidateFixture:
     identity: str
@@ -267,10 +279,7 @@ def test_each_real_v4_candidate_resolves_and_validates_against_its_exact_v3_pred
     assert resolved.frozen_provenance.personality == personality
     assert resolved.frozen_provenance.predecessor_name == predecessor_name
     assert resolved.frozen_provenance.search_name == f"{personality}-v4-search-v2"
-    development = load_promotion_corpus(
-        Path("configs/promotion/development-v1.json"),
-        registry=BOT_SPECS_BY_NAME,
-    )
+    development = _development_for_frozen(frozen)
 
     validate_promotion_candidate(
         resolved,
@@ -365,10 +374,7 @@ def test_nested_phase_aware_provenance_tampering_is_rejected(
         "garboid_pocketrocks.promotion.candidates.load_frozen_candidate_catalog",
         lambda: FROZEN_CANDIDATES_BY_NAME,
     )
-    development = load_promotion_corpus(
-        Path("configs/promotion/development-v1.json"),
-        registry=BOT_SPECS_BY_NAME,
-    )
+    development = _development_for_frozen(frozen)
     tampered = replace(
         resolved,
         frozen_provenance=tamper(resolved.frozen_provenance),
@@ -499,10 +505,7 @@ def test_every_shape_valid_phase_aware_binding_must_match_the_canonical_catalog(
         resolved,
         frozen_provenance=_shape_valid_phase_provenance_tamper(provenance, binding),
     )
-    development = load_promotion_corpus(
-        Path("configs/promotion/development-v1.json"),
-        registry=BOT_SPECS_BY_NAME,
-    )
+    development = _development_for_frozen(frozen)
 
     with pytest.raises(PromotionCandidateError, match="trusted frozen candidate record"):
         validate_promotion_candidate(
@@ -533,10 +536,7 @@ def test_phase_aware_provenance_requires_the_exact_public_type(kind: str) -> Non
         if kind == "subclass"
         else cast(FrozenCandidateProvenance, SimpleNamespace(**values))
     )
-    development = load_promotion_corpus(
-        Path("configs/promotion/development-v1.json"),
-        registry=BOT_SPECS_BY_NAME,
-    )
+    development = _development_for_frozen(frozen)
 
     with pytest.raises(PromotionCandidateError, match="exact provenance type"):
         validate_promotion_candidate(
@@ -561,10 +561,7 @@ def test_alternate_phase_aware_catalog_record_cannot_impersonate_the_canonical_r
         registry=BOT_SPECS_BY_NAME,
         frozen_candidates={frozen.identity: alternate},
     )
-    development = load_promotion_corpus(
-        Path("configs/promotion/development-v1.json"),
-        registry=BOT_SPECS_BY_NAME,
-    )
+    development = _development_for_frozen(frozen)
 
     with pytest.raises(PromotionCandidateError, match="trusted frozen candidate record"):
         validate_promotion_candidate(
@@ -970,10 +967,7 @@ def test_frozen_candidate_rejects_a_different_equal_bot_spec() -> None:
         frozen_candidates=FROZEN_CANDIDATES_BY_NAME,
     )
     forged = replace(frozen.bot_spec, brain_factory=EvilFactory())
-    development = load_promotion_corpus(
-        Path("configs/promotion/development-v1.json"),
-        registry=BOT_SPECS_BY_NAME,
-    )
+    development = _development_for_frozen(frozen)
     assert forged == frozen.bot_spec
 
     with pytest.raises(PromotionCandidateError, match="trusted frozen candidate record"):
@@ -1009,10 +1003,7 @@ def test_frozen_candidate_rejects_lying_string_subclasses(
         resolved.frozen_provenance,
         **{field_name: lying_value},
     )
-    development = load_promotion_corpus(
-        Path("configs/promotion/development-v1.json"),
-        registry=BOT_SPECS_BY_NAME,
-    )
+    development = _development_for_frozen(frozen)
     assert str(lying_value) != trusted_value
     assert lying_value == trusted_value
 
@@ -1034,10 +1025,7 @@ def test_frozen_candidate_rejects_a_lying_provenance_subclass() -> None:
     )
     assert resolved.frozen_provenance is not None
     forged_provenance = evil_provenance(resolved.frozen_provenance)
-    development = load_promotion_corpus(
-        Path("configs/promotion/development-v1.json"),
-        registry=BOT_SPECS_BY_NAME,
-    )
+    development = _development_for_frozen(frozen)
     assert forged_provenance.search_name != resolved.frozen_provenance.search_name
     assert forged_provenance == resolved.frozen_provenance
 

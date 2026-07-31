@@ -29,8 +29,9 @@ from garboid_pocketrocks.promotion.runner import PromotionRun, PromotionRunConfi
 
 from .test_runner import _run_inputs
 
-_DEVELOPMENT_CORPUS_DIGEST = "17c016350dbe717641b8cd499b0908e3bc0faa811a3b4f5e574f8713a5bf2b3d"
+_DEVELOPMENT_CORPUS_DIGEST = "3baf37660bb33ac2571ba62a09873a74cccbe6d7491f063e5d4a3e641fd24f4c"
 _BALANCED_V4_IDENTITY = "balanced-v4-candidate-g009-s000-4d391ce068d7"
+_V4_DEVELOPMENT_CORPUS = Path("configs/promotion/development-heuristic-v4-v1.json")
 
 
 @dataclass(frozen=True, slots=True)
@@ -119,6 +120,8 @@ def _completed_run(tmp_path: Path, *, promoted: bool) -> PromotionRun:
         candidate=plan_candidate,
         incumbent=plan_incumbent,
         opponents=(registry["opponent-a"], registry["opponent-b"]),
+        opponent_pool=None,
+        plan=None,
         development=config.development,
         held_out=config.held_out,
         bootstrap_samples=1_000,
@@ -163,6 +166,7 @@ def test_parser_defaults() -> None:
     assert args.bootstrap_samples == 1_000
     assert args.bootstrap_seed == 0
     assert args.batch_size == 64
+    assert args.output_dir == Path("artifacts/promotions")
 
 
 def test_promoted_candidate_prints_interval_report_and_exits_zero(
@@ -293,6 +297,7 @@ def test_phase_aware_frozen_candidate_is_passed_to_runner_with_schema_v2_provena
         record_run,
     )
     args = _required_args(tmp_path)
+    args.extend(("--development-corpus", str(_V4_DEVELOPMENT_CORPUS)))
     args[args.index("--candidate") + 1] = frozen.identity
     args[args.index("--incumbent") + 1] = frozen.predecessor_name
 
@@ -327,7 +332,7 @@ def test_shape_valid_phase_aware_tampering_exits_two_before_loading_held_out(
         ),
     )
     development = load_promotion_corpus(
-        Path("configs/promotion/development-v1.json"),
+        _V4_DEVELOPMENT_CORPUS,
         registry=BOT_SPECS_BY_NAME,
     )
     loaded_paths: list[Path] = []
@@ -358,12 +363,13 @@ def test_shape_valid_phase_aware_tampering_exits_two_before_loading_held_out(
         forbidden,
     )
     args = _required_args(tmp_path)
+    args.extend(("--development-corpus", str(_V4_DEVELOPMENT_CORPUS)))
     args[args.index("--candidate") + 1] = tampered.identity
     args[args.index("--incumbent") + 1] = tampered.predecessor_name
 
     assert cli.main(args) == 2
     assert "trusted frozen candidate record" in capsys.readouterr().err
-    assert loaded_paths == [Path("configs/promotion/development-v1.json")]
+    assert loaded_paths == [_V4_DEVELOPMENT_CORPUS]
     assert not tuple(tmp_path.iterdir())
 
 

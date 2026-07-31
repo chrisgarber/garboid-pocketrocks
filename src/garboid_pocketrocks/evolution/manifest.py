@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Literal, NoReturn, cast
 
 from garboid_pocketrocks.heuristics.phases import PHASE_SELECTOR_NAME, HeuristicPhase
-from garboid_pocketrocks.heuristics.profiles import HEURISTIC_V2, HEURISTIC_V3, HeuristicProfile
+from garboid_pocketrocks.heuristics.profiles import HEURISTIC_V2, HeuristicProfile
 from garboid_pocketrocks.promotion.corpus import PromotionCorpus
 
 CoefficientName = Literal[
@@ -600,7 +600,7 @@ def validate_phase_search_manifest_contract(manifest: PhaseSearchManifest) -> No
     if manifest.personality not in expected_personalities:
         _raise_invalid_phase_search_contract()
     personality = manifest.personality
-    expected_profile = _profile_coefficient_values(getattr(HEURISTIC_V3, personality))
+    expected_profile = _fixed_phase_initial_profile(personality)
     expected_experts = PhaseCoefficientValues(
         early=expected_profile,
         middle=expected_profile,
@@ -1326,13 +1326,23 @@ def _validate_phase_initial_coefficients(
                     f"Initial {phase} {coefficient_name} must lie exactly on its declared grid.",
                 )
 
-    expected = _profile_coefficient_values(getattr(HEURISTIC_V3, personality))
+    expected = _fixed_phase_initial_profile(personality)
     for phase, phase_values in zip(_PHASES, values.as_tuple(), strict=True):
         if phase_values != expected:
             raise SearchManifestError(
                 "wrong_initial_coefficients",
-                f"Initial {phase} coefficients for {personality} must exactly match heuristic v3.",
+                f"Initial {phase} coefficients for {personality} must match "
+                "the frozen v4 search contract.",
             )
+
+
+def _fixed_phase_initial_profile(personality: Personality) -> CoefficientValues:
+    values = {
+        "aggressive": ("1", "1.95", "0.15", "0.4"),
+        "balanced": ("0.25", "1.55", "0.30", "0.35"),
+        "passive": ("1.5", "1.8", "0.95", "0.45"),
+    }[personality]
+    return CoefficientValues(*(Decimal(value) for value in values))
 
 
 def _profile_coefficient_values(profile: HeuristicProfile) -> CoefficientValues:

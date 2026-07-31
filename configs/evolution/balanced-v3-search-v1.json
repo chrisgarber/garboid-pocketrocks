@@ -4,8 +4,8 @@
   "personality": "balanced",
   "predecessor_name": "balanced-v2",
   "development_corpus": {
-    "name": "development-v1",
-    "digest": "17c016350dbe717641b8cd499b0908e3bc0faa811a3b4f5e574f8713a5bf2b3d"
+    "name": "development-balanced-v3-broad-v1",
+    "digest": "d556cc940c92ebf3633fde83485d4ba776b6e582f34cf8d445a5c190824b3228"
   },
   "search_seed": 11002,
   "algorithm": {

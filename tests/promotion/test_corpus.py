@@ -439,8 +439,19 @@ def test_committed_corpora_have_exact_coverage_and_disjoint_seeds() -> None:
     assert held_out.recipe.purpose == "held_out"
     assert held_out.recipe.repetitions_per_seat_cell == 8
     assert len(held_out.cases) == 480
-    assert development.digest == "17c016350dbe717641b8cd499b0908e3bc0faa811a3b4f5e574f8713a5bf2b3d"
-    assert held_out.digest == "de686b97e9318d840554514d71158e7d30e4b1603c6692d68b73bc77947b10da"
+    expected_opponents = (
+        "aggressive-v1",
+        "balanced-v1",
+        "passive-v1",
+        "aggressive-v2",
+        "balanced-v2",
+        "passive-v2",
+        "vector_ppo_large_v1_g350k",
+    )
+    assert development.recipe.opponent_names == expected_opponents
+    assert held_out.recipe.opponent_names == expected_opponents
+    assert development.digest == "3baf37660bb33ac2571ba62a09873a74cccbe6d7491f063e5d4a3e641fd24f4c"
+    assert held_out.digest == "8b5a42d944f5c79486fc0a78333c35acee72322bdd062b1f80a6a247cf7a5164"
     validate_corpus_separation(development, held_out)
 
 

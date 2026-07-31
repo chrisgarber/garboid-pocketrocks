@@ -18,6 +18,7 @@ from garboid_pocketrocks.evolution.candidates import (
 )
 from garboid_pocketrocks.evolution.evaluation import (
     CandidateEvaluation,
+    ChallengerFinishDelta,
     evaluate_candidate,
 )
 from garboid_pocketrocks.evolution.manifest import (
@@ -255,6 +256,14 @@ def test_complete_nonpositive_search_selects_but_does_not_freeze(
             requested_cases=1,
             completed_baseline_games=1,
             completed_candidate_games=1,
+            worst_challenger_finish_delta=0.0,
+            challenger_finish_deltas=(
+                ChallengerFinishDelta(
+                    opponent_identity="challenger",
+                    shared_cases=1,
+                    normalized_finish_delta=0.0,
+                ),
+            ),
             rating_delta=0.0,
             normalized_finish_delta=0.0,
             final_money_delta=0,
@@ -427,7 +436,7 @@ def test_rejects_fresh_digest_forged_phase_contract_before_simulation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     corpus = load_promotion_corpus(
-        REPOSITORY_ROOT / "configs/promotion/development-v1.json",
+        REPOSITORY_ROOT / "configs/promotion/development-heuristic-v4-v1.json",
         registry=BOT_SPECS_BY_NAME,
     )
     loaded = load_search_recipe(
@@ -569,7 +578,7 @@ def _small_inputs(
     cases: int,
 ) -> tuple[SearchManifest, PromotionCorpus]:
     corpus = load_promotion_corpus(
-        REPOSITORY_ROOT / "configs/promotion/development-v1.json",
+        REPOSITORY_ROOT / "configs/promotion/development-balanced-v3-broad-v1.json",
         registry=BOT_SPECS_BY_NAME,
     )
     manifest = load_search_manifest(
@@ -601,7 +610,7 @@ def _small_phase_inputs(
     cases: int,
 ) -> tuple[PhaseSearchManifest, PromotionCorpus]:
     corpus = load_promotion_corpus(
-        REPOSITORY_ROOT / "configs/promotion/development-v1.json",
+        REPOSITORY_ROOT / "configs/promotion/development-heuristic-v4-v1.json",
         registry=BOT_SPECS_BY_NAME,
     )
     loaded = load_search_recipe(
