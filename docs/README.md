@@ -43,8 +43,8 @@ architecture transcripts.
   machine-readable CSV, JSON, and HTML artifacts referenced by tournament
   reports.
 - [`docs/benchmarks/promotions`](benchmarks/promotions/) contains immutable
-  promotion reports, paired game summaries, and corpus snapshots referenced by
-  dated promotion notes.
+  promotion reports and paired game summaries referenced by dated promotion
+  notes.
 
 Reports and artifacts are historical evidence. Do not silently rewrite them
 when current behavior changes; add a newly dated result instead.

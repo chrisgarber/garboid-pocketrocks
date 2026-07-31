@@ -1,8 +1,7 @@
 {
   "artifacts": [
     "promotion-report.json",
-    "paired-games.jsonl",
-    "corpus-snapshot.json"
+    "paired-games.jsonl"
   ],
   "bootstrap": {
     "converged": 1000,

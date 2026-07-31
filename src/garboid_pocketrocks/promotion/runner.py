@@ -20,6 +20,7 @@ from garboid_pocketrocks.promotion.corpus import (
     validate_corpus_separation,
 )
 from garboid_pocketrocks.promotion.planning import (
+    EffectiveOpponentPool,
     PromotionPlan,
     PromotionPlanningError,
     plan_paired_games,
@@ -83,6 +84,7 @@ class PromotionRunner:
             repository_commit if repository_commit is not None else _repository_commit()
         )
         plan: PromotionPlan | None = None
+        opponent_pool: EffectiveOpponentPool | None = None
         result: MonteCarloResult | None = None
         try:
             validate_corpus_separation(config.development, config.held_out)
@@ -92,6 +94,7 @@ class PromotionRunner:
                 incumbent=config.incumbent,
                 registry=registry,
             )
+            opponent_pool = plan.opponent_pool
             result = _run_promotion_games(
                 plan,
                 workers=workers,
@@ -114,6 +117,7 @@ class PromotionRunner:
                 message=str(error),
             )
         except PromotionPlanningError as error:
+            opponent_pool = error.opponent_pool
             analysis = _failure_analysis(
                 config,
                 plan=plan,
@@ -141,13 +145,19 @@ class PromotionRunner:
         opponents = (
             plan.opponents
             if plan is not None
-            else _resolved_report_opponents(config.held_out, registry=registry)
+            else (
+                opponent_pool.remaining
+                if opponent_pool is not None
+                else _resolved_report_opponents(config.held_out, registry=registry)
+            )
         )
         report = build_promotion_report(
             repository_commit=resolved_repository_commit,
             candidate=config.candidate,
             incumbent=config.incumbent,
             opponents=opponents,
+            opponent_pool=opponent_pool,
+            plan=plan,
             development=config.development,
             held_out=config.held_out,
             bootstrap_samples=config.bootstrap_samples,

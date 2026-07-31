@@ -71,6 +71,8 @@ def _completed_run(tmp_path: Path, *, promoted: bool) -> PromotionRun:
         candidate=plan_candidate,
         incumbent=plan_incumbent,
         opponents=(registry["opponent-a"], registry["opponent-b"]),
+        opponent_pool=None,
+        plan=None,
         development=config.development,
         held_out=config.held_out,
         bootstrap_samples=1_000,

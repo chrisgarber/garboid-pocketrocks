@@ -4,6 +4,7 @@ from collections.abc import Mapping
 from types import MappingProxyType
 
 from garboid_pocketrocks.bots.base import BotSpec
+from garboid_pocketrocks.bots.fixed_bid import FIXED_BID_BOT_SPEC
 from garboid_pocketrocks.bots.heuristic import (
     AGGRESSIVE_HEURISTIC_BOT_SPEC,
     AGGRESSIVE_HEURISTIC_V1_BOT_SPEC,
@@ -16,6 +17,7 @@ from garboid_pocketrocks.bots.heuristic import (
     PASSIVE_HEURISTIC_V2_BOT_SPEC,
 )
 from garboid_pocketrocks.bots.random_bot import RandomBot
+from garboid_pocketrocks.bots.sdk_samples import SDK_GREEDY_VALUE_V1_BOT_SPEC
 from garboid_pocketrocks.neural.tournament_bot import (
     VECTOR_PPO_LARGE_V1_G350K_BOT_SPEC,
     VECTOR_PPO_SMALL_V1_G1500_BOT_SPEC,
@@ -23,6 +25,7 @@ from garboid_pocketrocks.neural.tournament_bot import (
 
 BOT_SPECS = (
     BotSpec.from_bot_class(RandomBot),
+    FIXED_BID_BOT_SPEC,
     AGGRESSIVE_HEURISTIC_BOT_SPEC,
     BALANCED_HEURISTIC_BOT_SPEC,
     PASSIVE_HEURISTIC_BOT_SPEC,
@@ -32,18 +35,21 @@ BOT_SPECS = (
     AGGRESSIVE_HEURISTIC_V2_BOT_SPEC,
     BALANCED_HEURISTIC_V2_BOT_SPEC,
     PASSIVE_HEURISTIC_V2_BOT_SPEC,
+    SDK_GREEDY_VALUE_V1_BOT_SPEC,
     VECTOR_PPO_SMALL_V1_G1500_BOT_SPEC,
     VECTOR_PPO_LARGE_V1_G350K_BOT_SPEC,
 )
 
 DEFAULT_TOURNAMENT_BOT_SPECS = (
     BOT_SPECS[0],
+    FIXED_BID_BOT_SPEC,
     AGGRESSIVE_HEURISTIC_V1_BOT_SPEC,
     BALANCED_HEURISTIC_V1_BOT_SPEC,
     PASSIVE_HEURISTIC_V1_BOT_SPEC,
     AGGRESSIVE_HEURISTIC_V2_BOT_SPEC,
     BALANCED_HEURISTIC_V2_BOT_SPEC,
     PASSIVE_HEURISTIC_V2_BOT_SPEC,
+    SDK_GREEDY_VALUE_V1_BOT_SPEC,
     VECTOR_PPO_SMALL_V1_G1500_BOT_SPEC,
     VECTOR_PPO_LARGE_V1_G350K_BOT_SPEC,
 )
