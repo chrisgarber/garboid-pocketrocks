@@ -678,6 +678,7 @@ def _phase_run_with_recomputed_positive_evidence(
                     for score in baseline_summary.scores
                 ),
             ),
+            *run.baseline_result.game_summaries[1:],
         ),
     )
     candidate_runs = tuple(

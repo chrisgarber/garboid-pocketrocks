@@ -6,11 +6,17 @@ import argparse
 import os
 import sys
 from collections.abc import Sequence
+from dataclasses import replace
 from pathlib import Path
 from typing import NoReturn
 
 from garboid_pocketrocks.bots import BOT_SPECS_BY_NAME
+from garboid_pocketrocks.evolution.diagnostics import (
+    WinnerDiagnosticsError,
+    run_winner_diagnostics,
+)
 from garboid_pocketrocks.evolution.manifest import (
+    PhaseSearchManifest,
     SearchManifestError,
     load_search_recipe,
 )
@@ -20,7 +26,11 @@ from garboid_pocketrocks.evolution.reporting import (
     validate_search_output_dir,
     write_search_artifacts,
 )
-from garboid_pocketrocks.evolution.runner import SearchRunError, run_search
+from garboid_pocketrocks.evolution.runner import (
+    SearchFailure,
+    SearchRunError,
+    run_search,
+)
 from garboid_pocketrocks.promotion.corpus import (
     PromotionCorpusError,
     load_promotion_corpus,
@@ -121,11 +131,46 @@ def main(argv: Sequence[str] | None = None) -> int:
             workers=args.workers,
             batch_size=args.batch_size,
         )
+        winner_diagnostics = None
+        if isinstance(run.manifest, PhaseSearchManifest) and run.frozen_candidate is not None:
+            try:
+                winner_diagnostics = run_winner_diagnostics(
+                    run,
+                    registry=_BOT_REGISTRY,
+                    workers=args.workers,
+                    batch_size=args.batch_size,
+                )
+            except WinnerDiagnosticsError as error:
+                run = replace(
+                    run,
+                    frozen_candidate=None,
+                    failures=(
+                        *run.failures,
+                        SearchFailure(
+                            error.code,
+                            f"Winner diagnostics failed closed ({error.code}).",
+                        ),
+                    ),
+                )
+            except Exception:
+                run = replace(
+                    run,
+                    frozen_candidate=None,
+                    failures=(
+                        *run.failures,
+                        SearchFailure(
+                            "winner_diagnostics_operational_failure",
+                            "Winner diagnostics failed closed because of an "
+                            "unexpected operational error.",
+                        ),
+                    ),
+                )
         report = build_search_report(
             run,
             repository_commit=commit,
             workers=args.workers,
             batch_size=args.batch_size,
+            winner_diagnostics=winner_diagnostics,
         )
         artifacts = write_search_artifacts(
             args.output_dir,

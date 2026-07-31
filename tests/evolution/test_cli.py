@@ -5,12 +5,19 @@ from pathlib import Path
 
 import pytest
 
+import garboid_pocketrocks.evolution.diagnostics as diagnostics_module
 import garboid_pocketrocks.evolution.reporting as reporting_module
 from garboid_pocketrocks.bots import BOT_SPECS_BY_NAME
 from garboid_pocketrocks.evolution import cli
-from garboid_pocketrocks.evolution.reporting import SearchArtifacts
+from garboid_pocketrocks.evolution.diagnostics import WinnerDiagnosticsError
+from garboid_pocketrocks.evolution.reporting import (
+    SearchArtifacts,
+    SearchReport,
+    search_report_payload,
+)
 from garboid_pocketrocks.evolution.runner import SearchFailure, SearchRun, run_search
 
+from .test_reporting import _canonical_winner_diagnostics
 from .test_runner import (
     _phase_run_with_recomputed_positive_evidence,
     _run_small_phase_search,
@@ -43,8 +50,16 @@ def complete_phase_run() -> SearchRun:
 
 
 @pytest.fixture(scope="module")
-def frozen_phase_run(complete_phase_run: SearchRun) -> SearchRun:
-    return _phase_run_with_recomputed_positive_evidence(complete_phase_run)
+def frozen_phase_run() -> SearchRun:
+    manifest, corpus = _small_phase_inputs(generations=1, cases=3)
+    return _phase_run_with_recomputed_positive_evidence(
+        _run_small_phase_search(
+            manifest,
+            corpus,
+            workers=1,
+            batch_size=1,
+        )
+    )
 
 
 def _required_args(tmp_path: Path) -> list[str]:
@@ -79,6 +94,17 @@ def _stub_execution(
             "_validate_fixed_phase_manifest_for_report",
             lambda *args, **kwargs: None,
         )
+        monkeypatch.setattr(
+            diagnostics_module,
+            "_require_exact_winner_case_count",
+            lambda *args, **kwargs: None,
+        )
+        if run.frozen_candidate is not None:
+            monkeypatch.setattr(
+                cli,
+                "run_winner_diagnostics",
+                lambda *args, **kwargs: _canonical_winner_diagnostics(run),
+            )
     monkeypatch.setattr(
         cli,
         "load_promotion_corpus",
@@ -139,6 +165,12 @@ def test_frozen_improvement_exits_zero_and_labels_development_only(
     run = replace(complete_run, frozen_candidate=complete_run.selected_candidate)
     _stub_execution(monkeypatch, run, tmp_path)
 
+    def forbidden_diagnostics(*args: object, **kwargs: object) -> None:
+        del args, kwargs
+        raise AssertionError("schema-v1 must never invoke winner diagnostics")
+
+    monkeypatch.setattr(cli, "run_winner_diagnostics", forbidden_diagnostics)
+
     exit_code = cli.main(_required_args(tmp_path))
 
     output = capsys.readouterr().out
@@ -198,6 +230,85 @@ def test_phase_manifest_frozen_improvement_exits_zero(
     assert frozen_phase_run.manifest.schema_version == 2
     assert frozen_phase_run.frozen_candidate is not None
     _stub_execution(monkeypatch, frozen_phase_run, tmp_path)
+    diagnostics = _canonical_winner_diagnostics(frozen_phase_run)
+    calls: list[tuple[SearchRun, object, int, int | None]] = []
+
+    def record_diagnostics(
+        run: SearchRun,
+        *,
+        registry: object,
+        workers: int,
+        batch_size: int | None,
+    ) -> object:
+        calls.append((run, registry, workers, batch_size))
+        return diagnostics
+
+    monkeypatch.setattr(cli, "run_winner_diagnostics", record_diagnostics)
+
+    exit_code = cli.main(
+        [
+            "--manifest",
+            "configs/evolution/balanced-v4-search-v2.json",
+            "--workers",
+            "2",
+            "--batch-size",
+            "1",
+            "--output-dir",
+            str(tmp_path),
+        ]
+    )
+
+    assert exit_code == 0
+    assert calls == [(frozen_phase_run, BOT_SPECS_BY_NAME, 2, 1)]
+    assert frozen_phase_run.frozen_candidate.identity in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    ("diagnostic_error", "expected_code"),
+    (
+        (
+            WinnerDiagnosticsError(
+                "diagnostic_result_mismatch",
+                "PRIVATE_SENTINEL must not be retained",
+            ),
+            "diagnostic_result_mismatch",
+        ),
+        (
+            RuntimeError("PRIVATE_SENTINEL must not be retained"),
+            "winner_diagnostics_operational_failure",
+        ),
+    ),
+)
+def test_phase_diagnostics_failure_preserves_selection_and_fails_closed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    frozen_phase_run: SearchRun,
+    diagnostic_error: Exception,
+    expected_code: str,
+) -> None:
+    _stub_execution(monkeypatch, frozen_phase_run, tmp_path)
+    captured_reports: list[SearchReport] = []
+
+    def fail_diagnostics(*args: object, **kwargs: object) -> None:
+        del args, kwargs
+        raise diagnostic_error
+
+    def capture_write(
+        output_dir: Path,
+        *,
+        report: SearchReport,
+        overwrite: bool,
+    ) -> SearchArtifacts:
+        del overwrite
+        captured_reports.append(report)
+        return _artifacts(
+            output_dir,
+            frozen=report.run.frozen_candidate is not None,
+        )
+
+    monkeypatch.setattr(cli, "run_winner_diagnostics", fail_diagnostics)
+    monkeypatch.setattr(cli, "write_search_artifacts", capture_write)
 
     exit_code = cli.main(
         [
@@ -208,8 +319,16 @@ def test_phase_manifest_frozen_improvement_exits_zero(
         ]
     )
 
-    assert exit_code == 0
-    assert frozen_phase_run.frozen_candidate.identity in capsys.readouterr().out
+    assert exit_code == 2
+    assert len(captured_reports) == 1
+    report = captured_reports[0]
+    assert report.run.selected_candidate == frozen_phase_run.selected_candidate
+    assert report.run.frozen_candidate is None
+    assert report.winner_diagnostics is None
+    assert report.run.failures[-1].code == expected_code
+    assert "PRIVATE_SENTINEL" not in report.run.failures[-1].message
+    assert "PRIVATE_SENTINEL" not in str(search_report_payload(report))
+    assert "PRIVATE_SENTINEL" not in capsys.readouterr().out
 
 
 def test_phase_manifest_invalid_evidence_exits_two(
@@ -274,7 +393,8 @@ def test_phase_manifest_report_validation_failure_exits_two(
 
     captured = capsys.readouterr()
     assert exit_code == 2
-    assert "evaluations recomputed" in captured.err
+    assert "Winner diagnostics failed closed (invalid_frozen_run)." in captured.out
+    assert captured.err == ""
 
 
 def test_held_out_corpus_is_rejected_before_search_execution(

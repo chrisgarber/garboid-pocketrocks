@@ -13,9 +13,17 @@ from unittest.mock import patch
 
 import pytest
 
+import garboid_pocketrocks.evolution.diagnostics as diagnostics_module
 import garboid_pocketrocks.evolution.reporting as reporting_module
 from garboid_pocketrocks.bots import BOT_SPECS_BY_NAME
 from garboid_pocketrocks.evolution.candidates import candidate_bot_spec
+from garboid_pocketrocks.evolution.diagnostics import (
+    WINNER_DECISION_SLICES_NAME,
+    WINNER_DIAGNOSTICS_JSON_NAME,
+    WINNER_DIAGNOSTICS_MARKDOWN_NAME,
+    WinnerDiagnostics,
+    run_winner_diagnostics,
+)
 from garboid_pocketrocks.evolution.manifest import PhaseSearchManifest
 from garboid_pocketrocks.evolution.planning import DevelopmentPlan
 from garboid_pocketrocks.evolution.reporting import (
@@ -26,7 +34,7 @@ from garboid_pocketrocks.evolution.reporting import (
     validate_search_output_dir,
     write_search_artifacts,
 )
-from garboid_pocketrocks.evolution.runner import SearchRun, run_search
+from garboid_pocketrocks.evolution.runner import SearchFailure, SearchRun, run_search
 from garboid_pocketrocks.promotion.corpus import (
     corpus_snapshot_payload,
     recompute_promotion_corpus_digest,
@@ -48,6 +56,12 @@ _REQUIRED_ARTIFACTS = (
     "development-corpus-snapshot.json",
 )
 _ALL_ARTIFACTS = (*_REQUIRED_ARTIFACTS, "frozen-candidate.json")
+_ALL_PHASE_ARTIFACTS = (
+    *_ALL_ARTIFACTS,
+    WINNER_DECISION_SLICES_NAME,
+    WINNER_DIAGNOSTICS_JSON_NAME,
+    WINNER_DIAGNOSTICS_MARKDOWN_NAME,
+)
 
 
 @pytest.fixture(scope="module")
@@ -94,6 +108,25 @@ def phase_search_run(
     return phase_search_runs[0]
 
 
+@pytest.fixture(scope="module")
+def frozen_phase_search_run() -> SearchRun:
+    manifest, corpus = _small_phase_inputs(generations=1, cases=3)
+    run = _run_small_phase_search(
+        manifest,
+        corpus,
+        workers=1,
+        batch_size=1,
+    )
+    return _phase_run_with_recomputed_positive_evidence(run)
+
+
+@pytest.fixture(scope="module")
+def canonical_winner_diagnostics(
+    frozen_phase_search_run: SearchRun,
+) -> WinnerDiagnostics:
+    return _canonical_winner_diagnostics(frozen_phase_search_run)
+
+
 def _report(run: SearchRun, *, frozen: bool = False) -> SearchReport:
     selected = run.selected_candidate
     assert selected is not None
@@ -115,19 +148,49 @@ def _phase_report(
     repository_commit: str = "0123456789abcdef",
     workers: int = 1,
     batch_size: int = 1,
+    winner_diagnostics: WinnerDiagnostics | None = None,
 ) -> SearchReport:
     """Build a tiny schema-v2 fixture while bypassing only the fixed-budget contract."""
 
-    with patch.object(
-        reporting_module,
-        "_validate_fixed_phase_manifest_for_report",
-        return_value=None,
+    with (
+        patch.object(
+            reporting_module,
+            "_validate_fixed_phase_manifest_for_report",
+            return_value=None,
+        ),
+        patch.object(
+            diagnostics_module,
+            "_require_exact_winner_case_count",
+            return_value=None,
+        ),
     ):
         return build_search_report(
             run,
             repository_commit=repository_commit,
             workers=workers,
             batch_size=batch_size,
+            winner_diagnostics=winner_diagnostics,
+        )
+
+
+def _canonical_winner_diagnostics(run: SearchRun) -> WinnerDiagnostics:
+    with (
+        patch.object(
+            reporting_module,
+            "_validate_fixed_phase_manifest_for_report",
+            return_value=None,
+        ),
+        patch.object(
+            diagnostics_module,
+            "_require_exact_winner_case_count",
+            return_value=None,
+        ),
+    ):
+        return run_winner_diagnostics(
+            run,
+            registry=BOT_SPECS_BY_NAME,
+            workers=1,
+            batch_size=1,
         )
 
 
@@ -768,15 +831,16 @@ def test_phase_report_rejects_candidate_family_personality_and_selector_tamperin
 
 def test_valid_phase_frozen_payload_binds_selector_and_boundary_evidence(
     tmp_path: Path,
-    phase_search_run: SearchRun,
+    frozen_phase_search_run: SearchRun,
+    canonical_winner_diagnostics: WinnerDiagnostics,
 ) -> None:
-    frozen_run = _phase_run_with_recomputed_positive_evidence(phase_search_run)
-    assert isinstance(frozen_run.manifest, PhaseSearchManifest)
+    assert isinstance(frozen_phase_search_run.manifest, PhaseSearchManifest)
     report = _phase_report(
-        frozen_run,
+        frozen_phase_search_run,
         repository_commit="0123456789abcdef",
         workers=1,
         batch_size=1,
+        winner_diagnostics=canonical_winner_diagnostics,
     )
 
     artifacts = write_search_artifacts(tmp_path, report=report)
@@ -787,11 +851,198 @@ def test_valid_phase_frozen_payload_binds_selector_and_boundary_evidence(
     assert payload["phase_selector"]["kind"] == "public-resource-horizon-v1"
     assert sum(len(values) for values in payload["experts"].values()) == 12
     assert payload["boundary_evidence"] == {
-        "report_path": frozen_run.manifest.boundary_evidence.report_path,
-        "report_digest": frozen_run.manifest.boundary_evidence.report_digest,
-        "slices_path": frozen_run.manifest.boundary_evidence.slices_path,
-        "slices_digest": frozen_run.manifest.boundary_evidence.slices_digest,
+        "report_path": frozen_phase_search_run.manifest.boundary_evidence.report_path,
+        "report_digest": frozen_phase_search_run.manifest.boundary_evidence.report_digest,
+        "slices_path": frozen_phase_search_run.manifest.boundary_evidence.slices_path,
+        "slices_digest": frozen_phase_search_run.manifest.boundary_evidence.slices_digest,
     }
+    expected_leaf_digests = dict(canonical_winner_diagnostics.artifact_digests)
+    report_payload = json.loads(artifacts.search_report_json.read_text())
+    assert {
+        item["name"]: item["sha256"] for item in report_payload["winner_diagnostics"]["artifacts"]
+    } == expected_leaf_digests
+    assert payload["source_evidence"]["winner_diagnostics"] == expected_leaf_digests
+    assert (
+        payload["source_evidence"]["selection_log_sha256"]
+        == hashlib.sha256(artifacts.selection_log_jsonl.read_bytes()).hexdigest()
+    )
+    assert (
+        payload["source_evidence"]["development_games_sha256"]
+        == hashlib.sha256(artifacts.development_games_jsonl.read_bytes()).hexdigest()
+    )
+    assert set(path.name for path in artifacts.paths) == set(_ALL_PHASE_ARTIFACTS)
+
+
+def test_phase_report_rejects_self_hashed_noncanonical_diagnostic_bytes(
+    frozen_phase_search_run: SearchRun,
+    canonical_winner_diagnostics: WinnerDiagnostics,
+) -> None:
+    forged_json = '{"schema_version":2,"private_snapshot":"forged"}\n'
+    forged = replace(
+        canonical_winner_diagnostics,
+        diagnostics_json=forged_json,
+    )
+    forged = replace(
+        forged,
+        artifact_digests=tuple(
+            (name, hashlib.sha256(content.encode()).hexdigest())
+            for name, content in forged.named_contents()
+        ),
+    )
+
+    with pytest.raises(ValueError, match="not canonical"):
+        _phase_report(
+            frozen_phase_search_run,
+            winner_diagnostics=forged,
+        )
+
+
+@pytest.mark.parametrize(
+    "evidence",
+    ("diagnostic_plan", "diagnostic_result", "decision_report"),
+)
+def test_phase_report_recomputes_typed_winner_diagnostic_evidence(
+    frozen_phase_search_run: SearchRun,
+    canonical_winner_diagnostics: WinnerDiagnostics,
+    evidence: str,
+) -> None:
+    if evidence == "diagnostic_plan":
+        forged = replace(
+            canonical_winner_diagnostics,
+            diagnostic_plan=replace(
+                canonical_winner_diagnostics.diagnostic_plan,
+                candidate_config=replace(
+                    canonical_winner_diagnostics.diagnostic_plan.candidate_config,
+                    capture_decision_traces=False,
+                ),
+            ),
+        )
+    elif evidence == "diagnostic_result":
+        forged = replace(
+            canonical_winner_diagnostics,
+            diagnostic_result=replace(
+                canonical_winner_diagnostics.diagnostic_result,
+                game_summaries=canonical_winner_diagnostics.diagnostic_result.game_summaries[:-1],
+            ),
+        )
+    else:
+        forged = replace(
+            canonical_winner_diagnostics,
+            decision_report=replace(
+                canonical_winner_diagnostics.decision_report,
+                reconciliation=replace(
+                    canonical_winner_diagnostics.decision_report.reconciliation,
+                    selected_expert_decision_count=(
+                        canonical_winner_diagnostics.decision_report.reconciliation.selected_expert_decision_count
+                        + 1
+                    ),
+                ),
+            ),
+        )
+
+    with pytest.raises(ValueError):
+        _phase_report(
+            frozen_phase_search_run,
+            winner_diagnostics=forged,
+        )
+
+
+@pytest.mark.parametrize(
+    "metadata",
+    (
+        "corpus_digest",
+        "corpus_bool_root_seed",
+        "candidate_spec",
+        "incumbent",
+        "opponents",
+    ),
+)
+def test_phase_report_rejects_forged_diagnostic_plan_metadata(
+    frozen_phase_search_run: SearchRun,
+    canonical_winner_diagnostics: WinnerDiagnostics,
+    metadata: str,
+) -> None:
+    plan = canonical_winner_diagnostics.diagnostic_plan
+    if metadata == "corpus_digest":
+        forged_plan = replace(
+            plan,
+            corpus=replace(plan.corpus, digest="0" * 64),
+        )
+    elif metadata == "corpus_bool_root_seed":
+        forged_plan = replace(
+            plan,
+            corpus=replace(
+                plan.corpus,
+                recipe=replace(
+                    plan.corpus.recipe,
+                    root_seed=cast(Any, True),
+                ),
+            ),
+        )
+    elif metadata == "candidate_spec":
+        forged_plan = replace(
+            plan,
+            candidate=replace(
+                plan.candidate,
+                name=f"{plan.candidate.name}-forged",
+            ),
+        )
+    elif metadata == "incumbent":
+        forged_plan = replace(plan, incumbent=plan.opponents[0])
+    else:
+        forged_plan = replace(
+            plan,
+            opponents=(plan.incumbent, *plan.opponents[1:]),
+        )
+    forged = replace(
+        canonical_winner_diagnostics,
+        diagnostic_plan=forged_plan,
+    )
+
+    with pytest.raises(ValueError, match="may differ only by trace capture"):
+        _phase_report(
+            frozen_phase_search_run,
+            winner_diagnostics=forged,
+        )
+
+
+def test_phase_winner_artifacts_retain_only_aggregate_diagnostics(
+    tmp_path: Path,
+    frozen_phase_search_run: SearchRun,
+    canonical_winner_diagnostics: WinnerDiagnostics,
+) -> None:
+    artifacts = write_search_artifacts(
+        tmp_path,
+        report=_phase_report(
+            frozen_phase_search_run,
+            winner_diagnostics=canonical_winner_diagnostics,
+        ),
+    )
+    assert artifacts.winner_decision_slices_csv is not None
+    assert artifacts.winner_diagnostics_json is not None
+    assert artifacts.winner_diagnostics_markdown is not None
+    retained = "\n".join(
+        path.read_text()
+        for path in (
+            artifacts.winner_decision_slices_csv,
+            artifacts.winner_diagnostics_json,
+            artifacts.winner_diagnostics_markdown,
+        )
+    )
+
+    assert all(
+        sentinel not in retained
+        for sentinel in (
+            "decision_traces",
+            "game_summaries",
+            "candidate_jobs",
+            "baseline_jobs",
+            "root_seed",
+            "engine_seed",
+            "private_hand",
+            "snapshot",
+        )
+    )
 
 
 def test_nonfinite_evidence_fails_before_creating_output(
@@ -919,4 +1170,105 @@ def test_replace_failure_rolls_back_replacement_and_stale_freeze_deletion(
 
     assert {name: (tmp_path / name).read_bytes() for name in _ALL_ARTIFACTS} == previous
     assert unrelated.read_text() == "keep me"
+    assert not tuple(path for path in tmp_path.iterdir() if path.name.startswith("."))
+
+
+def test_phase_failed_overwrite_transactionally_removes_all_winner_artifacts(
+    tmp_path: Path,
+    frozen_phase_search_run: SearchRun,
+    canonical_winner_diagnostics: WinnerDiagnostics,
+) -> None:
+    write_search_artifacts(
+        tmp_path,
+        report=_phase_report(
+            frozen_phase_search_run,
+            winner_diagnostics=canonical_winner_diagnostics,
+        ),
+    )
+    unrelated = tmp_path / "notes.txt"
+    unrelated.write_text("keep me")
+    failed_run = replace(
+        frozen_phase_search_run,
+        frozen_candidate=None,
+        failures=(SearchFailure("diagnostic_failure", "Diagnostics failed closed."),),
+    )
+
+    artifacts = write_search_artifacts(
+        tmp_path,
+        report=_phase_report(failed_run),
+        overwrite=True,
+    )
+
+    assert artifacts.frozen_candidate_json is None
+    assert artifacts.winner_decision_slices_csv is None
+    assert set(path.name for path in tmp_path.iterdir()) == {
+        *_REQUIRED_ARTIFACTS,
+        "notes.txt",
+    }
+    assert unrelated.read_text() == "keep me"
+
+
+@pytest.mark.parametrize("failure_position", range(1, 11))
+def test_phase_failed_overwrite_rolls_back_all_ten_artifact_operations(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    frozen_phase_search_run: SearchRun,
+    canonical_winner_diagnostics: WinnerDiagnostics,
+    failure_position: int,
+) -> None:
+    winner_report = _phase_report(
+        frozen_phase_search_run,
+        winner_diagnostics=canonical_winner_diagnostics,
+    )
+    write_search_artifacts(tmp_path, report=winner_report)
+    previous = {name: (tmp_path / name).read_bytes() for name in _ALL_PHASE_ARTIFACTS}
+    failed_run = replace(
+        frozen_phase_search_run,
+        frozen_candidate=None,
+        failures=(SearchFailure("diagnostic_failure", "Diagnostics failed closed."),),
+    )
+    failed_report = _phase_report(failed_run)
+    real_replace = os.replace
+    real_unlink = Path.unlink
+    operations = 0
+
+    def fail_selected_replace(source: Any, destination: Any) -> None:
+        nonlocal operations
+        source_path = Path(source)
+        destination_path = Path(destination)
+        if (
+            destination_path.parent == tmp_path
+            and destination_path.name in _REQUIRED_ARTIFACTS
+            and ".staged." in source_path.name
+        ):
+            operations += 1
+            if operations == failure_position:
+                raise OSError(f"simulated phase failure {failure_position}")
+        real_replace(source, destination)
+
+    def fail_selected_unlink(path: Path, *args: Any, **kwargs: Any) -> None:
+        nonlocal operations
+        if path.parent == tmp_path and path.name in _ALL_PHASE_ARTIFACTS[6:]:
+            operations += 1
+            if operations == failure_position:
+                raise OSError(f"simulated phase failure {failure_position}")
+        real_unlink(path, *args, **kwargs)
+
+    monkeypatch.setattr(
+        "garboid_pocketrocks.evolution.reporting.os.replace",
+        fail_selected_replace,
+    )
+    monkeypatch.setattr(Path, "unlink", fail_selected_unlink)
+
+    with pytest.raises(
+        OSError,
+        match=f"simulated phase failure {failure_position}",
+    ):
+        write_search_artifacts(
+            tmp_path,
+            report=failed_report,
+            overwrite=True,
+        )
+
+    assert {name: (tmp_path / name).read_bytes() for name in _ALL_PHASE_ARTIFACTS} == previous
     assert not tuple(path for path in tmp_path.iterdir() if path.name.startswith("."))

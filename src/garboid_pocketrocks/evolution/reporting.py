@@ -19,6 +19,14 @@ from garboid_pocketrocks.evolution.candidates import (
     SearchCandidate,
     candidate_bot_spec,
 )
+from garboid_pocketrocks.evolution.diagnostics import (
+    WINNER_DECISION_SLICES_NAME,
+    WINNER_DIAGNOSTIC_NAMES,
+    WINNER_DIAGNOSTICS_JSON_NAME,
+    WINNER_DIAGNOSTICS_MARKDOWN_NAME,
+    WinnerDiagnostics,
+    validate_winner_diagnostics_evidence,
+)
 from garboid_pocketrocks.evolution.evaluation import (
     CandidateEvaluation,
     evaluate_candidate,
@@ -75,6 +83,7 @@ _REQUIRED_ARTIFACT_NAMES = (
     _CORPUS_NAME,
 )
 _ALL_ARTIFACT_NAMES = (*_REQUIRED_ARTIFACT_NAMES, _FROZEN_NAME)
+_ALL_PHASE_ARTIFACT_NAMES = (*_ALL_ARTIFACT_NAMES, *WINNER_DIAGNOSTIC_NAMES)
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,6 +96,7 @@ class SearchReport:
     batch_size: int
     run: SearchRun
     artifact_names: tuple[str, ...]
+    winner_diagnostics: WinnerDiagnostics | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -100,6 +110,9 @@ class SearchArtifacts:
     development_games_jsonl: Path
     development_corpus_snapshot_json: Path
     frozen_candidate_json: Path | None
+    winner_decision_slices_csv: Path | None = None
+    winner_diagnostics_json: Path | None = None
+    winner_diagnostics_markdown: Path | None = None
 
     @property
     def paths(self) -> tuple[Path, ...]:
@@ -115,7 +128,15 @@ class SearchArtifacts:
         )
         if self.frozen_candidate_json is None:
             return required
-        return (*required, self.frozen_candidate_json)
+        frozen = (*required, self.frozen_candidate_json)
+        diagnostics = (
+            self.winner_decision_slices_csv,
+            self.winner_diagnostics_json,
+            self.winner_diagnostics_markdown,
+        )
+        if all(path is not None for path in diagnostics):
+            return (*frozen, *(path for path in diagnostics if path is not None))
+        return frozen
 
 
 @dataclass(frozen=True, slots=True)
@@ -138,6 +159,7 @@ def build_search_report(
     repository_commit: str,
     workers: int,
     batch_size: int,
+    winner_diagnostics: WinnerDiagnostics | None = None,
 ) -> SearchReport:
     """Collect immutable search inputs and results into the report model."""
 
@@ -150,9 +172,18 @@ def build_search_report(
         _validate_phase_report_contract(run)
         _validate_phase_candidates(run)
         _validate_phase_freeze(run)
-    artifact_names = (
-        _ALL_ARTIFACT_NAMES if run.frozen_candidate is not None else _REQUIRED_ARTIFACT_NAMES
-    )
+    artifact_names: tuple[str, ...]
+    if isinstance(run.manifest, PhaseSearchManifest) and run.frozen_candidate is not None:
+        if winner_diagnostics is None:
+            raise ValueError("frozen schema-v2 reports require winner diagnostics")
+        _validate_winner_diagnostics(run, winner_diagnostics)
+        artifact_names = _ALL_PHASE_ARTIFACT_NAMES
+    else:
+        if winner_diagnostics is not None:
+            raise ValueError("winner diagnostics are allowed only for frozen schema-v2 reports")
+        artifact_names = (
+            _ALL_ARTIFACT_NAMES if run.frozen_candidate is not None else _REQUIRED_ARTIFACT_NAMES
+        )
     return SearchReport(
         schema_version=run.manifest.schema_version,
         repository_commit=normalized_commit,
@@ -160,6 +191,7 @@ def build_search_report(
         batch_size=batch_size,
         run=run,
         artifact_names=artifact_names,
+        winner_diagnostics=winner_diagnostics,
     )
 
 
@@ -239,6 +271,14 @@ def search_report_payload(report: SearchReport) -> dict[str, object]:
         assert isinstance(search, dict)
         search["phase_selector"] = _phase_selector_payload(run.manifest)
         search["boundary_evidence"] = _boundary_evidence_payload(run.manifest)
+    if report.winner_diagnostics is not None:
+        payload["winner_diagnostics"] = {
+            "winner_identity": report.winner_diagnostics.winner_identity,
+            "artifacts": [
+                {"name": name, "sha256": digest}
+                for name, digest in report.winner_diagnostics.artifact_digests
+            ],
+        }
     return payload
 
 
@@ -257,6 +297,7 @@ def write_search_artifacts(
     prepared = _prepare_artifact_generation(output_dir, rendered)
     _replace_artifact_generation(prepared)
     frozen_path = output_dir / _FROZEN_NAME if report.run.frozen_candidate is not None else None
+    has_diagnostics = report.winner_diagnostics is not None
     return SearchArtifacts(
         search_manifest_json=output_dir / _MANIFEST_NAME,
         search_report_json=output_dir / _REPORT_NAME,
@@ -265,6 +306,15 @@ def write_search_artifacts(
         development_games_jsonl=output_dir / _GAMES_NAME,
         development_corpus_snapshot_json=output_dir / _CORPUS_NAME,
         frozen_candidate_json=frozen_path,
+        winner_decision_slices_csv=(
+            output_dir / WINNER_DECISION_SLICES_NAME if has_diagnostics else None
+        ),
+        winner_diagnostics_json=(
+            output_dir / WINNER_DIAGNOSTICS_JSON_NAME if has_diagnostics else None
+        ),
+        winner_diagnostics_markdown=(
+            output_dir / WINNER_DIAGNOSTICS_MARKDOWN_NAME if has_diagnostics else None
+        ),
     )
 
 
@@ -339,8 +389,15 @@ def _render_artifacts(report: SearchReport) -> tuple[tuple[str, str | None], ...
                 report,
                 search_report_sha256=_sha256_text(search_report),
                 candidate_evaluations_sha256=_sha256_text(evaluations),
+                selection_log_sha256=_sha256_text(selections),
+                development_games_sha256=_sha256_text(games),
             )
         )
+    diagnostics_by_name = (
+        {}
+        if report.winner_diagnostics is None
+        else dict(report.winner_diagnostics.named_contents())
+    )
     return (
         (_MANIFEST_NAME, rendered_manifest),
         (_REPORT_NAME, search_report),
@@ -349,6 +406,18 @@ def _render_artifacts(report: SearchReport) -> tuple[tuple[str, str | None], ...
         (_GAMES_NAME, games),
         (_CORPUS_NAME, corpus),
         (_FROZEN_NAME, frozen),
+        (
+            WINNER_DECISION_SLICES_NAME,
+            diagnostics_by_name.get(WINNER_DECISION_SLICES_NAME),
+        ),
+        (
+            WINNER_DIAGNOSTICS_JSON_NAME,
+            diagnostics_by_name.get(WINNER_DIAGNOSTICS_JSON_NAME),
+        ),
+        (
+            WINNER_DIAGNOSTICS_MARKDOWN_NAME,
+            diagnostics_by_name.get(WINNER_DIAGNOSTICS_MARKDOWN_NAME),
+        ),
     )
 
 
@@ -564,6 +633,8 @@ def _frozen_candidate_payload(
     *,
     search_report_sha256: str,
     candidate_evaluations_sha256: str,
+    selection_log_sha256: str,
+    development_games_sha256: str,
 ) -> dict[str, object]:
     run = report.run
     candidate = run.frozen_candidate
@@ -594,6 +665,14 @@ def _frozen_candidate_payload(
     }
     if isinstance(run.manifest, PhaseSearchManifest):
         payload["boundary_evidence"] = _boundary_evidence_payload(run.manifest)
+        assert report.winner_diagnostics is not None
+        source_evidence = payload["source_evidence"]
+        assert isinstance(source_evidence, dict)
+        source_evidence["selection_log_sha256"] = selection_log_sha256
+        source_evidence["development_games_sha256"] = development_games_sha256
+        source_evidence["winner_diagnostics"] = {
+            name: digest for name, digest in report.winner_diagnostics.artifact_digests
+        }
     return payload
 
 
@@ -623,6 +702,17 @@ def _coefficient_values_payload(values: CoefficientValues) -> dict[str, str]:
         name: _decimal_text(value)
         for name, value in zip(COEFFICIENT_NAMES, coefficients, strict=True)
     }
+
+
+def _validate_winner_diagnostics(
+    run: SearchRun,
+    diagnostics: WinnerDiagnostics,
+) -> None:
+    validate_winner_diagnostics_evidence(
+        run,
+        diagnostics,
+        registry=BOT_SPECS_BY_NAME,
+    )
 
 
 def _validate_phase_report_contract(run: SearchRun) -> None:
