@@ -7,7 +7,17 @@ from garboid_pocketrocks.bots.base import (
     HistoryAwareBotBrain,
     PocketRocksFastBot,
 )
-from garboid_pocketrocks.bots.fixed_bid import FixedBidBotBrain
+from garboid_pocketrocks.bots.fixed_bid import (
+    FixedBidBotBrain,
+    FixedBidDiverseV1Brain,
+    FixedBidTunedNormalV1Brain,
+    FixedBidTunedV1Brain,
+)
+from garboid_pocketrocks.bots.fixed_objective_overlay import (
+    FixedObjectiveOverlayBrain,
+    FixedObjectiveOverlayV1Brain,
+    FixedObjectiveOverlayV2Brain,
+)
 from garboid_pocketrocks.bots.heuristic import (
     AggressiveHeuristicBot,
     AggressiveHeuristicBrain,
@@ -45,6 +55,12 @@ __all__ = [
     "BotSpec",
     "BrainFactory",
     "FixedBidBotBrain",
+    "FixedBidDiverseV1Brain",
+    "FixedBidTunedNormalV1Brain",
+    "FixedBidTunedV1Brain",
+    "FixedObjectiveOverlayBrain",
+    "FixedObjectiveOverlayV1Brain",
+    "FixedObjectiveOverlayV2Brain",
     "AggressiveHeuristicBot",
     "AggressiveHeuristicBrain",
     "AggressiveHeuristicV1Brain",

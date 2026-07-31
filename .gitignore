@@ -28,6 +28,7 @@ htmlcov/
 /artifacts/
 /checkpoints/
 /data/
+/docs/benchmarks/tournaments/
 *.onnx
 *.pt
 *.pth

@@ -1,11 +1,22 @@
 from __future__ import annotations
 
+import statistics
 from dataclasses import replace
 
 import pytest
 from pocketrocks import OBJECTIVES, ActionId, BotDecision, DecisionContext
 
-from garboid_pocketrocks.bots.fixed_bid import FIXED_BID_BOT_SPEC, FixedBidBotBrain
+from garboid_pocketrocks.bots.base import BotSpec
+from garboid_pocketrocks.bots.fixed_bid import (
+    FIXED_BID_BOT_SPEC,
+    FIXED_BID_DIVERSE_V1_BOT_SPEC,
+    FIXED_BID_TUNED_NORMAL_V1_BOT_SPEC,
+    FIXED_BID_TUNED_V1_BOT_SPEC,
+    FixedBidBotBrain,
+    FixedBidDiverseV1Brain,
+    FixedBidTunedNormalV1Brain,
+    FixedBidTunedV1Brain,
+)
 from garboid_pocketrocks.knowledge import RulesetKnowledge
 
 
@@ -149,3 +160,89 @@ def test_fixed_bid_spec_is_local_deterministic_and_builds_fresh_brains() -> None
         context,
         _knowledge(),
     )
+
+
+@pytest.mark.parametrize(
+    ("brain_type", "expected"),
+    (
+        (FixedBidTunedV1Brain, (5, 10, 2, 5, 4, 7)),
+        (FixedBidDiverseV1Brain, (4, 9, 2, 5, 4, 7)),
+    ),
+)
+def test_fixed_bid_candidate_profiles_are_frozen(
+    brain_type: type[FixedBidTunedV1Brain] | type[FixedBidDiverseV1Brain],
+    expected: tuple[int, ...],
+) -> None:
+    decisions = tuple(
+        brain_type().choose_decision(_context(action_id=action), _knowledge()).value
+        for action in ActionId
+    )
+
+    assert decisions == expected
+
+
+@pytest.mark.parametrize(
+    ("spec", "name", "brain_type"),
+    (
+        (FIXED_BID_TUNED_V1_BOT_SPEC, "fixed-bid-tuned-v1", FixedBidTunedV1Brain),
+        (FIXED_BID_DIVERSE_V1_BOT_SPEC, "fixed-bid-diverse-v1", FixedBidDiverseV1Brain),
+    ),
+)
+def test_fixed_bid_candidate_specs_are_versioned_local_and_seed_invariant(
+    spec: BotSpec,
+    name: str,
+    brain_type: type[FixedBidTunedV1Brain] | type[FixedBidDiverseV1Brain],
+) -> None:
+    assert spec.name == name
+    assert spec.bot_id == name
+    left = spec.make_brain(seed=11)
+    right = spec.make_brain(seed=999)
+    context = _context(action_id=ActionId.INVEST10)
+
+    assert isinstance(left, brain_type)
+    assert isinstance(right, brain_type)
+    assert left is not right
+    assert left.choose_decision(context, _knowledge()) == right.choose_decision(
+        context,
+        _knowledge(),
+    )
+
+
+def test_normal_candidate_samples_standard_normal_offsets() -> None:
+    brain = FixedBidTunedNormalV1Brain(seed=20260731)
+
+    offsets = tuple(brain._sample_offset() for _ in range(20_000))
+
+    assert statistics.mean(offsets) == pytest.approx(0.0, abs=0.03)
+    assert statistics.pstdev(offsets) == pytest.approx(1.0, abs=0.03)
+
+
+def test_normal_candidate_is_seed_reproducible() -> None:
+    left = FixedBidTunedNormalV1Brain(seed=42)
+    right = FixedBidTunedNormalV1Brain(seed=42)
+    context = _context(action_id=ActionId.INVEST10)
+
+    left_decisions = tuple(left.choose_decision(context, _knowledge()) for _ in range(50))
+    right_decisions = tuple(right.choose_decision(context, _knowledge()) for _ in range(50))
+
+    assert left_decisions == right_decisions
+    assert len(set(left_decisions)) > 1
+
+
+def test_normal_candidate_spec_is_versioned_and_local() -> None:
+    brain = FIXED_BID_TUNED_NORMAL_V1_BOT_SPEC.make_brain(seed=42)
+
+    assert FIXED_BID_TUNED_NORMAL_V1_BOT_SPEC.name == "fixed-bid-tuned-normal-v1"
+    assert FIXED_BID_TUNED_NORMAL_V1_BOT_SPEC.bot_id == "fixed-bid-tuned-normal-v1"
+    assert isinstance(brain, FixedBidTunedNormalV1Brain)
+
+
+def test_normal_candidate_clips_to_legal_range(monkeypatch: pytest.MonkeyPatch) -> None:
+    brain = FixedBidTunedNormalV1Brain(seed=42)
+    context = _context(action_id=ActionId.LOAN10, legal_max=3)
+
+    monkeypatch.setattr(brain, "_sample_offset", lambda: 100.0)
+    assert brain.choose_decision(context, _knowledge()) == BotDecision.submit_bid(3)
+
+    monkeypatch.setattr(brain, "_sample_offset", lambda: -100.0)
+    assert brain.choose_decision(context, _knowledge()) == BotDecision.pass_turn()

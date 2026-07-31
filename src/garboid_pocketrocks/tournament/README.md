@@ -18,9 +18,13 @@ omitted. Use `--bots` or `--exclude-bots` for an explicit field,
 `--bootstrap-samples 0` for a quick run, and `--overwrite` only when replacing
 an existing known artifact generation.
 
-The curated default field contains random, all six explicit heuristic v1/v2
-generations, and the two frozen neural policies. Moving unversioned heuristic
-aliases are omitted because they duplicate v2 behavior.
+The curated default field is the top ten from the 15-bot
+`fixed-objective-overlay-v2` benchmark: both objective-aware overlay
+generations, all three fixed-bid policies, aggressive-v2, balanced-v2,
+passive-v2, passive-v1, and the frozen large neural policy. The five lower
+finishers remain registered and explicitly selectable; pruning the default
+does not delete their immutable identities or historical evidence. Moving
+unversioned heuristic aliases are omitted because they duplicate v2 behavior.
 
 Decision diagnostics are opt-in:
 
@@ -100,9 +104,9 @@ Writes are atomic. A bootstrap failure still preserves primary ratings and
 reports the missing uncertainty explicitly.
 
 For recorded evidence, see the
-[benchmark reports](../../../docs/benchmarks/) and their
-[tournament artifacts](../../../docs/benchmarks/tournaments/). Do not rewrite
-a dated report; create a new dated result with its seed, configuration,
+[benchmark reports](../../../docs/benchmarks/). Generated tournament artifacts
+are local analysis outputs and are excluded from version control. Do not
+rewrite a dated report; create a new dated result with its seed, configuration,
 repository revision, and runtime.
 
 ## Extension points
