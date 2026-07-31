@@ -46,6 +46,7 @@ def test_bot_filters_use_curated_defaults_when_include_is_omitted() -> None:
 
     assert tuple(spec.name for spec in selected) == (
         "random",
+        "fixed-bid",
         "aggressive-v1",
         "balanced-v1",
         "passive-v1",
