@@ -25,6 +25,7 @@ class TournamentConfig:
     fault_mode: FaultMode = FaultMode.RECORD_AND_PASS
     batch_size: int = 64
     bootstrap_samples: int = 200
+    decision_reports: bool = False
 
     def __post_init__(self) -> None:
         if not self.bot_specs:
@@ -123,6 +124,7 @@ class TournamentPlanner:
                         objectives_enabled=True,
                         lineup=lineup,
                         fault_mode=config.fault_mode,
+                        capture_decision_traces=config.decision_reports,
                     )
                 )
                 _record_lineup(
@@ -143,6 +145,7 @@ class TournamentPlanner:
             value_charts=config.charts,
             root_seed=config.root_seed,
             fault_mode=config.fault_mode,
+            capture_decision_traces=config.decision_reports,
         )
         pair_exposures = tuple(
             PairExposure(first, second, pair_appearances[first, second])

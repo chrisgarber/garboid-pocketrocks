@@ -12,6 +12,7 @@ from itertools import batched
 from pocketrocks.sim.constants import ACTION_WIRE_IDS, VALUE_CHARTS
 
 from garboid_pocketrocks.bots.base import BotSpec
+from garboid_pocketrocks.diagnostics.trace import DecisionTrace
 from garboid_pocketrocks.knowledge import ruleset_name
 from garboid_pocketrocks.simulator.batch_match import run_batch_matches
 from garboid_pocketrocks.simulator.errors import SimulationError
@@ -35,6 +36,7 @@ class MonteCarloConfig:
     objectives_enabled: tuple[bool, ...] = (True,)
     fault_mode: FaultMode = FaultMode.RAISE
     capture_replays: bool = False
+    capture_decision_traces: bool = False
 
     def __post_init__(self) -> None:
         if self.games < 0:
@@ -69,6 +71,7 @@ class GameJob:
     objectives_enabled: bool
     lineup: tuple[BotSpec, ...]
     fault_mode: FaultMode
+    capture_decision_traces: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -213,6 +216,7 @@ class MonteCarloResult:
     game_summaries: tuple[GameSummary, ...]
     bot_statistics: tuple[BotStatistics, ...]
     replays: tuple[MatchReplay, ...]
+    decision_traces: tuple[DecisionTrace, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -310,6 +314,7 @@ class MonteCarloRunner:
                     objectives_enabled=objectives_enabled,
                     lineup=lineup,
                     fault_mode=config.fault_mode,
+                    capture_decision_traces=config.capture_decision_traces,
                 )
             )
         return tuple(jobs)
@@ -405,6 +410,10 @@ def _validate_jobs(
             raise ValueError(f"job {job.game_index} uses an unconfigured bot identity")
         if job.fault_mode is not config.fault_mode:
             raise ValueError(f"job {job.game_index} fault mode does not match the configuration")
+        if job.capture_decision_traces is not config.capture_decision_traces:
+            raise ValueError(
+                f"job {job.game_index} trace capture mode does not match the configuration"
+            )
 
 
 def _validate_picklable_bot_specs(bot_specs: tuple[BotSpec, ...]) -> None:
@@ -451,6 +460,8 @@ def _execute_job(job: GameJob) -> _CompletedGame:
             value_chart=job.value_chart,
             objectives_enabled=job.objectives_enabled,
             fault_mode=job.fault_mode,
+            game_index=job.game_index,
+            capture_decision_traces=job.capture_decision_traces,
         ),
     )
 
@@ -510,6 +521,7 @@ def _aggregate(
 
     summaries: list[GameSummary] = []
     replays: list[MatchReplay] = []
+    decision_traces: list[DecisionTrace] = []
     for completed in sorted(completed_games, key=lambda item: item.job.game_index):
         job = completed.job
         match = completed.match
@@ -547,6 +559,8 @@ def _aggregate(
                     game_index=job.game_index,
                 )
             )
+        if config.capture_decision_traces:
+            decision_traces.extend(match.decision_traces)
 
         _record_behavior(
             match.replay,
@@ -587,6 +601,7 @@ def _aggregate(
         game_summaries=tuple(summaries),
         bot_statistics=statistics_by_bot,
         replays=tuple(replays),
+        decision_traces=tuple(decision_traces),
     )
 
 

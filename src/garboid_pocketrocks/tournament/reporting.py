@@ -8,10 +8,17 @@ import math
 import os
 import statistics
 import tempfile
+from collections.abc import Collection, Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
+from garboid_pocketrocks.diagnostics.reporting import (
+    DECISION_SLICES_NAME,
+    DECISION_TRACES_NAME,
+    GAME_SUMMARIES_NAME,
+    render_decision_artifacts,
+)
 from garboid_pocketrocks.tournament.analysis import (
     BootstrapSummary,
     TournamentAnalysis,
@@ -22,6 +29,9 @@ from garboid_pocketrocks.tournament.schedule import (
     TournamentPlan,
 )
 
+if TYPE_CHECKING:
+    from garboid_pocketrocks.diagnostics.analysis import DecisionReport
+
 _ARTIFACT_NAMES = ("ratings.csv", "summary.json", "report.html")
 
 
@@ -30,6 +40,23 @@ class TournamentArtifacts:
     ratings_csv: Path
     summary_json: Path
     report_html: Path
+    game_summaries_jsonl: Path | None = None
+    decision_traces_jsonl: Path | None = None
+    decision_slices_csv: Path | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class _PreparedArtifact:
+    target: Path
+    staged: Path | None
+    backup: Path | None
+
+
+@dataclass(frozen=True, slots=True)
+class _RollbackFailure:
+    target: Path
+    backup: Path | None
+    error: OSError
 
 
 def write_tournament_artifacts(
@@ -41,6 +68,7 @@ def write_tournament_artifacts(
     fit: PlackettLuceFit,
     analysis: TournamentAnalysis,
     bootstrap: BootstrapSummary,
+    decision_report: DecisionReport | None = None,
 ) -> TournamentArtifacts:
     validate_artifact_output_dir(output_dir, overwrite=overwrite)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -51,24 +79,59 @@ def write_tournament_artifacts(
         fit=fit,
         analysis=analysis,
         bootstrap=bootstrap,
+        decision_report=decision_report,
     )
     contents = {
         "ratings.csv": _render_csv(analysis, bootstrap),
-        "summary.json": json.dumps(payload, indent=2, sort_keys=True) + "\n",
-        "report.html": _render_html(config, fit, analysis, bootstrap),
+        "summary.json": _render_json_document(payload),
+        "report.html": _render_html(
+            config,
+            fit,
+            analysis,
+            bootstrap,
+            decision_report=decision_report,
+        ),
     }
-    for name, content in contents.items():
-        _atomic_write(output_dir / name, content)
+    if decision_report is not None:
+        rendered_decisions = render_decision_artifacts(decision_report=decision_report)
+        contents.update(rendered_decisions.named_contents())
+    validate_artifact_output_dir(output_dir, overwrite=overwrite)
+    prepared_artifacts = _prepare_artifact_generation(
+        output_dir,
+        tuple(contents.items()),
+        remove_artifact_names=(
+            (GAME_SUMMARIES_NAME, DECISION_TRACES_NAME, DECISION_SLICES_NAME)
+            if decision_report is None
+            else ()
+        ),
+    )
+    _replace_artifact_generation(prepared_artifacts)
     return TournamentArtifacts(
         ratings_csv=output_dir / "ratings.csv",
         summary_json=output_dir / "summary.json",
         report_html=output_dir / "report.html",
+        game_summaries_jsonl=(
+            output_dir / GAME_SUMMARIES_NAME if decision_report is not None else None
+        ),
+        decision_traces_jsonl=(
+            output_dir / DECISION_TRACES_NAME if decision_report is not None else None
+        ),
+        decision_slices_csv=(
+            output_dir / DECISION_SLICES_NAME if decision_report is not None else None
+        ),
     )
 
 
 def validate_artifact_output_dir(output_dir: Path, *, overwrite: bool) -> None:
     if output_dir.exists() and any(output_dir.iterdir()) and not overwrite:
         raise FileExistsError(f"output directory is not empty: {output_dir}")
+
+
+def _render_json_document(payload: dict[str, Any]) -> str:
+    try:
+        return json.dumps(payload, allow_nan=False, indent=2, sort_keys=True) + "\n"
+    except ValueError as error:
+        raise ValueError("Tournament artifacts must contain only finite JSON numbers.") from error
 
 
 def _summary_payload(
@@ -78,6 +141,7 @@ def _summary_payload(
     fit: PlackettLuceFit,
     analysis: TournamentAnalysis,
     bootstrap: BootstrapSummary,
+    decision_report: DecisionReport | None = None,
 ) -> dict[str, Any]:
     intervals = {interval.bot_id: interval for interval in bootstrap.intervals}
     pair_counts = tuple(exposure.games for exposure in plan.pair_exposures)
@@ -88,7 +152,7 @@ def _summary_payload(
         item["rating_interval_lower"] = interval.lower if interval is not None else None
         item["rating_interval_upper"] = interval.upper if interval is not None else None
         leaderboard.append(item)
-    return {
+    payload: dict[str, Any] = {
         "schema_version": 1,
         "configuration": {
             "bots": [{"name": spec.name, "bot_id": spec.bot_id} for spec in config.bot_specs],
@@ -124,6 +188,21 @@ def _summary_payload(
             "report_html": "report.html",
         },
     }
+    if decision_report is not None:
+        payload["configuration"]["root_seed"] = None
+        payload["decision_diagnostics"] = {
+            "schema_version": decision_report.schema_version,
+            "seed_disclosure": "withheld_for_privacy",
+            "reconciliation": asdict(decision_report.reconciliation),
+        }
+        payload["artifacts"].update(
+            {
+                "game_summaries_jsonl": GAME_SUMMARIES_NAME,
+                "decision_traces_jsonl": DECISION_TRACES_NAME,
+                "decision_slices_csv": DECISION_SLICES_NAME,
+            }
+        )
+    return payload
 
 
 def _render_csv(
@@ -171,11 +250,21 @@ def _render_html(
     fit: PlackettLuceFit,
     analysis: TournamentAnalysis,
     bootstrap: BootstrapSummary,
+    *,
+    decision_report: DecisionReport | None = None,
 ) -> str:
     del fit
     intervals = {interval.bot_id: interval for interval in bootstrap.intervals}
     warning_html = "".join(
         f'<p class="warning">{html.escape(warning)}</p>' for warning in bootstrap.warnings
+    )
+    seed_text = (
+        "Seed withheld for decision-trace privacy"
+        if decision_report is not None
+        else f"seed {config.root_seed}"
+    )
+    decision_diagnostics_html = (
+        "\n" + _decision_diagnostics_html(decision_report) if decision_report is not None else ""
     )
     table_rows = []
     for row in analysis.rows:
@@ -235,7 +324,7 @@ svg {{ display: block; height: auto; margin: 1rem 0 2rem; max-width: 100%; }}
 <body>
 <h1>Garboid PocketRocks tournament</h1>
 <p class="meta">{config.games:,} games · charts {", ".join(config.charts)} ·
-players {", ".join(map(str, config.player_counts))} · seed {config.root_seed}</p>
+players {", ".join(map(str, config.player_counts))} · {seed_text}</p>
 {warning_html}
 <div class="table-wrap">
 <table>
@@ -250,10 +339,24 @@ players {", ".join(map(str, config.player_counts))} · seed {config.root_seed}</
 <h2>Rating versus mean winning money</h2>
 {_money_svg(analysis)}
 <h2>PL calibration</h2>
-{_calibration_svg(analysis)}
+{_calibration_svg(analysis)}{decision_diagnostics_html}
 </body>
 </html>
 """
+
+
+def _decision_diagnostics_html(report: DecisionReport) -> str:
+    reconciliation = report.reconciliation
+    return (
+        "<h2>Decision diagnostics</h2>"
+        f"<p>Validated {reconciliation.trace_decision_count:,} decisions across "
+        f"{reconciliation.game_count:,} games.</p>"
+        "<ul>"
+        f'<li><a href="{GAME_SUMMARIES_NAME}">Game summaries</a></li>'
+        f'<li><a href="{DECISION_TRACES_NAME}">Decision traces</a></li>'
+        f'<li><a href="{DECISION_SLICES_NAME}">Decision slices</a></li>'
+        "</ul>"
+    )
 
 
 def _rating_svg(
@@ -386,22 +489,153 @@ def _scale(
     return range_low + fraction * (range_high - range_low)
 
 
-def _atomic_write(path: Path, content: str) -> None:
+def _prepare_artifact_generation(
+    output_dir: Path,
+    rendered_artifacts: tuple[tuple[str, str], ...],
+    *,
+    remove_artifact_names: Sequence[str] = (),
+) -> tuple[_PreparedArtifact, ...]:
+    prepared: list[_PreparedArtifact] = []
+    try:
+        for artifact_name, content in rendered_artifacts:
+            target = output_dir / artifact_name
+            staged = _stage_bytes(
+                output_dir,
+                prefix=f".{artifact_name}.staged.",
+                content=content.encode("utf-8"),
+            )
+            prepared.append(
+                _PreparedArtifact(
+                    target=target,
+                    staged=staged,
+                    backup=None,
+                )
+            )
+        for artifact_name in remove_artifact_names:
+            target = output_dir / artifact_name
+            if target.exists():
+                prepared.append(
+                    _PreparedArtifact(
+                        target=target,
+                        staged=None,
+                        backup=None,
+                    )
+                )
+
+        for index, artifact in enumerate(prepared):
+            backup = (
+                _stage_bytes(
+                    output_dir,
+                    prefix=f".{artifact.target.name}.backup.",
+                    content=artifact.target.read_bytes(),
+                )
+                if artifact.target.exists()
+                else None
+            )
+            prepared[index] = _PreparedArtifact(
+                target=artifact.target,
+                staged=artifact.staged,
+                backup=backup,
+            )
+        return tuple(prepared)
+    except Exception:
+        _remove_prepared_files(prepared)
+        raise
+
+
+def _replace_artifact_generation(
+    prepared_artifacts: tuple[_PreparedArtifact, ...],
+) -> None:
+    replaced: list[_PreparedArtifact] = []
+    try:
+        for artifact in prepared_artifacts:
+            if artifact.staged is None:
+                artifact.target.unlink(missing_ok=True)
+            else:
+                os.replace(artifact.staged, artifact.target)
+            replaced.append(artifact)
+    except Exception as replacement_error:
+        rollback_failures = _rollback_replaced_artifacts(replaced)
+        preserved_backups = tuple(
+            failure.backup for failure in rollback_failures if failure.backup is not None
+        )
+        _remove_prepared_files(
+            prepared_artifacts,
+            preserve_backups=preserved_backups,
+        )
+        if rollback_failures:
+            failure_summary = "; ".join(
+                f"{failure.target}: {failure.error}" for failure in rollback_failures
+            )
+            recovery_summary = (
+                " Recovery copies were preserved at: "
+                + ", ".join(str(path) for path in preserved_backups)
+                if preserved_backups
+                else " No recovery copy was available for the unrestored files."
+            )
+            raise RuntimeError(
+                "Tournament artifact replacement failed, and the previous artifact "
+                "generation could not be fully restored. "
+                f"Rollback errors: {failure_summary}.{recovery_summary}"
+            ) from replacement_error
+        raise
+    _remove_prepared_files(prepared_artifacts)
+
+
+def _rollback_replaced_artifacts(
+    replaced_artifacts: Sequence[_PreparedArtifact],
+) -> tuple[_RollbackFailure, ...]:
+    rollback_failures: list[_RollbackFailure] = []
+    for artifact in reversed(replaced_artifacts):
+        try:
+            if artifact.backup is None:
+                artifact.target.unlink(missing_ok=True)
+            else:
+                os.replace(artifact.backup, artifact.target)
+        except OSError as error:
+            rollback_failures.append(
+                _RollbackFailure(
+                    target=artifact.target,
+                    backup=artifact.backup,
+                    error=error,
+                )
+            )
+    return tuple(rollback_failures)
+
+
+def _remove_prepared_files(
+    prepared_artifacts: Sequence[_PreparedArtifact],
+    *,
+    preserve_backups: Collection[Path] = (),
+) -> None:
+    for artifact in prepared_artifacts:
+        if artifact.staged is not None:
+            artifact.staged.unlink(missing_ok=True)
+        if artifact.backup is not None and artifact.backup not in preserve_backups:
+            artifact.backup.unlink(missing_ok=True)
+
+
+def _stage_bytes(
+    directory: Path,
+    *,
+    prefix: str,
+    content: bytes,
+) -> Path:
     temporary_path: Path | None = None
+    staged = False
     try:
         with tempfile.NamedTemporaryFile(
-            mode="w",
-            encoding="utf-8",
-            dir=path.parent,
-            prefix=f".{path.name}.",
+            mode="wb",
+            dir=directory,
+            prefix=prefix,
             delete=False,
         ) as stream:
             temporary_path = Path(stream.name)
             stream.write(content)
             stream.flush()
             os.fsync(stream.fileno())
-        os.replace(temporary_path, path)
-        temporary_path = None
+        staged = True
+        return temporary_path
     finally:
-        if temporary_path is not None:
+        if temporary_path is not None and not staged:
             temporary_path.unlink(missing_ok=True)

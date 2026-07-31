@@ -21,16 +21,21 @@ from garboid_pocketrocks.adapters.public_history import (
     PublicTurnOpened,
 )
 from garboid_pocketrocks.bots.base import BotBrain, BotSpec
+from garboid_pocketrocks.diagnostics.trace import PendingDecisionTrace
 from garboid_pocketrocks.knowledge import RulesetKnowledge, canonical_knowledge
 from garboid_pocketrocks.simulator.batch_context import build_batch_context
 from garboid_pocketrocks.simulator.bot_execution import (
     BotFault,
     FaultMode,
-    choose_brain_decision,
+    execute_brain_decision,
     initialize_brains,
 )
 from garboid_pocketrocks.simulator.replay import MatchReplay
-from garboid_pocketrocks.simulator.runner import MatchResult
+from garboid_pocketrocks.simulator.runner import (
+    MatchResult,
+    _build_pending_decision_trace,
+    _finalize_decision_traces,
+)
 from garboid_pocketrocks.simulator.session import (
     SessionResult,
     SessionScore,
@@ -44,6 +49,9 @@ _RESOURCE_GRANTS = {
 
 
 class BatchGameJob(Protocol):
+    @property
+    def game_index(self) -> int: ...
+
     @property
     def seed(self) -> int: ...
 
@@ -62,6 +70,9 @@ class BatchGameJob(Protocol):
     @property
     def fault_mode(self) -> FaultMode: ...
 
+    @property
+    def capture_decision_traces(self) -> bool: ...
+
 
 @dataclass(slots=True)
 class _BatchRunState:
@@ -73,6 +84,7 @@ class _BatchRunState:
     knowledge: list[RulesetKnowledge]
     histories: list[list[PublicEvent]]
     decisions: list[list[tuple[int, tuple[tuple[int, BotDecision], ...]]]]
+    pending_traces: list[list[PendingDecisionTrace]]
     turns: list[list[TurnRecord]]
     step_indices: list[int]
 
@@ -146,6 +158,7 @@ def _initialize_batch(jobs: tuple[BatchGameJob, ...]) -> _BatchRunState:
         knowledge=knowledge,
         histories=histories,
         decisions=[[] for _ in jobs],
+        pending_traces=[[] for _ in jobs],
         turns=[[] for _ in jobs],
         step_indices=[0] * len(jobs),
     )
@@ -203,18 +216,35 @@ def _collect_bid_decisions(state: _BatchRunState, pending: _PendingBatchTurn) ->
                 turn_index=int(pending.turn_indices[row]),
                 legal_max_amount=int(pending.legal_max_bids[row, seat]),
             )
-            decision = choose_brain_decision(
+            history = tuple(state.histories[row])
+            execution = execute_brain_decision(
                 brain=state.brains[row][seat],
                 context=context,
                 knowledge=state.knowledge[row],
-                history=tuple(state.histories[row]),
+                history=history,
                 fault_mode=job.fault_mode,
                 faults=state.faults[row],
                 turn_index=int(pending.turn_indices[row]),
                 seat=seat,
                 bot_name=job.lineup[seat].name,
+                request_explanation=job.capture_decision_traces,
             )
+            decision = execution.decision
             recorded.append((seat, decision))
+            if job.capture_decision_traces:
+                state.pending_traces[row].append(
+                    _build_pending_decision_trace(
+                        game_index=job.game_index,
+                        chart=job.value_chart,
+                        step_index=state.step_indices[row],
+                        turn_index=int(pending.turn_indices[row]),
+                        seat=seat,
+                        lineup=job.lineup,
+                        context=context,
+                        public_history=history,
+                        execution=execution,
+                    )
+                )
             if decision.action_kind == "submitBid":
                 assert decision.value is not None
                 pending.raw_bids[row, seat] = decision.value
@@ -310,17 +340,34 @@ def _resolve_reveals(
                 turn_index=int(pending.turn_indices[row]),
                 legal_max_amount=None,
             )
-            decision = choose_brain_decision(
+            history = tuple(state.histories[row])
+            execution = execute_brain_decision(
                 brain=state.brains[row][winner],
                 context=context,
                 knowledge=state.knowledge[row],
-                history=tuple(state.histories[row]),
+                history=history,
                 fault_mode=job.fault_mode,
                 faults=state.faults[row],
                 turn_index=int(state.engine.turn_indices[row]),
                 seat=winner,
                 bot_name=job.lineup[winner].name,
+                request_explanation=job.capture_decision_traces,
             )
+            decision = execution.decision
+            if job.capture_decision_traces:
+                state.pending_traces[row].append(
+                    _build_pending_decision_trace(
+                        game_index=job.game_index,
+                        chart=job.value_chart,
+                        step_index=state.step_indices[row],
+                        turn_index=int(state.engine.turn_indices[row]),
+                        seat=winner,
+                        lineup=job.lineup,
+                        context=context,
+                        public_history=history,
+                        execution=execution,
+                    )
+                )
             state.decisions[row].append((state.step_indices[row], ((winner, decision),)))
             state.step_indices[row] += 1
             if decision.action_kind == "selectInfoToReveal":
@@ -410,6 +457,10 @@ def _build_match_results(state: _BatchRunState) -> tuple[MatchResult, ...]:
                 turns=tuple(state.turns[row]),
                 faults=tuple(state.faults[row]),
                 replay=replay,
+                decision_traces=_finalize_decision_traces(
+                    state.pending_traces[row],
+                    session_result,
+                ),
             )
         )
     return tuple(results)

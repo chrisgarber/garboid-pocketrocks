@@ -8,6 +8,7 @@ import pytest
 from pocketrocks import OBJECTIVES, ActionId, BotDecision, DecisionContext, Suit
 from pocketrocks.sim.constants import VALUE_CHARTS
 
+import garboid_pocketrocks.bots.heuristic as heuristic_module
 from garboid_pocketrocks.bots import (
     AggressiveHeuristicBot,
     AggressiveHeuristicBrain,
@@ -36,13 +37,14 @@ from garboid_pocketrocks.bots.heuristic import (
     PASSIVE_HEURISTIC_V2_BOT_SPEC,
     HeuristicBotBrain,
 )
+from garboid_pocketrocks.diagnostics.trace import HeuristicBidExplanation
 from garboid_pocketrocks.heuristics.errors import HeuristicInputError
 from garboid_pocketrocks.heuristics.profiles import (
     BALANCED_PROFILE,
     HEURISTIC_V1,
     HEURISTIC_V2,
 )
-from garboid_pocketrocks.heuristics.valuation import HeuristicValuator
+from garboid_pocketrocks.heuristics.valuation import BidEvaluation, HeuristicValuator
 from garboid_pocketrocks.knowledge import (
     RulesetKnowledge,
     canonical_knowledge,
@@ -256,6 +258,99 @@ def test_profile_brains_return_legal_bid_and_reveal_decisions(
     assert bid_context.is_legal(bid)
     assert reveal_context.is_legal(reveal)
     assert reveal.action_kind == "selectInfoToReveal"
+
+
+def test_heuristic_explanation_reuses_the_single_bid_evaluation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = make_context(
+        action_id=ActionId.AUCTION2,
+        current_resources=(int(Suit.BRICK), int(Suit.WOOD)),
+        legal_max=9,
+    )
+    knowledge = make_knowledge()
+    brain = HeuristicBotBrain(BALANCED_PROFILE)
+    original_evaluate = HeuristicValuator.evaluate_bid
+    evaluations = []
+
+    def record_evaluation(
+        valuator: HeuristicValuator,
+        context: DecisionContext,
+        ruleset: RulesetKnowledge,
+    ) -> BidEvaluation:
+        evaluation = original_evaluate(valuator, context, ruleset)
+        evaluations.append(evaluation)
+        return evaluation
+
+    monkeypatch.setattr(HeuristicValuator, "evaluate_bid", record_evaluation)
+
+    explained = brain.choose_explained_decision(context, knowledge, ())
+
+    assert len(evaluations) == 1
+    evaluation = evaluations[0]
+    point = evaluation.points[evaluation.chosen_bid]
+    assert explained.decision == (
+        BotDecision.pass_turn()
+        if evaluation.chosen_bid == 0
+        else BotDecision.submit_bid(evaluation.chosen_bid)
+    )
+    assert explained.explanation == HeuristicBidExplanation(
+        resource_value=point.breakdown.resource,
+        objective_completion_value=point.breakdown.objective_completion,
+        objective_progress_value=point.breakdown.objective_progress,
+        terminal_cash_value=point.breakdown.terminal_cash,
+        liquidity_value=point.breakdown.liquidity,
+        future_cash_value=point.breakdown.future_cash,
+        total_value=point.breakdown.total,
+        reservation_bid=evaluation.reservation_bid,
+        chosen_bid=evaluation.chosen_bid,
+    )
+
+
+def test_ordinary_heuristic_choice_does_not_construct_an_explanation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = make_context(
+        action_id=ActionId.AUCTION2,
+        current_resources=(int(Suit.BRICK), int(Suit.WOOD)),
+        legal_max=9,
+    )
+    knowledge = make_knowledge()
+    brain = HeuristicBotBrain(BALANCED_PROFILE)
+    expected = brain.choose_decision(context, knowledge)
+
+    def reject_explanation(**_values: object) -> None:
+        raise RuntimeError("explanation construction is disabled")
+
+    monkeypatch.setattr(
+        heuristic_module,
+        "HeuristicBidExplanation",
+        reject_explanation,
+    )
+
+    assert brain.choose_decision(context, knowledge) == expected
+    with pytest.raises(RuntimeError, match="explanation construction"):
+        brain.choose_explained_decision(context, knowledge, ())
+
+
+def test_heuristic_reveal_decision_has_no_bid_explanation() -> None:
+    context = make_context(
+        decision_kind="selectInfoToReveal",
+        action_id=ActionId.AUCTION1,
+        current_resources=(0, 0),
+        hand=(int(Suit.ORE), int(Suit.SHEEP)),
+        legal_max=None,
+    )
+    knowledge = make_knowledge(private_cards=2, resource_counts=(3, 3, 3, 3, 3))
+
+    explained = HeuristicBotBrain(BALANCED_PROFILE).choose_explained_decision(
+        context,
+        knowledge,
+        (),
+    )
+
+    assert context.is_legal(explained.decision)
+    assert explained.explanation is None
 
 
 @pytest.mark.parametrize("chart_name", ("B", "C", "D", "E"))

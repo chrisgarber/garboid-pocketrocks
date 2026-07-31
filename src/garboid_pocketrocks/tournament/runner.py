@@ -80,6 +80,17 @@ class TournamentRunner:
                     "confidence intervals are unavailable",
                 ),
             )
+        if config.decision_reports:
+            from garboid_pocketrocks.diagnostics.analysis import build_decision_report
+
+            decision_report = build_decision_report(
+                monte_carlo_result.decision_traces,
+                game_summaries=monte_carlo_result.game_summaries,
+                bot_statistics=monte_carlo_result.bot_statistics,
+                tournament_analysis=analysis,
+            )
+        else:
+            decision_report = None
         artifacts = write_tournament_artifacts(
             output_dir=output_dir,
             overwrite=overwrite,
@@ -88,6 +99,7 @@ class TournamentRunner:
             fit=fit,
             analysis=analysis,
             bootstrap=bootstrap,
+            decision_report=decision_report,
         )
         return TournamentRun(
             config=config,

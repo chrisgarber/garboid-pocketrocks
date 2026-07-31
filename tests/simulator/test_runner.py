@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import random
+from dataclasses import replace
 
 import pytest
 from pocketrocks import BotDecision, DecisionContext
@@ -12,6 +13,10 @@ from garboid_pocketrocks.adapters.public_history import (
     public_history_from_sdk_events,
 )
 from garboid_pocketrocks.bots import BotSpec, RandomBot
+from garboid_pocketrocks.diagnostics.trace import (
+    PublicDecisionOutcome,
+    RecordedAction,
+)
 from garboid_pocketrocks.knowledge import RulesetKnowledge
 from garboid_pocketrocks.simulator.runner import FaultMode, MatchRunner
 
@@ -95,6 +100,44 @@ class IllegalDecisionBrain:
 def _illegal_decision_brain(seed: int | None) -> IllegalDecisionBrain:
     del seed
     return IllegalDecisionBrain()
+
+
+_FAILING_EXPLANATION_CALLS = 0
+
+
+class AlwaysPassBrain:
+    def choose_decision(
+        self,
+        context: DecisionContext,
+        ruleset: RulesetKnowledge,
+    ) -> BotDecision:
+        del ruleset
+        if context.decision_kind == "selectInfoToReveal":
+            return BotDecision.select_info_to_reveal(0)
+        return BotDecision.submit_bid(0)
+
+
+class FailingExplanationBrain(AlwaysPassBrain):
+    def choose_explained_decision(
+        self,
+        context: DecisionContext,
+        ruleset: RulesetKnowledge,
+        history: PublicHistory,
+    ) -> object:
+        del context, ruleset, history
+        global _FAILING_EXPLANATION_CALLS
+        _FAILING_EXPLANATION_CALLS += 1
+        raise RuntimeError("explanation path must remain opt-in")
+
+
+def _always_pass_brain(seed: int | None) -> AlwaysPassBrain:
+    del seed
+    return AlwaysPassBrain()
+
+
+def _failing_explanation_brain(seed: int | None) -> FailingExplanationBrain:
+    del seed
+    return FailingExplanationBrain()
 
 
 def _random_lineup() -> tuple[BotSpec, ...]:
@@ -323,3 +366,102 @@ def test_automatic_reveals_are_not_recorded_as_bot_decisions() -> None:
 
     assert automatic_reveals
     assert len(choice_reveal_decisions) == len(nonautomatic_reveals)
+
+
+def test_decision_traces_are_opt_in_finalized_and_behavior_preserving() -> None:
+    lineup = _random_lineup()
+    omitted = MatchRunner.run(
+        lineup,
+        player_count=3,
+        seed=31,
+        value_chart="C",
+        game_index=7,
+    )
+    captured = MatchRunner.run(
+        lineup,
+        player_count=3,
+        seed=31,
+        value_chart="C",
+        game_index=7,
+        capture_decision_traces=True,
+    )
+
+    assert omitted.decision_traces == ()
+    assert replace(captured, decision_traces=()) == omitted
+    replayed_decisions = {
+        (step_index, seat): RecordedAction.from_decision(decision)
+        for step_index, decisions in captured.replay.decisions
+        for seat, decision in decisions
+    }
+    assert len(captured.decision_traces) == len(replayed_decisions)
+    assert tuple(
+        (trace.game_index, trace.step_index, trace.seat) for trace in captured.decision_traces
+    ) == tuple(
+        sorted(
+            (trace.game_index, trace.step_index, trace.seat) for trace in captured.decision_traces
+        )
+    )
+    scores_by_seat = {score.seat: score for score in captured.result.scores}
+    for trace in captured.decision_traces:
+        score = scores_by_seat[trace.seat]
+        assert not hasattr(trace, "root_seed")
+        assert not hasattr(trace, "engine_seed")
+        assert trace.chart == "C"
+        assert trace.selected_action == replayed_decisions[(trace.step_index, trace.seat)]
+        assert trace.outcome == PublicDecisionOutcome(
+            rank=score.rank,
+            final_money=score.final_money,
+            first_place_tied=(
+                score.rank == 1 and sum(other.rank == 1 for other in captured.result.scores) > 1
+            ),
+        )
+
+
+def test_captured_fault_fallbacks_keep_the_ordinary_decision_and_source() -> None:
+    lineup = (
+        BotSpec("raising", "test-raising", _raising_brain),
+        *_random_lineup()[:2],
+    )
+
+    match = MatchRunner.run(
+        lineup,
+        player_count=3,
+        seed=5,
+        fault_mode=FaultMode.RECORD_AND_PASS,
+        capture_decision_traces=True,
+    )
+
+    fallback_traces = tuple(
+        trace for trace in match.decision_traces if trace.bot_id == "test-raising"
+    )
+    assert fallback_traces
+    assert all(trace.selection_source == "fault_fallback" for trace in fallback_traces)
+    assert all(trace.explanation is None for trace in fallback_traces)
+
+
+def test_tracing_off_never_invokes_the_explanation_protocol() -> None:
+    global _FAILING_EXPLANATION_CALLS
+    _FAILING_EXPLANATION_CALLS = 0
+    ordinary_spec = BotSpec("opt-in", "opt-in", _always_pass_brain)
+    explanation_spec = BotSpec("opt-in", "opt-in", _failing_explanation_brain)
+    expected = MatchRunner.run(
+        (ordinary_spec, *_random_lineup()[1:]),
+        player_count=3,
+        seed=31,
+        value_chart="C",
+        fault_mode=FaultMode.RAISE,
+    )
+    actual = MatchRunner.run(
+        (explanation_spec, *_random_lineup()[1:]),
+        player_count=3,
+        seed=31,
+        value_chart="C",
+        fault_mode=FaultMode.RAISE,
+    )
+
+    assert _FAILING_EXPLANATION_CALLS == 0
+    assert actual.result == expected.result
+    assert actual.events == expected.events
+    assert actual.turns == expected.turns
+    assert actual.faults == expected.faults
+    assert actual.replay == expected.replay

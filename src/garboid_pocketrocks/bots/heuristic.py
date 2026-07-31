@@ -1,16 +1,29 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from pocketrocks import BotDecision, DecisionContext
 
+from garboid_pocketrocks.adapters.public_history import PublicHistory
 from garboid_pocketrocks.bots.base import BotSpec, PocketRocksFastBot
+from garboid_pocketrocks.diagnostics.trace import (
+    ExplainedBotDecision,
+    HeuristicBidExplanation,
+)
 from garboid_pocketrocks.heuristics.errors import HeuristicInputError
 from garboid_pocketrocks.heuristics.profiles import (
     HEURISTIC_V1,
     HEURISTIC_V2,
     HeuristicProfile,
 )
-from garboid_pocketrocks.heuristics.valuation import HeuristicValuator
+from garboid_pocketrocks.heuristics.valuation import BidEvaluation, HeuristicValuator
 from garboid_pocketrocks.knowledge import RulesetKnowledge
+
+
+@dataclass(frozen=True, slots=True)
+class _HeuristicChoice:
+    decision: BotDecision
+    bid_evaluation: BidEvaluation | None
 
 
 class HeuristicBotBrain:
@@ -24,15 +37,61 @@ class HeuristicBotBrain:
         context: DecisionContext,
         ruleset: RulesetKnowledge,
     ) -> BotDecision:
+        return self._choose_raw(context, ruleset).decision
+
+    def choose_explained_decision(
+        self,
+        context: DecisionContext,
+        ruleset: RulesetKnowledge,
+        history: PublicHistory,
+    ) -> ExplainedBotDecision:
+        """Choose once and retain the valuation that produced a heuristic bid."""
+
+        del history
+        choice = self._choose_raw(context, ruleset)
+        evaluation = choice.bid_evaluation
+        if evaluation is None:
+            return ExplainedBotDecision(decision=choice.decision)
+        bid = evaluation.chosen_bid
+        point = evaluation.points[bid]
+        return ExplainedBotDecision(
+            decision=choice.decision,
+            explanation=HeuristicBidExplanation(
+                resource_value=point.breakdown.resource,
+                objective_completion_value=point.breakdown.objective_completion,
+                objective_progress_value=point.breakdown.objective_progress,
+                terminal_cash_value=point.breakdown.terminal_cash,
+                liquidity_value=point.breakdown.liquidity,
+                future_cash_value=point.breakdown.future_cash,
+                total_value=point.breakdown.total,
+                reservation_bid=evaluation.reservation_bid,
+                chosen_bid=bid,
+            ),
+        )
+
+    def _choose_raw(
+        self,
+        context: DecisionContext,
+        ruleset: RulesetKnowledge,
+    ) -> _HeuristicChoice:
+        """Choose once without constructing diagnostic records."""
+
         try:
             if context.decision_kind == "selectInfoToReveal":
-                return BotDecision.select_info_to_reveal(
-                    self.valuator.choose_reveal(context, ruleset)
+                return _HeuristicChoice(
+                    BotDecision.select_info_to_reveal(
+                        self.valuator.choose_reveal(context, ruleset),
+                    ),
+                    None,
                 )
-            bid = self.valuator.evaluate_bid(context, ruleset).chosen_bid
-            return BotDecision.pass_turn() if bid == 0 else BotDecision.submit_bid(bid)
+            evaluation = self.valuator.evaluate_bid(context, ruleset)
+            bid = evaluation.chosen_bid
+            return _HeuristicChoice(
+                BotDecision.pass_turn() if bid == 0 else BotDecision.submit_bid(bid),
+                evaluation,
+            )
         except HeuristicInputError:
-            return BotDecision.pass_turn()
+            return _HeuristicChoice(BotDecision.pass_turn(), None)
 
 
 class AggressiveHeuristicV1Brain(HeuristicBotBrain):
