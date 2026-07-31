@@ -11,7 +11,9 @@ from typing import Any, cast
 import pytest
 
 PROMOTION_SOURCE_COMMIT = "7a59af3e37d5124536f1f7ba7366a1953b929137"
+V4_PROMOTION_SOURCE_COMMIT = "109d0602ab035df82b382b92f4a63a133617b5c1"
 SEARCH_SOURCE_COMMIT = "5fb33de9734234ce0902bf79b85a75c3a5585c23"
+V4_SEARCH_SOURCE_COMMIT = "a66c49e559849b35a290827b51b2e5098524e2d1"
 DEVELOPMENT_DIGEST = "17c016350dbe717641b8cd499b0908e3bc0faa811a3b4f5e574f8713a5bf2b3d"
 HELD_OUT_DIGEST = "de686b97e9318d840554514d71158e7d30e4b1603c6692d68b73bc77947b10da"
 CORPUS_SNAPSHOT_SHA256 = "6122d00ba4995580c3f2c4642be8e1a045f371c5b527f8fe967d3f284549cb0d"
@@ -137,6 +139,52 @@ EXPECTATIONS = (
 )
 
 
+@dataclass(frozen=True, slots=True)
+class V4PromotionExpectation:
+    personality: str
+    candidate: str
+    incumbent: str
+    report_sha256: str
+    games_sha256: str
+
+    @property
+    def promotion_directory(self) -> Path:
+        return PROMOTIONS_ROOT / f"2026-07-30-{self.candidate}-vs-{self.incumbent}"
+
+    @property
+    def artifact_hashes(self) -> dict[str, str]:
+        return {
+            "promotion-report.json": self.report_sha256,
+            "paired-games.jsonl": self.games_sha256,
+            "corpus-snapshot.json": CORPUS_SNAPSHOT_SHA256,
+        }
+
+
+V4_EXPECTATIONS = (
+    V4PromotionExpectation(
+        personality="aggressive",
+        candidate="aggressive-v4-candidate-g011-s004-000d194163fa",
+        incumbent="aggressive-v3",
+        report_sha256="c3f6faa6f8d70b387d3962e66fc96bdaa6385edb9a3cf40ed40e72cf04689878",
+        games_sha256="c426336cff83e6c7d14e99bf668b4e0560ba17a1ffb42d258ca64e24042be07d",
+    ),
+    V4PromotionExpectation(
+        personality="balanced",
+        candidate="balanced-v4-candidate-g009-s000-4d391ce068d7",
+        incumbent="balanced-v3",
+        report_sha256="e61dad7b0116d5a26286169159b0a0fc0d81bb6d055dcf8f3c4c93e2f71eb30b",
+        games_sha256="71332fde536a5ac6cac5d8d77ae634712cc1e71f3becc9a9937b8e6b69c65ea3",
+    ),
+    V4PromotionExpectation(
+        personality="passive",
+        candidate="passive-v4-candidate-g005-s005-cf4f7b924ee3",
+        incumbent="passive-v3",
+        report_sha256="212d275550ea659bb9be7a70d3fd01f53c51f85ee40dfa16c947d3623bc2e1b8",
+        games_sha256="f243a0bf900d7dbf8186b12d563fbfe62b57c7dadceb2d9b426b3c6270452a3e",
+    ),
+)
+
+
 def _load_json(path: Path) -> dict[str, Any]:
     payload: object = json.loads(path.read_text(encoding="utf-8"))
     assert isinstance(payload, dict)
@@ -177,6 +225,212 @@ def _bot_names_for_case(case: dict[str, Any], focal_identity: str) -> list[str]:
         focal_identity if opponent_name is None else opponent_name
         for opponent_name in case["opponent_names_by_seat"]
     ]
+
+
+@pytest.mark.parametrize("expected", V4_EXPECTATIONS, ids=lambda value: value.personality)
+def test_v4_reports_pin_truthful_failed_held_out_decisions(
+    expected: V4PromotionExpectation,
+) -> None:
+    report = _load_json(expected.promotion_directory / "promotion-report.json")
+    snapshot = _load_json(expected.promotion_directory / "corpus-snapshot.json")
+
+    assert report["schema_version"] == 2
+    assert report["repository_commit"] == V4_PROMOTION_SOURCE_COMMIT
+    assert report["candidate"] == {"bot_id": expected.candidate, "name": expected.candidate}
+    assert report["incumbent"] == {"bot_id": expected.incumbent, "name": expected.incumbent}
+    assert report["corpora"]["development"] == _report_corpus_metadata(snapshot["development"])
+    assert report["corpora"]["held_out"] == _report_corpus_metadata(snapshot["held_out"])
+    assert report["execution"] == {
+        "batch_size": 64,
+        "bot_ids": [
+            expected.candidate,
+            expected.incumbent,
+            "passive-v1",
+            "bot_e0e2c541-1615-4f47-983c-224e7d888d89",
+            "aggressive-v1",
+            "balanced-v1",
+        ],
+        "capture_replays": False,
+        "fault_mode": "record_and_pass",
+        "games": 960,
+        "objectives_enabled": [True],
+        "player_counts": [3, 4, 5],
+        "root_seed": 90001,
+        "value_charts": ["A", "B", "C", "D", "E"],
+        "workers": 4,
+    }
+    assert report["coverage"] == {
+        "completed_games": 960,
+        "completed_pairs": 480,
+        "requested_games": 960,
+        "requested_pairs": 480,
+    }
+    assert report["bootstrap"] == {"converged": 1000, "requested": 1000, "seed": 0}
+    assert report["faults"] == {"by_identity": [], "total": 0, "unattributed": 0}
+    assert report["warnings"] == []
+    assert report["promoted"] is False
+    assert report["failures"] == [
+        {
+            "code": "interval_includes_zero",
+            "message": (
+                "The 95 percent uncertainty range does not show a reliably positive "
+                "candidate advantage."
+            ),
+        }
+    ]
+
+    provenance = report["candidate_provenance"]
+    assert set(provenance) == {
+        "boundary_evidence",
+        "candidate_bot_id",
+        "candidate_evaluations_digest",
+        "candidate_name",
+        "development_corpus_digest",
+        "development_corpus_name",
+        "development_games_digest",
+        "experts",
+        "freeze_digest",
+        "freeze_schema_version",
+        "kind",
+        "manifest_digest",
+        "personality",
+        "phase_selector",
+        "predecessor_name",
+        "profile_digest",
+        "repository_commit",
+        "search_name",
+        "search_report_digest",
+        "selection_log_digest",
+        "winner_diagnostics_digests",
+    }
+    assert provenance["kind"] == "frozen_phase_aware_heuristic_candidate"
+    assert provenance["freeze_schema_version"] == 2
+    assert provenance["candidate_name"] == expected.candidate
+    assert provenance["candidate_bot_id"] == expected.candidate
+    assert provenance["personality"] == expected.personality
+    assert provenance["predecessor_name"] == expected.incumbent
+    assert provenance["development_corpus_name"] == "development-v1"
+    assert provenance["development_corpus_digest"] == DEVELOPMENT_DIGEST
+    assert provenance["repository_commit"] == V4_SEARCH_SOURCE_COMMIT
+    assert provenance["search_name"] == f"{expected.personality}-v4-search-v2"
+    assert provenance["phase_selector"] == {
+        "early": "3*future>=2*total",
+        "kind": "public-resource-horizon-v1",
+        "late": "otherwise",
+        "middle": "3*future>=total",
+    }
+    assert provenance["boundary_evidence"] == {
+        "report_digest": "9961f26f32270dcebc98df443588e96cbde2f953858cd131c66a37aeecaa9b01",
+        "report_path": "docs/benchmarks/2026-07-30-heuristic-v4-phase-boundaries.md",
+        "slices_digest": "4f8aa60edf31b28c746cb8004a4dd5468ee8ab1b26462550c914b2e3fa50d7ae",
+        "slices_path": (
+            "docs/benchmarks/tournaments/"
+            "2026-07-30-heuristic-v3-phase-boundaries-development/"
+            "phase-boundary-slices.csv"
+        ),
+    }
+    assert set(provenance["experts"]) == {"early", "middle", "late"}
+    for expert in provenance["experts"].values():
+        assert set(expert) == {"profile", "profile_digest"}
+        assert set(expert["profile"]) == {
+            "bid_shading",
+            "future_cash_weight",
+            "liquidity_strength",
+            "objective_progress_weight",
+        }
+        assert re.fullmatch(r"[0-9a-f]{64}", expert["profile_digest"])
+    assert set(provenance["winner_diagnostics_digests"]) == {
+        "winner-decision-slices.csv",
+        "winner-diagnostics.json",
+        "winner-diagnostics.md",
+    }
+    digest_fields = (
+        "candidate_evaluations_digest",
+        "development_games_digest",
+        "freeze_digest",
+        "manifest_digest",
+        "profile_digest",
+        "search_report_digest",
+        "selection_log_digest",
+    )
+    assert all(re.fullmatch(r"[0-9a-f]{64}", provenance[field]) for field in digest_fields)
+    assert all(
+        re.fullmatch(r"[0-9a-f]{64}", digest)
+        for digest in provenance["winner_diagnostics_digests"].values()
+    )
+
+
+@pytest.mark.parametrize("expected", V4_EXPECTATIONS, ids=lambda value: value.personality)
+def test_v4_failed_artifact_generations_have_canonical_hashes(
+    expected: V4PromotionExpectation,
+) -> None:
+    directory = expected.promotion_directory
+
+    assert {path.name for path in directory.iterdir()} == ARTIFACT_NAMES
+    assert {
+        name: _sha256(directory / name) for name in sorted(ARTIFACT_NAMES)
+    } == expected.artifact_hashes
+
+
+def test_v4_promotions_reuse_the_complete_held_out_matrix() -> None:
+    snapshots = [
+        _load_json(expected.promotion_directory / "corpus-snapshot.json")
+        for expected in V4_EXPECTATIONS
+    ]
+    assert all(snapshot == snapshots[0] for snapshot in snapshots[1:])
+    assert _sha256(V4_EXPECTATIONS[0].promotion_directory / "corpus-snapshot.json") == (
+        CORPUS_SNAPSHOT_SHA256
+    )
+
+    snapshot = snapshots[0]
+    assert snapshot["development"]["digest"] == DEVELOPMENT_DIGEST
+    assert snapshot["held_out"]["digest"] == HELD_OUT_DIGEST
+    held_out = snapshot["held_out"]
+    assert held_out["recipe"]["charts"] == ["A", "B", "C", "D", "E"]
+    assert held_out["recipe"]["player_counts"] == [3, 4, 5]
+    cases = held_out["cases"]
+    assert len(cases) == 480
+    coverage = Counter((case["chart"], case["player_count"], case["focal_seat"]) for case in cases)
+    expected_seats = {
+        (chart, player_count, focal_seat)
+        for chart in "ABCDE"
+        for player_count in (3, 4, 5)
+        for focal_seat in range(player_count)
+    }
+    assert set(coverage) == expected_seats
+    assert set(coverage.values()) == {8}
+
+
+@pytest.mark.parametrize("expected", V4_EXPECTATIONS, ids=lambda value: value.personality)
+def test_v4_paired_games_are_480_ordered_fault_free_twins(
+    expected: V4PromotionExpectation,
+) -> None:
+    summaries = _load_json_lines(expected.promotion_directory / "paired-games.jsonl")
+    snapshot = _load_json(expected.promotion_directory / "corpus-snapshot.json")
+    cases = snapshot["held_out"]["cases"]
+
+    assert len(summaries) == 2 * len(cases) == 960
+    for pair_index, case in enumerate(cases):
+        candidate_game = summaries[2 * pair_index]
+        incumbent_game = summaries[2 * pair_index + 1]
+        focal_seat = case["focal_seat"]
+
+        assert candidate_game["game_index"] == 2 * pair_index
+        assert incumbent_game["game_index"] == 2 * pair_index + 1
+        assert candidate_game["bot_ids"][focal_seat] == expected.candidate
+        assert incumbent_game["bot_ids"][focal_seat] == expected.incumbent
+        assert candidate_game["bot_names"] == _bot_names_for_case(case, expected.candidate)
+        assert incumbent_game["bot_names"] == _bot_names_for_case(case, expected.incumbent)
+        assert candidate_game["seed"] == incumbent_game["seed"] == case["engine_seed"]
+        assert candidate_game["root_seed"] == incumbent_game["root_seed"] == 90001
+        assert candidate_game["ruleset_name"] == incumbent_game["ruleset_name"]
+        assert candidate_game["player_count"] == incumbent_game["player_count"]
+        assert (
+            candidate_game["bot_ids"][:focal_seat] + candidate_game["bot_ids"][focal_seat + 1 :]
+            == incumbent_game["bot_ids"][:focal_seat] + incumbent_game["bot_ids"][focal_seat + 1 :]
+        )
+        assert candidate_game["fault_counts"] == [0] * case["player_count"]
+        assert incumbent_game["fault_counts"] == [0] * case["player_count"]
 
 
 @pytest.mark.parametrize("expected", EXPECTATIONS, ids=lambda value: value.personality)
