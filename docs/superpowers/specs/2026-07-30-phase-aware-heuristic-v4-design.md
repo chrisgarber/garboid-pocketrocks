@@ -115,8 +115,11 @@ with decision reports across charts A-E and player counts 3/4/5. Its committed
 report records the distribution of decisions and outcomes by exact `(R, T)`
 state and demonstrates that the thirds give nonempty, meaningful early,
 middle, and late ranges across all supported conditions. The report uses a
-new development seed and no held-out cases. Its path and SHA-256 digest are
-bound into every v4 manifest.
+new development seed and no held-out cases. Raw traces and game summaries stay
+in temporary storage because publishing them beside a reproducible seed would
+reconstruct private game state. Commit only the privacy-safe aggregate slices
+and distilled boundary report. Their paths and SHA-256 digests are bound into
+every v4 manifest.
 
 The initial thirds are fixed after that boundary report and before v4 search.
 The report justifies a simple equal-resource-horizon split; it does not search
@@ -325,19 +328,19 @@ Each complete search retains the existing authoritative artifact set:
   corpus; and
 - `frozen-candidate.json` — present only for an eligible development winner.
 
-The winner-only diagnostic generation adds:
+The winner-only diagnostic run constructs and reconciles raw traces in
+temporary storage, then retains only privacy-safe aggregate evidence:
 
-- `game-summaries.jsonl`;
-- `decision-traces.jsonl`;
-- `decision-slices.csv`;
-- `summary.json`; and
-- `report.html`.
+- `winner-decision-slices.csv`;
+- `winner-diagnostics.json`; and
+- `winner-diagnostics.md`.
 
 The search report points to the diagnostic generation and stores its artifact
-digests. Reporting stays canonical, finite, deterministic, and transactional.
-All files are rendered and validated before the prior known generation is
-replaced; a replacement failure restores the previous generation and
-preserves unrelated files.
+digests. No committed artifact combines per-decision rows with reproducible
+game seeds. Reporting stays canonical, finite, deterministic, and
+transactional. All files are rendered and validated before the prior known
+generation is replaced; a replacement failure restores the previous
+generation and preserves unrelated files.
 
 ## Frozen v4 candidates
 

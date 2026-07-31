@@ -234,8 +234,11 @@ pytest, mypy, and Ruff.
   `(future_biddable_resources, total_biddable_resources)` selection counts and
   phase-sliced outcomes, explain why equal resource thirds give nonempty,
   useful ranges, and state that no alternate thresholds were searched. Commit
-  the canonical artifacts and SHA-256 digest before constructing a v4
-  manifest. Do not use the held-out corpus or promotion output.
+  only the privacy-safe aggregate `decision-slices.csv`, a distilled report,
+  and their SHA-256 digests before constructing a v4 manifest. Keep raw traces
+  and game summaries in temporary storage: publishing them beside the
+  reproducible development seed would reconstruct private game state. Do not
+  use the held-out corpus or promotion output.
 
 - [ ] **Step 2: Pin schema-v1 golden bytes and write schema-v2 RED tests**
 
@@ -444,15 +447,17 @@ pytest, mypy, and Ruff.
 
 **Interfaces:**
 
-- Consumes: `HeuristicBidExplanation.selected_expert_phase` and a selected,
+- Consumes: `PhaseAwareHeuristicBidExplanation` and a selected,
   complete development winner.
 - Produces: `DecisionSlice.selected_expert_phase:
   HeuristicPhase | None`; additive selection counts and the existing
   final-money, normalized-finish, win, tie, and fault outcome sums grouped by
   phase. After search selection, the evolution command reruns only the winner
   on its exact 240 development cases with tracing enabled, reconciles that
-  result, and writes a nested `winner-diagnostics/` generation. The frozen
-  winner report links every diagnostic artifact digest.
+  result in temporary storage, then writes only privacy-safe aggregate
+  `winner-decision-slices.csv`, `winner-diagnostics.json`, and
+  `winner-diagnostics.md` artifacts. The frozen winner report links every
+  retained diagnostic artifact digest.
 
 - [ ] **Step 1: Write failing reconciliation/reporting tests**
 
@@ -486,9 +491,11 @@ pytest, mypy, and Ruff.
   adds the expert-phase column and stable sort key. Add a winner-only evolution
   diagnostic runner that rebuilds the selected candidate's exact development
   plan, enables tracing for those jobs, constructs the ordinary statistics
-  needed for reconciliation, and transactionally writes the nested artifacts.
-  Add their content digests to the frozen-winner report. Do not enable
-  diagnostics for the baseline or any losing proposal.
+  needed for reconciliation, and transactionally writes only the aggregate
+  slice/summary artifacts. Raw per-decision and per-game rows stay temporary
+  and are removed from the retained generation. Add retained content digests
+  to the frozen-winner report. Do not enable diagnostics for the baseline or
+  any losing proposal.
 
 - [ ] **Step 4: Run tests and verify GREEN**
 
