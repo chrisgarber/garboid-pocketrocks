@@ -235,11 +235,12 @@ pytest, mypy, and Ruff.
   `(future_biddable_resources, total_biddable_resources)` selection counts and
   phase-sliced outcomes, explain why equal resource thirds give nonempty,
   useful ranges, and state that no alternate thresholds were searched. Commit
-  only the privacy-safe aggregate `decision-slices.csv`, a distilled report,
-  and their SHA-256 digests before constructing a v4 manifest. Keep raw traces
-  and game summaries in temporary storage: publishing them beside the
-  reproducible development seed would reconstruct private game state. Do not
-  use the held-out corpus or promotion output.
+  only the privacy-safe derived `phase-boundary-slices.csv`, a distilled
+  report, and their SHA-256 digests before constructing a v4 manifest. Keep
+  the high-dimensional source slices, raw traces, and game summaries in
+  temporary storage: publishing them beside the reproducible development seed
+  would reconstruct private game state. Do not use the held-out corpus or
+  promotion output.
 
 - [ ] **Step 2: Pin schema-v1 golden bytes and write schema-v2 RED tests**
 
