@@ -15,7 +15,9 @@ _TARGET_BIDS = {
 }
 
 
-def _target_bid(action_id: int) -> int | None:
+def _target_bid(action_id: int | None) -> int | None:
+    if action_id is None:
+        return None
     try:
         action = ActionId(action_id)
     except ValueError:

@@ -109,6 +109,12 @@ def test_fixed_bid_brain_passes_for_unknown_action() -> None:
     assert FixedBidBotBrain().choose_decision(context, _knowledge()) == BotDecision.pass_turn()
 
 
+def test_fixed_bid_brain_passes_without_current_action() -> None:
+    context = replace(_context(), current_action_id=None)
+
+    assert FixedBidBotBrain().choose_decision(context, _knowledge()) == BotDecision.pass_turn()
+
+
 @pytest.mark.parametrize(
     ("revealable_count", "expected"),
     (
