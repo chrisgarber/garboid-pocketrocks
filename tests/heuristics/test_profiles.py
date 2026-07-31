@@ -65,9 +65,9 @@ def test_versioned_profiles_have_exact_constants() -> None:
     assert HEURISTIC_V2.passive == HeuristicProfile("passive", 0.15, 0.60, 0.15, 0.30)
 
     assert HEURISTIC_V3.version == "v3"
-    assert HEURISTIC_V3.aggressive == HeuristicProfile("aggressive", 1.00, 1.95, 0.15, 0.40)
+    assert HEURISTIC_V3.aggressive == HeuristicProfile("aggressive", 1.40, 1.05, 0.70, 0.30)
     assert HEURISTIC_V3.balanced == HeuristicProfile("balanced", 0.25, 1.55, 0.30, 0.35)
-    assert HEURISTIC_V3.passive == HeuristicProfile("passive", 1.50, 1.80, 0.95, 0.45)
+    assert HEURISTIC_V3.passive == HeuristicProfile("passive", 1.40, 1.10, 0.40, 0.30)
 
 
 def test_unversioned_profiles_alias_latest_generation() -> None:
