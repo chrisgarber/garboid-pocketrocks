@@ -107,6 +107,9 @@ def test_bot_filters_use_curated_defaults_when_include_is_omitted() -> None:
         "aggressive-v2",
         "balanced-v2",
         "passive-v2",
+        "aggressive-v3",
+        "balanced-v3",
+        "passive-v3",
         "vector_ppo_small_v1_g1500",
         "vector_ppo_large_v1_g350k",
     )

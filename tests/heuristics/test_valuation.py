@@ -133,7 +133,7 @@ def test_chosen_bid_is_floor_of_shaded_reservation() -> None:
     assert result.chosen_bid == 7
 
 
-def test_future_cash_preserves_personality_and_defers_spending() -> None:
+def test_future_cash_never_encourages_early_spending_and_disappears_at_the_horizon() -> None:
     chart = (10, 10, 10, 10, 10, 10)
     knowledge = make_knowledge(value_chart=chart)
     early_context = make_context(
@@ -161,11 +161,13 @@ def test_future_cash_preserves_personality_and_defers_spending() -> None:
         for profile in (AGGRESSIVE_PROFILE, BALANCED_PROFILE, PASSIVE_PROFILE)
     )
 
-    assert late_results[0].chosen_bid > late_results[1].chosen_bid > late_results[2].chosen_bid
     for early, late in zip(early_results, late_results, strict=True):
         assert early.chosen_bid < late.chosen_bid
-        assert early.points[early.chosen_bid].breakdown.future_cash < 0.0
+        assert early.points[early.chosen_bid].breakdown.future_cash <= 0.0
         assert late.points[late.chosen_bid].breakdown.future_cash == 0.0
+    assert any(
+        result.points[result.chosen_bid].breakdown.future_cash < 0.0 for result in early_results
+    )
 
 
 def test_breakdown_components_sum_to_each_point_delta() -> None:

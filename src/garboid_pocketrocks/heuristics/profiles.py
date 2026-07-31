@@ -73,7 +73,13 @@ HEURISTIC_V2 = HeuristicProfileSet(
     HeuristicProfile("balanced", 0.40, 0.75, 0.20, 0.25),
     HeuristicProfile("passive", 0.15, 0.60, 0.15, 0.30),
 )
-LATEST_HEURISTICS = HEURISTIC_V2
+HEURISTIC_V3 = HeuristicProfileSet(
+    "v3",
+    HeuristicProfile("aggressive", 1.00, 1.95, 0.15, 0.40),
+    HeuristicProfile("balanced", 0.25, 1.55, 0.30, 0.35),
+    HeuristicProfile("passive", 1.50, 1.80, 0.95, 0.45),
+)
+LATEST_HEURISTICS = HEURISTIC_V3
 
 AGGRESSIVE_PROFILE = LATEST_HEURISTICS.aggressive
 BALANCED_PROFILE = LATEST_HEURISTICS.balanced
