@@ -7,7 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from garboid_pocketrocks.neural.bootstrap_reporting import (
+pytest.importorskip("torch")
+
+from garboid_pocketrocks.neural.bootstrap_reporting import (  # noqa: E402
     BootstrapReportingError,
     write_bootstrap_report,
 )
