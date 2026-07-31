@@ -7,6 +7,7 @@ from garboid_pocketrocks.bots.base import (
     HistoryAwareBotBrain,
     PocketRocksFastBot,
 )
+from garboid_pocketrocks.bots.fixed_bid import FixedBidBotBrain
 from garboid_pocketrocks.bots.heuristic import (
     AggressiveHeuristicBot,
     AggressiveHeuristicBrain,
@@ -41,6 +42,7 @@ __all__ = [
     "BotBrain",
     "BotSpec",
     "BrainFactory",
+    "FixedBidBotBrain",
     "AggressiveHeuristicBot",
     "AggressiveHeuristicBrain",
     "AggressiveHeuristicV1Brain",
