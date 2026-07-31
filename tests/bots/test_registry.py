@@ -22,6 +22,7 @@ def test_registered_bot_specs_have_unique_names_and_ids() -> None:
         "aggressive-v2",
         "balanced-v2",
         "passive-v2",
+        "sdk-greedy-value-v1",
         "vector_ppo_small_v1_g1500",
         "vector_ppo_large_v1_g350k",
     )
@@ -42,6 +43,7 @@ def test_default_tournament_specs_include_baseline_and_versioned_bots_only() -> 
         "aggressive-v2",
         "balanced-v2",
         "passive-v2",
+        "sdk-greedy-value-v1",
         "vector_ppo_small_v1_g1500",
         "vector_ppo_large_v1_g350k",
     )

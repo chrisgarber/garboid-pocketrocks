@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
 
@@ -53,6 +54,7 @@ def test_bot_filters_use_curated_defaults_when_include_is_omitted() -> None:
         "aggressive-v2",
         "balanced-v2",
         "passive-v2",
+        "sdk-greedy-value-v1",
         "vector_ppo_small_v1_g1500",
         "vector_ppo_large_v1_g350k",
     )
@@ -96,3 +98,11 @@ def test_cli_runs_all_conditions_with_current_registry(tmp_path: Path) -> None:
     assert (tmp_path / "ratings.csv").is_file()
     assert (tmp_path / "summary.json").is_file()
     assert (tmp_path / "report.html").is_file()
+    summary = json.loads((tmp_path / "summary.json").read_text(encoding="utf-8"))
+    configured_names = tuple(item["name"] for item in summary["configuration"]["bots"])
+    sdk_row = next(
+        row for row in summary["leaderboard"] if row["bot_name"] == "sdk-greedy-value-v1"
+    )
+
+    assert "sdk-greedy-value-v1" in configured_names
+    assert sdk_row["faults"] == 0
