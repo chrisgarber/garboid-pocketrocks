@@ -90,6 +90,22 @@ uv run --extra neural garboid-tournament \
 See the [tournament runbook](src/garboid_pocketrocks/tournament/README.md) for
 scheduling, rating semantics, artifacts, and reproduction.
 
+Run the held-out final exam before promoting a candidate:
+
+```bash
+uv run --extra neural garboid-promote \
+  --candidate vector_ppo_large_v1_g350k \
+  --incumbent vector_ppo_small_v1_g1500 \
+  --output-dir promotion-results/neural-comparison
+```
+
+The committed opponent pool contains all v1/v2 heuristics and the frozen
+350k PPO policy. Compared identities are removed automatically from ordinary
+opponent seats before matched games are planned.
+
+See the [promotion runbook](src/garboid_pocketrocks/promotion/README.md) for
+the matched-game contract, evidence, and failure reasons.
+
 Install the optional neural dependencies and run the production-backed smoke:
 
 ```bash
@@ -116,5 +132,6 @@ Start at the [documentation index](docs/README.md). Current operational
 runbooks live beside the
 [simulator](src/garboid_pocketrocks/simulator/README.md),
 [tournament](src/garboid_pocketrocks/tournament/README.md),
+[promotion](src/garboid_pocketrocks/promotion/README.md),
 [heuristics](src/garboid_pocketrocks/heuristics/README.md), and
 [neural](src/garboid_pocketrocks/neural/README.md) packages.
