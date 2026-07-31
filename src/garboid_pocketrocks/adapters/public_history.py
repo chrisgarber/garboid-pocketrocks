@@ -99,6 +99,8 @@ class ValidatedPublicHistory:
     investment_value_by_seat: tuple[int, ...]
     legal_max_bid_by_seat: tuple[int, ...] | None
     visible_resource_ids: tuple[int, ...]
+    biddable_resource_budget: int
+    public_biddable_resource_count: int
     resolved_turn_count: int
     seen_action_counts: tuple[int, ...]
 
@@ -231,6 +233,7 @@ def validate_public_history(history: PublicHistory) -> ValidatedPublicHistory:
                 revealed_info_counts_by_seat,
                 turn=turn,
                 phase=phase,
+                player_count=setup.player_count,
                 index=index,
             )
         elif type(event) is PublicAuctionResolved:
@@ -303,6 +306,7 @@ def validate_public_history(history: PublicHistory) -> ValidatedPublicHistory:
                 revealed_info_counts_by_seat,
                 turn=latest_turn,
                 phase=phase,
+                player_count=setup.player_count,
                 index=index,
             )
         elif type(event) is PublicInformationRevealed:
@@ -327,6 +331,7 @@ def validate_public_history(history: PublicHistory) -> ValidatedPublicHistory:
                 revealed_info_counts_by_seat,
                 turn=latest_turn,
                 phase=phase,
+                player_count=setup.player_count,
                 index=index,
             )
         else:
@@ -336,6 +341,10 @@ def validate_public_history(history: PublicHistory) -> ValidatedPublicHistory:
         if phase == "turn_open" and latest_turn is not None
         else None
     )
+    visible_resource_ids = _visible_resource_ids(latest_turn, phase)
+    public_biddable_resource_count = sum(
+        count for row in won_resource_counts_by_seat for count in row
+    ) + len(visible_resource_ids)
     return ValidatedPublicHistory(
         setup=setup,
         phase=phase,
@@ -348,7 +357,9 @@ def validate_public_history(history: PublicHistory) -> ValidatedPublicHistory:
         loan_principal_by_seat=tuple(loan_principal_by_seat),
         investment_value_by_seat=tuple(investment_value_by_seat),
         legal_max_bid_by_seat=legal_max_bid_by_seat,
-        visible_resource_ids=_visible_resource_ids(latest_turn, phase),
+        visible_resource_ids=visible_resource_ids,
+        biddable_resource_budget=_biddable_resource_budget(setup.player_count),
+        public_biddable_resource_count=public_biddable_resource_count,
         resolved_turn_count=resolved_turn_count,
         seen_action_counts=tuple(seen_action_counts),
     )
@@ -380,6 +391,7 @@ def _require_known_resources_fit_deck(
     *,
     turn: PublicTurnOpened | None,
     phase: PublicHistoryPhase,
+    player_count: int,
     index: int,
 ) -> None:
     visible_resource_ids = _visible_resource_ids(turn, phase)
@@ -394,6 +406,17 @@ def _require_known_resources_fit_deck(
         for known, available in zip(known_by_suit, _RESOURCE_COUNT_BY_SUIT, strict=True)
     ):
         raise _compatibility_error(index, "public resources exceed the finite SDK deck")
+    public_biddable_resource_count = sum(count for row in won_by_seat for count in row) + len(
+        visible_resource_ids
+    )
+    if public_biddable_resource_count > _biddable_resource_budget(player_count):
+        raise _compatibility_error(
+            index, "won resources and visible offer exceed the SDK biddable-card budget"
+        )
+
+
+def _biddable_resource_budget(player_count: int) -> int:
+    return len(ITEM_DECK_SUITS) - player_count * INFO_CARDS_PER_PLAYER[player_count]
 
 
 def _visible_resource_ids(

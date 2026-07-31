@@ -205,12 +205,101 @@ def test_shared_validator_accepts_complete_sdk_games_after_players_exhaust_their
         session.step(decisions)
 
     history = public_history_from_sdk_frame(SimpleNamespace(common_events=session.events))
+    state = validate_public_history(history)
 
-    assert validate_public_history(history).setup.player_count == player_count
+    assert state.setup.player_count == player_count
+    assert state.biddable_resource_budget == {3: 15, 4: 14, 5: 15}[player_count]
+    assert state.public_biddable_resource_count == state.biddable_resource_budget
     assert any(
         isinstance(current, PublicAuctionResolved) and isinstance(following, PublicTurnOpened)
         for current, following in zip(history, history[1:], strict=False)
     )
+
+
+@pytest.mark.parametrize(
+    ("player_count", "starting_cash", "expected_budget"), ((4, 25, 14), (5, 20, 15))
+)
+def test_shared_validator_derives_the_sdk_biddable_resource_budget(
+    player_count: int,
+    starting_cash: int,
+    expected_budget: int,
+) -> None:
+    history = (
+        PublicGameSetup(
+            PublicEventKind.GAME_SETUP,
+            player_count,
+            starting_cash,
+            (0, 4, 8, 12, 16, 20),
+            0,
+            (),
+        ),
+        PublicTurnOpened(PublicEventKind.TURN_OPENED, int(ActionId.AUCTION2), (1, 2)),
+    )
+
+    state = validate_public_history(history)
+
+    assert state.biddable_resource_budget == expected_budget
+    assert state.public_biddable_resource_count == 2
+
+
+def test_eighth_three_player_auction_two_must_be_one_card_and_terminal() -> None:
+    setup = PublicGameSetup(
+        PublicEventKind.GAME_SETUP,
+        3,
+        30,
+        (0, 4, 8, 12, 16, 20),
+        0,
+        (),
+    )
+    offers = ((1, 1), (1, 2), (2, 2), (3, 3), (3, 4), (4, 4), (5, 5), (5, 0))
+    reveal_suits = (1, 2, 3, 4, 5, 1, 2, 3)
+    history_events: list[object] = [setup]
+    tiebreak_seat = 0
+    history_before_eighth_turn: PublicHistory | None = None
+    for turn_number, (offer, reveal_suit) in enumerate(
+        zip(offers, reveal_suits, strict=True),
+        start=1,
+    ):
+        if turn_number == 8:
+            history_before_eighth_turn = cast(PublicHistory, tuple(history_events))
+        winner = (tiebreak_seat + 1) % 3
+        history_events.extend(
+            (
+                PublicTurnOpened(PublicEventKind.TURN_OPENED, int(ActionId.AUCTION2), offer),
+                PublicAuctionResolved(PublicEventKind.AUCTION_RESOLVED, (0, 0, 0)),
+                PublicInformationRevealed(
+                    PublicEventKind.INFORMATION_REVEALED,
+                    winner,
+                    reveal_suit,
+                ),
+            )
+        )
+        tiebreak_seat = winner
+    history = cast(PublicHistory, tuple(history_events))
+    if history_before_eighth_turn is None:
+        raise AssertionError("the fixed eight-turn history must reach its final turn")
+
+    state = validate_public_history(history)
+
+    assert state.resolved_turn_count == 8
+    assert state.seen_action_counts[int(ActionId.AUCTION2) - 1] == 8
+    assert state.biddable_resource_budget == 15
+    assert state.public_biddable_resource_count == 15
+    assert sum(sum(row) for row in state.won_resource_counts_by_seat) == 15
+
+    two_card_eighth_turn = (
+        *history_before_eighth_turn,
+        PublicTurnOpened(PublicEventKind.TURN_OPENED, int(ActionId.AUCTION2), (5, 5)),
+    )
+    with pytest.raises(PublicHistoryCompatibilityError, match="biddable-card budget"):
+        validate_public_history(two_card_eighth_turn)
+
+    later_turn = (
+        *history,
+        PublicTurnOpened(PublicEventKind.TURN_OPENED, int(ActionId.LOAN10), (4, 5)),
+    )
+    with pytest.raises(PublicHistoryCompatibilityError, match="terminal one-card"):
+        validate_public_history(later_turn)
 
 
 def test_shared_validator_reconstructs_cash_assets_and_objectives() -> None:
