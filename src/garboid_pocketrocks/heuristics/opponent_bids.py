@@ -30,6 +30,14 @@ _FACE_VALUES = {
     ActionId.INVEST5: 5,
     ActionId.INVEST10: 10,
 }
+_ACTION_CREDIT = {
+    ActionId.AUCTION1: 0,
+    ActionId.AUCTION2: 0,
+    ActionId.LOAN10: 10,
+    ActionId.LOAN20: 20,
+    ActionId.INVEST5: 0,
+    ActionId.INVEST10: 0,
+}
 _PLAYER_PRESSURE = {
     3: Fraction(1),
     4: Fraction(11, 10),
@@ -184,6 +192,7 @@ DEFAULT_OPPONENT_BID_MODEL_CONFIG = OpponentBidModelConfig()
 class _ParsedHistory:
     rounds: tuple[PublicResolvedBidRound, ...]
     current_turn: PublicTurnOpened | None
+    replayed_tiebreak_seat: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -202,7 +211,12 @@ def resolved_bid_rounds_from_public_history(
     """Validate a public prefix and return completed bid rounds only."""
 
     parsed = _parse_history(history, context)
-    _validate_current_turn(parsed.current_turn, context, len(parsed.rounds))
+    _validate_current_turn(
+        parsed.current_turn,
+        context,
+        len(parsed.rounds),
+        replayed_tiebreak_seat=parsed.replayed_tiebreak_seat,
+    )
     return parsed.rounds
 
 
@@ -274,7 +288,8 @@ def _parse_history(
 
     rounds: list[PublicResolvedBidRound] = []
     current_turn: PublicTurnOpened | None = None
-    reveal_allowed = False
+    replayed_tiebreak_seat = setup.initial_tiebreak_seat
+    expected_reveal_seat: int | None = None
     for index, event in enumerate(history[1:], start=1):
         if isinstance(event, PublicTurnOpened):
             if event.kind is not PublicEventKind.TURN_OPENED:
@@ -283,7 +298,7 @@ def _parse_history(
                 raise HeuristicInputError("public history contains two unresolved turns")
             _validate_turn(event, index)
             current_turn = event
-            reveal_allowed = False
+            expected_reveal_seat = None
             continue
         if isinstance(event, PublicAuctionResolved):
             if event.kind is not PublicEventKind.AUCTION_RESOLVED:
@@ -291,6 +306,10 @@ def _parse_history(
             if current_turn is None:
                 raise HeuristicInputError("public history resolves a turn that is not open")
             bids = _validated_bids(event, context.player_count, index)
+            replayed_tiebreak_seat = _winning_seat(
+                bids,
+                tiebreak_seat=replayed_tiebreak_seat,
+            )
             turn_index = len(rounds)
             rounds.append(
                 PublicResolvedBidRound(
@@ -302,18 +321,27 @@ def _parse_history(
                 )
             )
             current_turn = None
-            reveal_allowed = True
+            expected_reveal_seat = replayed_tiebreak_seat
             continue
         if isinstance(event, PublicInformationRevealed):
             if event.kind is not PublicEventKind.INFORMATION_REVEALED:
                 raise HeuristicInputError(f"public history event {index} has a contradictory kind")
-            if not reveal_allowed or current_turn is not None:
+            if expected_reveal_seat is None or current_turn is not None:
                 raise HeuristicInputError("public information reveal is out of sequence")
-            _validate_reveal(event, context.player_count, index)
-            reveal_allowed = False
+            _validate_reveal(
+                event,
+                context.player_count,
+                index,
+                expected_seat=expected_reveal_seat,
+            )
+            expected_reveal_seat = None
             continue
         raise HeuristicInputError(f"public history event {index} has an unsupported type")
-    return _ParsedHistory(rounds=tuple(rounds), current_turn=current_turn)
+    return _ParsedHistory(
+        rounds=tuple(rounds),
+        current_turn=current_turn,
+        replayed_tiebreak_seat=replayed_tiebreak_seat,
+    )
 
 
 def _validate_setup(setup: PublicGameSetup, context: PublicOpponentBidContext) -> None:
@@ -354,19 +382,31 @@ def _validated_bids(
     return event.bids_by_seat
 
 
-def _validate_reveal(event: PublicInformationRevealed, player_count: int, index: int) -> None:
+def _validate_reveal(
+    event: PublicInformationRevealed,
+    player_count: int,
+    index: int,
+    *,
+    expected_seat: int,
+) -> None:
     if not _is_integer(event.seat) or not 0 <= event.seat < player_count:
         raise HeuristicInputError(
             f"public history event {index} reveal seat is outside player count"
         )
     if not _is_integer(event.suit_id) or not 1 <= event.suit_id <= len(Suit):
         raise HeuristicInputError(f"public history event {index} has an unknown revealed suit")
+    if event.seat != expected_seat:
+        raise HeuristicInputError(
+            f"public history event {index} reveal seat contradicts the auction winner"
+        )
 
 
 def _validate_current_turn(
     current_turn: PublicTurnOpened | None,
     context: PublicOpponentBidContext,
     completed_round_count: int,
+    *,
+    replayed_tiebreak_seat: int,
 ) -> None:
     if current_turn is None:
         raise HeuristicInputError("public history does not contain the current open turn")
@@ -375,6 +415,8 @@ def _validate_current_turn(
     expected_phase = game_phase_for_turn_index(completed_round_count)
     if context.game_phase != expected_phase:
         raise HeuristicInputError("history current turn contradicts current game phase")
+    if context.tiebreak_seat != replayed_tiebreak_seat:
+        raise HeuristicInputError("history tiebreak evolution contradicts current context")
 
 
 def _validate_context(context: PublicOpponentBidContext) -> None:
@@ -383,7 +425,7 @@ def _validate_context(context: PublicOpponentBidContext) -> None:
     if not _is_integer(context.starting_cash) or context.starting_cash <= 0:
         raise ValueError("starting cash must be positive")
     _validate_integer_tuple("value chart", context.value_chart, _CHART_BUCKET_COUNT, ValueError)
-    _known_action(context.current_action_id, "current context", ValueError)
+    action = _known_action(context.current_action_id, "current context", ValueError)
     _validate_integer_tuple("cash by seat", context.cash_by_seat, context.player_count, ValueError)
     if any(cash < 0 for cash in context.cash_by_seat):
         raise ValueError("cash by seat must be nonnegative")
@@ -395,8 +437,9 @@ def _validate_context(context: PublicOpponentBidContext) -> None:
         raise ValueError("bot seat is outside player count")
     if not _is_integer(context.legal_max_amount) or context.legal_max_amount < 0:
         raise ValueError("legal maximum amount must be a nonnegative integer")
-    if context.legal_max_amount < context.cash_by_seat[context.bot_seat]:
-        raise ValueError("legal maximum amount cannot be below own current cash")
+    expected_legal_maximum = context.cash_by_seat[context.bot_seat] + _ACTION_CREDIT[action]
+    if context.legal_max_amount != expected_legal_maximum:
+        raise ValueError("legal maximum amount contradicts current action credit")
     if context.game_phase not in _PHASE_PRESSURE:
         raise ValueError("game phase must be early, middle, or late")
 
@@ -500,6 +543,15 @@ def _history_weight(
     if same_action or same_phase:
         return _fraction(config.partial_match_weight)
     return _fraction(config.fallback_weight)
+
+
+def _winning_seat(bids: tuple[int, ...], *, tiebreak_seat: int) -> int:
+    highest_bid = max(bids)
+    for offset in range(1, len(bids) + 1):
+        seat = (tiebreak_seat + offset) % len(bids)
+        if bids[seat] == highest_bid:
+            return seat
+    raise AssertionError("a nonempty bid tuple always has a winner")
 
 
 def _winning_probability(

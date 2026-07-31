@@ -39,13 +39,14 @@ def _setup(
     starting_cash: int = 30,
     value_chart: tuple[int, ...] = CHART,
     objective_ids: tuple[int, ...] = (1, 2, 3, 4),
+    initial_tiebreak_seat: int = 0,
 ) -> PublicGameSetup:
     return PublicGameSetup(
         kind=PublicEventKind.GAME_SETUP,
         player_count=player_count,
         starting_cash=starting_cash,
         value_chart=value_chart,
-        initial_tiebreak_seat=0,
+        initial_tiebreak_seat=initial_tiebreak_seat,
         objective_ids=objective_ids,
     )
 
@@ -80,6 +81,7 @@ def _history(
     starting_cash: int = 30,
     value_chart: tuple[int, ...] = CHART,
     objective_ids: tuple[int, ...] = (1, 2, 3, 4),
+    initial_tiebreak_seat: int = 0,
 ) -> PublicHistory:
     events: list[PublicEvent] = [
         _setup(
@@ -87,6 +89,7 @@ def _history(
             starting_cash=starting_cash,
             value_chart=value_chart,
             objective_ids=objective_ids,
+            initial_tiebreak_seat=initial_tiebreak_seat,
         )
     ]
     for action, bids in rounds:
@@ -122,6 +125,21 @@ def _context(
 
 def _distribution(forecast: OpponentBidForecast, seat: int) -> OpponentBidDistribution:
     return next(item for item in forecast.opponent_distributions if item.opponent_seat == seat)
+
+
+def _tiebreak_after(
+    rounds: tuple[tuple[ActionId, tuple[int, ...]], ...],
+    initial_tiebreak_seat: int = 0,
+) -> int:
+    tiebreak_seat = initial_tiebreak_seat
+    for _action, bids in rounds:
+        highest_bid = max(bids)
+        for offset in range(1, len(bids) + 1):
+            seat = (tiebreak_seat + offset) % len(bids)
+            if bids[seat] == highest_bid:
+                tiebreak_seat = seat
+                break
+    return tiebreak_seat
 
 
 def test_public_types_are_closed_frozen_slotted_allowlists() -> None:
@@ -177,7 +195,7 @@ def test_forecast_is_deterministically_equal_and_primitive_serializable() -> Non
         (ActionId.AUCTION1, (2, 4, 7)),
         (ActionId.LOAN10, (1, 8, 3)),
     )
-    context = _context(completed_rounds=2)
+    context = _context(tiebreak_seat=_tiebreak_after(rounds), completed_rounds=2)
     history = _history(rounds)
 
     first = forecast_opponent_bids(history, context)
@@ -189,9 +207,10 @@ def test_forecast_is_deterministically_equal_and_primitive_serializable() -> Non
 
 def test_absent_and_one_round_history_use_exactly_the_same_prior() -> None:
     absent = forecast_opponent_bids(_history(), _context())
+    rounds = ((ActionId.AUCTION1, (10, 10, 10)),)
     one_round = forecast_opponent_bids(
-        _history(((ActionId.AUCTION1, (10, 10, 10)),)),
-        _context(completed_rounds=1),
+        _history(rounds),
+        _context(tiebreak_seat=_tiebreak_after(rounds), completed_rounds=1),
     )
 
     assert tuple(item.probabilities_by_amount for item in absent.opponent_distributions) == tuple(
@@ -200,18 +219,18 @@ def test_absent_and_one_round_history_use_exactly_the_same_prior() -> None:
 
 
 def test_sparse_prior_and_history_strength_are_auditable() -> None:
+    one = ((ActionId.AUCTION1, (1, 2, 3)),)
     one_round = forecast_opponent_bids(
-        _history(((ActionId.AUCTION1, (1, 2, 3)),)),
-        _context(completed_rounds=1),
+        _history(one),
+        _context(tiebreak_seat=_tiebreak_after(one), completed_rounds=1),
+    )
+    two = (
+        (ActionId.AUCTION1, (1, 2, 3)),
+        (ActionId.LOAN10, (3, 2, 1)),
     )
     two_rounds = forecast_opponent_bids(
-        _history(
-            (
-                (ActionId.AUCTION1, (1, 2, 3)),
-                (ActionId.LOAN10, (3, 2, 1)),
-            )
-        ),
-        _context(completed_rounds=2),
+        _history(two),
+        _context(tiebreak_seat=_tiebreak_after(two), completed_rounds=2),
     )
 
     sparse = _distribution(one_round, 1)
@@ -276,7 +295,7 @@ def test_prior_changes_with_action_player_pressure_and_phase() -> None:
     middle_rounds = tuple((ActionId.LOAN10, (0, 0, 0)) for _ in range(5))
     middle = forecast_opponent_bids(
         _history(middle_rounds),
-        _context(completed_rounds=5),
+        _context(tiebreak_seat=_tiebreak_after(middle_rounds), completed_rounds=5),
         prior_only,
     )
 
@@ -289,7 +308,7 @@ def test_history_weights_same_action_and_phase_more_than_partial_match() -> None
     prefix = tuple((ActionId.LOAN10, (0, 0, 0)) for _ in range(5))
     same = prefix + ((ActionId.AUCTION1, (0, 7, 0)),)
     partial = prefix + ((ActionId.AUCTION2, (0, 7, 0)),)
-    context = _context(completed_rounds=6)
+    context = _context(tiebreak_seat=_tiebreak_after(same), completed_rounds=6)
 
     same_probability = _distribution(
         forecast_opponent_bids(_history(same), context), 1
@@ -322,7 +341,10 @@ def test_each_opponent_learns_a_separate_distribution() -> None:
         (ActionId.AUCTION1, (0, 1, 8)),
         (ActionId.AUCTION1, (0, 1, 8)),
     )
-    forecast = forecast_opponent_bids(_history(rounds), _context(completed_rounds=2))
+    forecast = forecast_opponent_bids(
+        _history(rounds),
+        _context(tiebreak_seat=_tiebreak_after(rounds), completed_rounds=2),
+    )
 
     seat_one = _distribution(forecast, 1).probabilities_by_amount
     seat_two = _distribution(forecast, 2).probabilities_by_amount
@@ -359,7 +381,11 @@ def test_old_bids_are_clipped_only_to_current_legal_support() -> None:
     )
     forecast = forecast_opponent_bids(
         _history(rounds),
-        _context(cash=(10, 3, 10), completed_rounds=2),
+        _context(
+            cash=(10, 3, 10),
+            tiebreak_seat=_tiebreak_after(rounds),
+            completed_rounds=2,
+        ),
     )
     clipped = _distribution(forecast, 1).probabilities_by_amount
 
@@ -401,7 +427,10 @@ def test_bid_zero_can_win_when_bot_is_first_in_tiebreak_order() -> None:
 
 
 def test_ties_lose_to_opponents_ahead_and_beat_opponents_behind() -> None:
-    first = forecast_opponent_bids(_history(), _context(tiebreak_seat=2))
+    first = forecast_opponent_bids(
+        _history(initial_tiebreak_seat=2),
+        _context(tiebreak_seat=2),
+    )
     last = forecast_opponent_bids(_history(), _context(tiebreak_seat=0))
 
     assert first.opponent_distributions == last.opponent_distributions
@@ -409,6 +438,54 @@ def test_ties_lose_to_opponents_ahead_and_beat_opponents_behind() -> None:
         first.legal_bid_forecasts[5].win_probability > last.legal_bid_forecasts[5].win_probability
     )
     assert first.legal_bid_forecasts[-1].win_probability == 1.0
+
+
+def test_replayed_tiebreak_evolution_changes_zero_and_tie_probabilities() -> None:
+    bot_first_rounds = ((ActionId.AUCTION1, (5, 1, 0)),)
+    bot_last_rounds = ((ActionId.AUCTION1, (0, 5, 1)),)
+    bot_first = forecast_opponent_bids(
+        _history(bot_first_rounds),
+        _context(bot_seat=1, tiebreak_seat=0, completed_rounds=1),
+    )
+    bot_last = forecast_opponent_bids(
+        _history(bot_last_rounds),
+        _context(bot_seat=1, tiebreak_seat=1, completed_rounds=1),
+    )
+
+    assert tuple(
+        distribution.probabilities_by_amount for distribution in bot_first.opponent_distributions
+    ) == tuple(
+        distribution.probabilities_by_amount for distribution in bot_last.opponent_distributions
+    )
+    assert bot_first.legal_bid_forecasts[0].win_probability > 0.0
+    assert bot_last.legal_bid_forecasts[0].win_probability == 0.0
+    assert (
+        bot_first.legal_bid_forecasts[5].win_probability
+        > bot_last.legal_bid_forecasts[5].win_probability
+    )
+
+
+def test_wrong_current_tiebreak_fails_closed() -> None:
+    rounds = ((ActionId.AUCTION1, (0, 5, 1)),)
+
+    with pytest.raises(HeuristicInputError, match="tiebreak evolution"):
+        forecast_opponent_bids(
+            _history(rounds),
+            _context(tiebreak_seat=0, completed_rounds=1),
+        )
+
+
+def test_reveal_seat_must_equal_the_replayed_auction_winner() -> None:
+    history = (
+        _setup(),
+        _turn(),
+        _resolution((0, 5, 1)),
+        PublicInformationRevealed(PublicEventKind.INFORMATION_REVEALED, 2, 3),
+        _turn(),
+    )
+
+    with pytest.raises(HeuristicInputError, match="auction winner"):
+        forecast_opponent_bids(history, _context(tiebreak_seat=1, completed_rounds=1))
 
 
 @pytest.mark.parametrize(
@@ -441,7 +518,7 @@ def test_malformed_public_history_fails_closed(history: PublicHistory) -> None:
         _context(player_count=4, cash=(10, 10, 10, 10)),
         _context(starting_cash=31),
         _context(value_chart=(0, 1, 2, 3, 4, 5)),
-        _context(action=ActionId.LOAN10),
+        _context(action=ActionId.LOAN10, legal_max=20),
         replace(_context(), game_phase="middle"),
     ),
 )
@@ -460,7 +537,12 @@ def test_parser_returns_completed_rounds_and_ignores_valid_reveal() -> None:
         PublicInformationRevealed(PublicEventKind.INFORMATION_REVEALED, 2, 3),
         _turn(ActionId.LOAN10),
     )
-    context = _context(action=ActionId.LOAN10, completed_rounds=1)
+    context = _context(
+        action=ActionId.LOAN10,
+        legal_max=20,
+        tiebreak_seat=2,
+        completed_rounds=1,
+    )
 
     assert resolved_bid_rounds_from_public_history(history, context) == (
         PublicResolvedBidRound(
@@ -514,6 +596,18 @@ def test_public_probability_records_reject_invalid_values() -> None:
         LegalBidWinningForecast(0, math.nan)
 
 
-def test_negative_derived_credit_fails_closed() -> None:
-    with pytest.raises(ValueError, match="below own current cash"):
-        _context(cash=(10, 3, 7), legal_max=9)
+@pytest.mark.parametrize(
+    ("action", "credit"),
+    (
+        (ActionId.AUCTION1, 0),
+        (ActionId.AUCTION2, 0),
+        (ActionId.LOAN10, 10),
+        (ActionId.LOAN20, 20),
+        (ActionId.INVEST5, 0),
+        (ActionId.INVEST10, 0),
+    ),
+)
+def test_action_specific_public_credit_is_exact(action: ActionId, credit: int) -> None:
+    assert _context(action=action, legal_max=10 + credit).legal_max_amount == 10 + credit
+    with pytest.raises(ValueError, match="action credit"):
+        _context(action=action, legal_max=11 + credit)
