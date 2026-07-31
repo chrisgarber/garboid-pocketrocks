@@ -17,7 +17,8 @@ from garboid_pocketrocks.bots.sdk_samples import (
 )
 from garboid_pocketrocks.knowledge import canonical_knowledge
 
-SDK_REVISION = "51cad378ee1e70a78e39ebbb25957ea003444873"
+SDK_REPOSITORY = "https://github.com/jaiparera/pocketrocks-python-sdk.git"
+SDK_REVISION = "538c577b01bdadf5e6d7ce66547021a006f9c5ca"
 
 
 def _bid_context(
@@ -93,10 +94,7 @@ def test_sdk_greedy_value_adapter_has_frozen_local_identity() -> None:
 
 
 def test_sdk_dependency_revision_is_pinned_for_v1_reproducibility() -> None:
-    dependency = (
-        "pocketrocks-python-sdk @ "
-        f"git+https://github.com/chrisgarber/pocketrocks-python-sdk.git@{SDK_REVISION}"
-    )
+    dependency = f"pocketrocks-python-sdk @ git+{SDK_REPOSITORY}@{SDK_REVISION}"
 
     assert f'"{dependency}",' in Path("pyproject.toml").read_text(encoding="utf-8")
 
