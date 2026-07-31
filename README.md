@@ -47,8 +47,23 @@ uv run garboid-random-bot --seed 42
 Run all live bot wrappers together:
 
 ```bash
-uv run garboid-bots
+uv run --extra neural garboid-bots
 ```
+
+The command starts random, aggressive, balanced, passive, and
+`ppo-large-teen` in separate threads. Each bot uses its committed public ID and
+the shared SDK settings from `.env`. Press Ctrl+C to stop the local process.
+
+`ppo-large-teen` is the public latest alias for the large teen policy family.
+It currently runs the immutable `vector_ppo_large_v1_g350k` checkpoint (exactly
+349,860 self-play games) under public ID
+`bot_dd7807c1-93bc-4f70-80c8-a2f2d7d26429`. Historical checkpoints keep their
+versioned local identities; the public alias may advance to a later compatible
+large teen checkpoint.
+
+The SDK reads its server, capacity, logging, and API-key settings from the
+environment. The tests use its in-memory `FakeTransport` and never connect to
+the live service.
 
 Run deterministic local matches:
 
@@ -83,6 +98,10 @@ uv run --extra neural garboid-promote \
   --incumbent vector_ppo_small_v1_g1500 \
   --output-dir artifacts/promotions/neural-comparison
 ```
+
+The committed opponent pool contains all v1/v2 heuristics and the frozen
+350k PPO policy. Compared identities are removed automatically from ordinary
+opponent seats before matched games are planned.
 
 See the [promotion runbook](src/garboid_pocketrocks/promotion/README.md) for
 the matched-game contract, evidence, and failure reasons.

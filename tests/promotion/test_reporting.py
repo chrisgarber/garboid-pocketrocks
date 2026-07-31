@@ -131,6 +131,8 @@ def _report_inputs() -> tuple[
         candidate=plan.candidate,
         incumbent=plan.incumbent,
         opponents=plan.opponents,
+        opponent_pool=plan.opponent_pool,
+        plan=plan,
         development=development,
         held_out=held_out,
         bootstrap_samples=1_000,
@@ -206,6 +208,8 @@ def test_report_payload_has_complete_explicit_schema() -> None:
         "candidate",
         "incumbent",
         "opponents",
+        "opponent_pool",
+        "effective_plan",
         "execution",
         "corpora",
         "coverage",
@@ -221,11 +225,27 @@ def test_report_payload_has_complete_explicit_schema() -> None:
     assert payload["candidate"] == {"name": "candidate", "bot_id": "candidate"}
     assert payload["incumbent"] == {"name": "incumbent", "bot_id": "incumbent"}
     assert payload["opponents"] == [
-        {"name": "opponent-a", "bot_id": "opponent-a"},
         {"name": "opponent-b", "bot_id": "opponent-b"},
+        {"name": "opponent-a", "bot_id": "opponent-a"},
     ]
+    assert payload["opponent_pool"] == {
+        "configured": [
+            {"name": "opponent-a", "bot_id": "opponent-a"},
+            {"name": "opponent-b", "bot_id": "opponent-b"},
+        ],
+        "exclusions": [],
+        "remaining": [
+            {"name": "opponent-a", "bot_id": "opponent-a"},
+            {"name": "opponent-b", "bot_id": "opponent-b"},
+        ],
+    }
+    effective_plan = payload["effective_plan"]
+    assert isinstance(effective_plan, dict)
+    assert report.plan is not None
+    assert effective_plan["digest"] == report.plan.digest
+    assert len(effective_plan["pairs"]) == 2
     assert payload["execution"] == {
-        "bot_ids": ["candidate", "incumbent", "opponent-a", "opponent-b"],
+        "bot_ids": ["candidate", "incumbent", "opponent-b", "opponent-a"],
         "games": 4,
         "player_counts": [3],
         "value_charts": [case.chart for case in held_out.cases],
@@ -380,7 +400,7 @@ def test_writer_rejects_a_different_equal_frozen_bot_spec(
     )
     forged = replace(frozen.bot_spec, brain_factory=EvilFactory())
     development = load_promotion_corpus(
-        Path("configs/promotion/development-v1.json"),
+        Path("configs/promotion/historical/development-v1-17c01635.json"),
         registry=BOT_SPECS_BY_NAME,
     )
     report, summaries, _, held_out = _report_inputs()
@@ -442,7 +462,7 @@ def test_writer_rejects_lying_provenance_string_subclasses(
         **{field_name: EvilString(forged_value)},
     )
     development = load_promotion_corpus(
-        Path("configs/promotion/development-v1.json"),
+        Path("configs/promotion/historical/development-v1-17c01635.json"),
         registry=BOT_SPECS_BY_NAME,
     )
     report, summaries, _, held_out = _report_inputs()
@@ -491,7 +511,7 @@ def test_writer_rejects_a_lying_provenance_subclass(
     assert resolved.frozen_provenance is not None
     forged_provenance = evil_provenance(resolved.frozen_provenance)
     development = load_promotion_corpus(
-        Path("configs/promotion/development-v1.json"),
+        Path("configs/promotion/historical/development-v1-17c01635.json"),
         registry=BOT_SPECS_BY_NAME,
     )
     report, summaries, _, held_out = _report_inputs()
@@ -538,7 +558,7 @@ def test_frozen_writer_rejects_a_forged_canonical_name_opponent(
         frozen_candidates=FROZEN_CANDIDATES_BY_NAME,
     )
     development = load_promotion_corpus(
-        Path("configs/promotion/development-v1.json"),
+        Path("configs/promotion/historical/development-v1-17c01635.json"),
         registry=BOT_SPECS_BY_NAME,
     )
     forged_opponent = BotSpec.for_simulation("random", RandomBot.build_brain)

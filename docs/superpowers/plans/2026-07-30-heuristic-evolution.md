@@ -256,4 +256,3 @@ uv run pytest -n 0 tests/promotion tests/heuristics/test_frozen_candidates.py -q
   separation, provenance, version immutability, and issue acceptance.
 - Push and open a draft PR stacked on
   `codex/issue-10-decision-reports` with `Closes #11`.
-

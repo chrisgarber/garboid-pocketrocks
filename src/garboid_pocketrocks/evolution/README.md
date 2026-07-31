@@ -19,6 +19,9 @@ development-corpus binding. The CLI exposes only execution controls:
 `--development-corpus`, `--workers`, `--batch-size`, `--output-dir`, and
 `--overwrite`. There is no resume mode, held-out input, or promotion switch.
 Rerun the same immutable manifest from the beginning to reproduce a search.
+The default corpus is the historical `development-v1` snapshot whose digest
+is bound by the v3 manifests. The current promotion corpus remains separate so
+later opponent-pool improvements do not rewrite the evidence behind v3.
 
 ## Exit codes
 

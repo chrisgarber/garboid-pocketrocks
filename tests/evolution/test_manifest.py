@@ -25,7 +25,9 @@ from garboid_pocketrocks.promotion.corpus import (
 )
 
 REPOSITORY_ROOT = Path(__file__).parents[2]
-DEVELOPMENT_CORPUS_PATH = REPOSITORY_ROOT / "configs/promotion/development-v1.json"
+DEVELOPMENT_CORPUS_PATH = (
+    REPOSITORY_ROOT / "configs/promotion/historical/development-v1-17c01635.json"
+)
 EVOLUTION_CONFIG_DIRECTORY = REPOSITORY_ROOT / "configs/evolution"
 
 

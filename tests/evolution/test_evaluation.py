@@ -280,7 +280,7 @@ def test_malformed_rating_observation_is_invalid_evidence(
 
 def test_real_development_jobs_match_across_serial_batch_and_workers() -> None:
     corpus = load_promotion_corpus(
-        REPOSITORY_ROOT / "configs/promotion/development-v1.json",
+        REPOSITORY_ROOT / "configs/promotion/historical/development-v1-17c01635.json",
         registry=BOT_SPECS_BY_NAME,
     )
     manifest = load_search_manifest(

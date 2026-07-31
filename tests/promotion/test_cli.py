@@ -109,6 +109,8 @@ def _completed_run(tmp_path: Path, *, promoted: bool) -> PromotionRun:
         candidate=plan_candidate,
         incumbent=plan_incumbent,
         opponents=(registry["opponent-a"], registry["opponent-b"]),
+        opponent_pool=None,
+        plan=None,
         development=config.development,
         held_out=config.held_out,
         bootstrap_samples=1_000,
@@ -232,6 +234,12 @@ def test_frozen_candidate_is_passed_to_the_runner_with_complete_provenance(
     args = _required_args(tmp_path)
     args[args.index("--candidate") + 1] = frozen.bot_spec.name
     args[args.index("--incumbent") + 1] = frozen.predecessor_name
+    args.extend(
+        [
+            "--development-corpus",
+            "configs/promotion/historical/development-v1-17c01635.json",
+        ]
+    )
 
     assert cli.main(args) == 0
 

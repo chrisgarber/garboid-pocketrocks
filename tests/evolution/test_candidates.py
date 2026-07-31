@@ -35,12 +35,15 @@ from garboid_pocketrocks.knowledge import RulesetKnowledge
 from garboid_pocketrocks.promotion.corpus import load_promotion_corpus
 
 REPOSITORY_ROOT = Path(__file__).parents[2]
+HISTORICAL_DEVELOPMENT_CORPUS_PATH = (
+    REPOSITORY_ROOT / "configs/promotion/historical/development-v1-17c01635.json"
+)
 
 
 @pytest.fixture(scope="module")
 def balanced_manifest() -> SearchManifest:
     corpus = load_promotion_corpus(
-        REPOSITORY_ROOT / "configs/promotion/development-v1.json",
+        HISTORICAL_DEVELOPMENT_CORPUS_PATH,
         registry=BOT_SPECS_BY_NAME,
     )
     return load_search_manifest(
@@ -55,7 +58,7 @@ def _decimal_tuple(*values: str) -> tuple[Decimal, ...]:
 
 def _load_large_grid_manifest(tmp_path: Path) -> SearchManifest:
     corpus = load_promotion_corpus(
-        REPOSITORY_ROOT / "configs/promotion/development-v1.json",
+        HISTORICAL_DEVELOPMENT_CORPUS_PATH,
         registry=BOT_SPECS_BY_NAME,
     )
     payload = json.loads(

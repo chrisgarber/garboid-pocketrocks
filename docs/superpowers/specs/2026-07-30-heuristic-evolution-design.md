@@ -260,4 +260,3 @@ Use strict test-driven development:
   games with no illegal actions or faults;
 - held-out promotion remains the only code path that can justify v3/latest
   alias movement.
-

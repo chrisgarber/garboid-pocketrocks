@@ -74,7 +74,9 @@ def test_parser_has_only_execution_controls() -> None:
     args = parser.parse_args(["--manifest", "search.json"])
     option_strings = {option for action in parser._actions for option in action.option_strings}
 
-    assert args.development_corpus == Path("configs/promotion/development-v1.json")
+    assert args.development_corpus == Path(
+        "configs/promotion/historical/development-v1-17c01635.json"
+    )
     assert args.batch_size == 64
     assert args.output_dir == Path("artifacts/evolution")
     assert {

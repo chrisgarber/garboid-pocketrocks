@@ -317,7 +317,7 @@ def _small_inputs(
     cases: int,
 ) -> tuple[SearchManifest, PromotionCorpus]:
     corpus = load_promotion_corpus(
-        REPOSITORY_ROOT / "configs/promotion/development-v1.json",
+        REPOSITORY_ROOT / "configs/promotion/historical/development-v1-17c01635.json",
         registry=BOT_SPECS_BY_NAME,
     )
     manifest = load_search_manifest(

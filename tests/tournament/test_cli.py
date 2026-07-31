@@ -102,12 +102,14 @@ def test_bot_filters_use_curated_defaults_when_include_is_omitted() -> None:
 
     assert tuple(spec.name for spec in selected) == (
         "random",
+        "fixed-bid",
         "aggressive-v1",
         "balanced-v1",
         "passive-v1",
         "aggressive-v2",
         "balanced-v2",
         "passive-v2",
+        "sdk-greedy-value-v1",
         "aggressive-v3",
         "balanced-v3",
         "passive-v3",
@@ -154,6 +156,14 @@ def test_cli_runs_all_conditions_with_current_registry(tmp_path: Path) -> None:
     assert (tmp_path / "ratings.csv").is_file()
     assert (tmp_path / "summary.json").is_file()
     assert (tmp_path / "report.html").is_file()
+    summary = json.loads((tmp_path / "summary.json").read_text(encoding="utf-8"))
+    configured_names = tuple(item["name"] for item in summary["configuration"]["bots"])
+    sdk_row = next(
+        row for row in summary["leaderboard"] if row["bot_name"] == "sdk-greedy-value-v1"
+    )
+
+    assert "sdk-greedy-value-v1" in configured_names
+    assert sdk_row["faults"] == 0
 
 
 def test_cli_writes_and_prints_decision_reports_only_when_requested(

@@ -293,6 +293,64 @@ def test_candidate_and_incumbent_identity_collision_writes_a_report(tmp_path: Pa
     assert run.artifacts.report_json.is_file()
 
 
+def test_insufficient_filtered_opponents_preserve_pool_evidence(tmp_path: Path) -> None:
+    config, registry = _run_inputs(pair_count=1)
+    held_out = replace(
+        config.held_out,
+        recipe=replace(
+            config.held_out.recipe,
+            opponent_names=(
+                config.candidate.name,
+                config.incumbent.name,
+                "opponent-a",
+            ),
+        ),
+        cases=(
+            replace(
+                config.held_out.cases[0],
+                opponent_names_by_seat=(
+                    None,
+                    config.candidate.name,
+                    config.incumbent.name,
+                ),
+            ),
+        ),
+    )
+
+    run = PromotionRunner.run(
+        replace(config, held_out=held_out),
+        registry=registry,
+        workers=1,
+        output_dir=tmp_path,
+        repository_commit="test-commit",
+    )
+
+    assert run.plan is None
+    assert [failure.code for failure in run.report.analysis.failures] == [
+        "insufficient_eligible_opponents"
+    ]
+    payload = json.loads(run.artifacts.report_json.read_bytes())
+    assert payload["effective_plan"] is None
+    assert payload["opponent_pool"] == {
+        "configured": [
+            {"name": "candidate", "bot_id": "candidate"},
+            {"name": "incumbent", "bot_id": "incumbent"},
+            {"name": "opponent-a", "bot_id": "opponent-a"},
+        ],
+        "exclusions": [
+            {
+                "opponent": {"name": "candidate", "bot_id": "candidate"},
+                "reason": "candidate",
+            },
+            {
+                "opponent": {"name": "incumbent", "bot_id": "incumbent"},
+                "reason": "incumbent",
+            },
+        ],
+        "remaining": [{"name": "opponent-a", "bot_id": "opponent-a"}],
+    }
+
+
 def test_runner_does_not_accept_an_alternate_frozen_candidate_catalog() -> None:
     fake_catalog = {"forged-candidate": object()}
 
@@ -371,7 +429,7 @@ def test_runner_rejects_a_different_equal_frozen_bot_spec(
     )
     forged = replace(frozen.bot_spec, brain_factory=EvilFactory())
     development = load_promotion_corpus(
-        Path("configs/promotion/development-v1.json"),
+        Path("configs/promotion/historical/development-v1-17c01635.json"),
         registry=BOT_SPECS_BY_NAME,
     )
     _, held_out = _corpora(pair_count=1)
@@ -427,7 +485,7 @@ def test_runner_rejects_lying_provenance_string_subclasses(
         **{field_name: lying_value},
     )
     development = load_promotion_corpus(
-        Path("configs/promotion/development-v1.json"),
+        Path("configs/promotion/historical/development-v1-17c01635.json"),
         registry=BOT_SPECS_BY_NAME,
     )
     _, held_out = _corpora(pair_count=1)
@@ -469,7 +527,7 @@ def test_runner_rejects_a_lying_provenance_subclass(
     assert resolved.frozen_provenance is not None
     forged_provenance = evil_provenance(resolved.frozen_provenance)
     development = load_promotion_corpus(
-        Path("configs/promotion/development-v1.json"),
+        Path("configs/promotion/historical/development-v1-17c01635.json"),
         registry=BOT_SPECS_BY_NAME,
     )
     _, held_out = _corpora(pair_count=1)
@@ -509,7 +567,7 @@ def test_frozen_runner_rejects_a_forged_canonical_name_opponent(
         frozen_candidates=FROZEN_CANDIDATES_BY_NAME,
     )
     development = load_promotion_corpus(
-        Path("configs/promotion/development-v1.json"),
+        Path("configs/promotion/historical/development-v1-17c01635.json"),
         registry=BOT_SPECS_BY_NAME,
     )
     _, held_out = _corpora(pair_count=1)

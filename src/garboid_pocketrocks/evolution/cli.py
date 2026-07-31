@@ -27,7 +27,7 @@ from garboid_pocketrocks.promotion.corpus import (
 )
 
 _BOT_REGISTRY = BOT_SPECS_BY_NAME
-_DEFAULT_DEVELOPMENT_CORPUS = Path("configs/promotion/development-v1.json")
+_DEFAULT_DEVELOPMENT_CORPUS = Path("configs/promotion/historical/development-v1-17c01635.json")
 _DEFAULT_OUTPUT_DIR = Path("artifacts/evolution")
 
 

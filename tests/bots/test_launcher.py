@@ -11,6 +11,7 @@ from garboid_pocketrocks.bots import (
     RandomBot,
 )
 from garboid_pocketrocks.bots.launcher import BOT_REGISTRY, run_bots
+from garboid_pocketrocks.neural.live_bot import PpoLargeTeenBot
 
 
 class _RunnableBot(Protocol):
@@ -18,12 +19,19 @@ class _RunnableBot(Protocol):
 
 
 def test_registry_contains_every_live_wrapper_in_stable_order() -> None:
-    assert tuple(BOT_REGISTRY) == ("random", "aggressive", "balanced", "passive")
+    assert tuple(BOT_REGISTRY) == (
+        "random",
+        "aggressive",
+        "balanced",
+        "passive",
+        "ppo-large-teen",
+    )
     assert tuple(BOT_REGISTRY.values()) == (
         RandomBot,
         AggressiveHeuristicBot,
         BalancedHeuristicBot,
         PassiveHeuristicBot,
+        PpoLargeTeenBot,
     )
 
 

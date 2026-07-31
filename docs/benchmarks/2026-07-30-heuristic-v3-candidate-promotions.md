@@ -50,6 +50,11 @@ against the same opponents, chart, player count, and engine seed. The positive
 lower bounds therefore compare each candidate with its own predecessor on the
 same unseen matrix.
 
+The exact historical corpus recipes are retained under
+`configs/promotion/historical/`, keyed by digest prefix. The active promotion
+corpora use the later expanded opponent pool and intentionally have different
+digests; they do not replace the evidence summarized here.
+
 ## Exact commands
 
 The balanced and passive commands each ran once. The aggressive successful

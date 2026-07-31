@@ -228,7 +228,7 @@ def test_catalog_rejects_tampered_frozen_payload(
 
 def test_frozen_candidates_complete_development_matrix_without_faults() -> None:
     corpus = load_promotion_corpus(
-        REPOSITORY_ROOT / "configs" / "promotion" / "development-v1.json",
+        REPOSITORY_ROOT / "configs" / "promotion" / "historical" / "development-v1-17c01635.json",
         registry=BOT_SPECS_BY_NAME,
     )
     expected_matrix = set(product(tuple("ABCDE"), (3, 4, 5)))
