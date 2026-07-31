@@ -275,7 +275,7 @@ def test_v1_through_v3_representative_decisions_and_explanations_are_unchanged()
         for brain_class in brain_classes
     )
 
-    assert tuple((item.decision, item.explanation) for item in actual) == (
+    expected = (
         (
             BotDecision.submit_bid(3),
             _representative_legacy_explanation(
@@ -358,6 +358,35 @@ def test_v1_through_v3_representative_decisions_and_explanations_are_unchanged()
             ),
         ),
     )
+
+    assert tuple(item.decision for item in actual) == tuple(
+        decision for decision, _explanation in expected
+    )
+    for item, (_decision, expected_explanation) in zip(actual, expected, strict=True):
+        assert isinstance(item.explanation, HeuristicBidExplanation)
+        assert item.explanation.reservation_bid == expected_explanation.reservation_bid
+        assert item.explanation.chosen_bid == expected_explanation.chosen_bid
+        assert (
+            item.explanation.resource_value,
+            item.explanation.objective_completion_value,
+            item.explanation.objective_progress_value,
+            item.explanation.terminal_cash_value,
+            item.explanation.liquidity_value,
+            item.explanation.future_cash_value,
+            item.explanation.total_value,
+        ) == pytest.approx(
+            (
+                expected_explanation.resource_value,
+                expected_explanation.objective_completion_value,
+                expected_explanation.objective_progress_value,
+                expected_explanation.terminal_cash_value,
+                expected_explanation.liquidity_value,
+                expected_explanation.future_cash_value,
+                expected_explanation.total_value,
+            ),
+            rel=1e-14,
+            abs=1e-14,
+        )
 
 
 @pytest.mark.parametrize(
