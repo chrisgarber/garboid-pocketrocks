@@ -4,13 +4,25 @@ from dataclasses import dataclass
 
 from pocketrocks import BotDecision, DecisionContext
 
-from garboid_pocketrocks.adapters.public_history import PublicHistory
+from garboid_pocketrocks.adapters.public_history import PublicAuctionResolved, PublicHistory
 from garboid_pocketrocks.bots.base import BotSpec, PocketRocksFastBot
 from garboid_pocketrocks.diagnostics.trace import (
     ExplainedBotDecision,
     HeuristicBidExplanation,
+    OpponentAwareHeuristicBidExplanation,
 )
 from garboid_pocketrocks.heuristics.errors import HeuristicInputError
+from garboid_pocketrocks.heuristics.game_phase import GamePhase, game_phase_for_turn_index
+from garboid_pocketrocks.heuristics.opponent_bids import (
+    DEFAULT_OPPONENT_BID_MODEL_CONFIG,
+    OPPONENT_BID_MODEL_NAME,
+    CompetitiveBidPoint,
+    OpponentBidDistribution,
+    OpponentBidModelConfig,
+    PublicOpponentBidContext,
+    forecast_opponent_bids,
+    opponent_bid_model_config_digest,
+)
 from garboid_pocketrocks.heuristics.profiles import (
     HEURISTIC_V1,
     HEURISTIC_V2,
@@ -25,6 +37,15 @@ from garboid_pocketrocks.knowledge import RulesetKnowledge
 class _HeuristicChoice:
     decision: BotDecision
     bid_evaluation: BidEvaluation | None
+
+
+@dataclass(frozen=True, slots=True)
+class _OpponentAwareHeuristicChoice:
+    decision: BotDecision
+    bid_evaluation: BidEvaluation | None
+    public_game_phase: GamePhase | None
+    opponent_distributions: tuple[OpponentBidDistribution, ...]
+    competitive_bid_points: tuple[CompetitiveBidPoint, ...]
 
 
 class HeuristicBotBrain:
@@ -97,6 +118,174 @@ class HeuristicBotBrain:
             return _HeuristicChoice(BotDecision.pass_turn(), None)
 
 
+class OpponentAwareHeuristicBotBrain:
+    """Choose bids by combining a frozen valuation with public bid forecasts."""
+
+    def __init__(
+        self,
+        profile: HeuristicProfile,
+        model_config: OpponentBidModelConfig = DEFAULT_OPPONENT_BID_MODEL_CONFIG,
+    ) -> None:
+        if not isinstance(profile, HeuristicProfile):
+            raise HeuristicInputError("opponent-aware heuristic profile has the wrong type")
+        if not isinstance(model_config, OpponentBidModelConfig):
+            raise HeuristicInputError("opponent bid model config has the wrong type")
+        self.profile = profile
+        self.valuator = HeuristicValuator(profile)
+        self.model_config = model_config
+        self.model_config_digest = opponent_bid_model_config_digest(model_config)
+
+    def choose_decision(
+        self,
+        context: DecisionContext,
+        ruleset: RulesetKnowledge,
+        history: PublicHistory = (),
+    ) -> BotDecision:
+        """Choose with the immutable public history supplied to every bot brain."""
+
+        return self._choose_raw(context, ruleset, history).decision
+
+    def choose_explained_decision(
+        self,
+        context: DecisionContext,
+        ruleset: RulesetKnowledge,
+        history: PublicHistory,
+    ) -> ExplainedBotDecision:
+        """Choose once and retain the public inputs behind an opponent-aware bid."""
+
+        choice = self._choose_raw(context, ruleset, history)
+        evaluation = choice.bid_evaluation
+        phase = choice.public_game_phase
+        if evaluation is None or phase is None:
+            return ExplainedBotDecision(decision=choice.decision)
+
+        chosen_bid = 0 if choice.decision.action_kind == "pass" else choice.decision.value
+        if chosen_bid is None:
+            raise HeuristicInputError("opponent-aware bid decision has no amount")
+        selected_point = evaluation.points[chosen_bid]
+        breakdown = selected_point.breakdown
+        reservation_bid = max(
+            (
+                point.effective_bid
+                for point in choice.competitive_bid_points
+                if point.win_delta >= 0.0
+            ),
+            default=0,
+        )
+        return ExplainedBotDecision(
+            decision=choice.decision,
+            explanation=OpponentAwareHeuristicBidExplanation(
+                resource_value=breakdown.resource,
+                objective_completion_value=breakdown.objective_completion,
+                objective_progress_value=breakdown.objective_progress,
+                terminal_cash_value=breakdown.terminal_cash,
+                liquidity_value=breakdown.liquidity,
+                future_cash_value=breakdown.future_cash,
+                total_value=breakdown.total,
+                reservation_bid=reservation_bid,
+                chosen_bid=chosen_bid,
+                public_game_phase=phase,
+                model_name=OPPONENT_BID_MODEL_NAME,
+                model_config_digest=self.model_config_digest,
+                opponent_distributions=choice.opponent_distributions,
+                competitive_bid_points=choice.competitive_bid_points,
+            ),
+        )
+
+    def _choose_raw(
+        self,
+        context: DecisionContext,
+        ruleset: RulesetKnowledge,
+        history: PublicHistory,
+    ) -> _OpponentAwareHeuristicChoice:
+        """Value and forecast once, then maximize expected competitive surplus."""
+
+        if context.decision_kind == "selectInfoToReveal":
+            try:
+                decision = BotDecision.select_info_to_reveal(
+                    self.valuator.choose_reveal(context, ruleset),
+                )
+            except HeuristicInputError:
+                decision = BotDecision.pass_turn()
+            return _OpponentAwareHeuristicChoice(
+                decision=decision,
+                bid_evaluation=None,
+                public_game_phase=None,
+                opponent_distributions=(),
+                competitive_bid_points=(),
+            )
+        if context.decision_kind != "submitBid":
+            raise HeuristicInputError(
+                f"unsupported opponent-aware decision kind {context.decision_kind!r}",
+            )
+        if context.current_action_id is None:
+            raise HeuristicInputError("opponent-aware bid requires a current action")
+        if context.legal_max_amount is None:
+            raise HeuristicInputError("opponent-aware bid requires a legal maximum")
+        if not history:
+            raise HeuristicInputError("opponent-aware bids require public history")
+
+        completed_round_count = sum(isinstance(event, PublicAuctionResolved) for event in history)
+        phase = game_phase_for_turn_index(completed_round_count)
+        try:
+            model_context = PublicOpponentBidContext(
+                player_count=context.player_count,
+                starting_cash=context.starting_cash,
+                value_chart=context.value_chart,
+                current_action_id=context.current_action_id,
+                cash_by_seat=context.cash_by_seat,
+                tiebreak_seat=context.tiebreak_seat,
+                bot_seat=context.bot_seat,
+                legal_max_amount=context.legal_max_amount,
+                game_phase=phase,
+            )
+        except ValueError as error:
+            raise HeuristicInputError(str(error)) from error
+
+        evaluation = self.valuator.evaluate_bid(context, ruleset)
+        forecast = forecast_opponent_bids(history, model_context, self.model_config)
+        legal_support = tuple(range(context.legal_max_amount + 1))
+        valuation_support = tuple(point.bid for point in evaluation.points)
+        forecast_support = tuple(item.effective_bid for item in forecast.legal_bid_forecasts)
+        if valuation_support != legal_support:
+            raise HeuristicInputError("heuristic valuation does not cover every legal bid")
+        if forecast_support != legal_support:
+            raise HeuristicInputError("opponent forecast does not cover every legal bid")
+
+        try:
+            competitive_points = tuple(
+                CompetitiveBidPoint(
+                    effective_bid=value_point.bid,
+                    win_probability=forecast_point.win_probability,
+                    win_delta=value_point.win_delta,
+                    expected_surplus=(forecast_point.win_probability * value_point.win_delta),
+                )
+                for value_point, forecast_point in zip(
+                    evaluation.points,
+                    forecast.legal_bid_forecasts,
+                    strict=True,
+                )
+            )
+        except ValueError as error:
+            raise HeuristicInputError(str(error)) from error
+        selected = max(
+            competitive_points,
+            key=lambda point: (point.expected_surplus, -point.effective_bid),
+        )
+        decision = (
+            BotDecision.pass_turn()
+            if selected.effective_bid == 0
+            else BotDecision.submit_bid(selected.effective_bid)
+        )
+        return _OpponentAwareHeuristicChoice(
+            decision=decision,
+            bid_evaluation=evaluation,
+            public_game_phase=phase,
+            opponent_distributions=forecast.opponent_distributions,
+            competitive_bid_points=competitive_points,
+        )
+
+
 class AggressiveHeuristicV1Brain(HeuristicBotBrain):
     def __init__(self, seed: int | None = None) -> None:
         del seed
@@ -149,6 +338,26 @@ class PassiveHeuristicV3Brain(HeuristicBotBrain):
     def __init__(self, seed: int | None = None) -> None:
         del seed
         super().__init__(HEURISTIC_V3.passive)
+
+
+BALANCED_HEURISTIC_V5_CANDIDATE_MODEL_CONFIG = OpponentBidModelConfig(
+    prior_strength=4.0,
+    minimum_history_rounds=2,
+    same_action_phase_weight=4.0,
+    partial_match_weight=2.0,
+    fallback_weight=1.0,
+)
+
+
+class BalancedHeuristicV5CandidateBrain(OpponentAwareHeuristicBotBrain):
+    """Development-only balanced candidate that learns from public bid history."""
+
+    def __init__(self, seed: int | None = None) -> None:
+        del seed
+        super().__init__(
+            HEURISTIC_V3.balanced,
+            BALANCED_HEURISTIC_V5_CANDIDATE_MODEL_CONFIG,
+        )
 
 
 class AggressiveHeuristicBrain(AggressiveHeuristicV3Brain):
@@ -240,4 +449,12 @@ BALANCED_HEURISTIC_V3_BOT_SPEC = BotSpec.for_simulation(
 PASSIVE_HEURISTIC_V3_BOT_SPEC = BotSpec.for_simulation(
     "passive-v3",
     PassiveHeuristicV3Brain,
+)
+
+BALANCED_HEURISTIC_V5_CANDIDATE_BOT_SPEC = BotSpec.for_simulation(
+    (
+        "balanced-v5-candidate-opponent-aware-"
+        f"{opponent_bid_model_config_digest(BALANCED_HEURISTIC_V5_CANDIDATE_MODEL_CONFIG)[:12]}"
+    ),
+    BalancedHeuristicV5CandidateBrain,
 )

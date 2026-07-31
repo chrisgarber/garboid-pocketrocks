@@ -20,6 +20,8 @@ from garboid_pocketrocks.adapters.public_history import (
 from garboid_pocketrocks.heuristics.errors import HeuristicInputError
 from garboid_pocketrocks.heuristics.game_phase import game_phase_for_turn_index
 from garboid_pocketrocks.heuristics.opponent_bids import (
+    DEFAULT_OPPONENT_BID_MODEL_CONFIG,
+    OPPONENT_BID_MODEL_NAME,
     CompetitiveBidPoint,
     LegalBidWinningForecast,
     OpponentBidDistribution,
@@ -28,10 +30,43 @@ from garboid_pocketrocks.heuristics.opponent_bids import (
     PublicOpponentBidContext,
     PublicResolvedBidRound,
     forecast_opponent_bids,
+    opponent_bid_model_config_digest,
+    opponent_bid_model_config_payload,
     resolved_bid_rounds_from_public_history,
 )
 
 CHART = (0, 4, 8, 12, 16, 20)
+
+
+def test_model_config_identity_has_a_pinned_canonical_payload_and_digest() -> None:
+    assert opponent_bid_model_config_payload() == {
+        "model_name": OPPONENT_BID_MODEL_NAME,
+        "model_config": {
+            "prior_strength": 4.0,
+            "minimum_history_rounds": 2,
+            "same_action_phase_weight": 4.0,
+            "partial_match_weight": 2.0,
+            "fallback_weight": 1.0,
+        },
+    }
+    assert opponent_bid_model_config_digest() == (
+        "001d5130a98451443ec6bce9760a76dc8a01576e2551ed17b6ce16dd0aeb8f1d"
+    )
+
+
+def test_model_config_digest_normalizes_equivalent_integer_and_float_values() -> None:
+    integer_config = OpponentBidModelConfig(
+        prior_strength=4,
+        minimum_history_rounds=2,
+        same_action_phase_weight=4,
+        partial_match_weight=2,
+        fallback_weight=1,
+    )
+
+    assert integer_config == DEFAULT_OPPONENT_BID_MODEL_CONFIG
+    assert opponent_bid_model_config_digest(integer_config) == (
+        opponent_bid_model_config_digest(DEFAULT_OPPONENT_BID_MODEL_CONFIG)
+    )
 
 
 def test_competitive_bid_point_is_frozen_slotted_and_self_consistent() -> None:

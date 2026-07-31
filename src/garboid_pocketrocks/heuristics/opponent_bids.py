@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import math
 from dataclasses import dataclass
 from fractions import Fraction
@@ -221,6 +223,39 @@ class OpponentBidModelConfig:
 
 
 DEFAULT_OPPONENT_BID_MODEL_CONFIG = OpponentBidModelConfig()
+
+
+def opponent_bid_model_config_payload(
+    config: OpponentBidModelConfig = DEFAULT_OPPONENT_BID_MODEL_CONFIG,
+) -> dict[str, object]:
+    """Return the canonical public identity payload for one model configuration."""
+
+    if not isinstance(config, OpponentBidModelConfig):
+        raise HeuristicInputError("opponent bid model config has the wrong type")
+    return {
+        "model_name": OPPONENT_BID_MODEL_NAME,
+        "model_config": {
+            "prior_strength": float(config.prior_strength),
+            "minimum_history_rounds": config.minimum_history_rounds,
+            "same_action_phase_weight": float(config.same_action_phase_weight),
+            "partial_match_weight": float(config.partial_match_weight),
+            "fallback_weight": float(config.fallback_weight),
+        },
+    }
+
+
+def opponent_bid_model_config_digest(
+    config: OpponentBidModelConfig = DEFAULT_OPPONENT_BID_MODEL_CONFIG,
+) -> str:
+    """Return a stable SHA-256 identity for a normalized model configuration."""
+
+    canonical_json = json.dumps(
+        opponent_bid_model_config_payload(config),
+        allow_nan=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    return hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()
 
 
 @dataclass(frozen=True, slots=True)

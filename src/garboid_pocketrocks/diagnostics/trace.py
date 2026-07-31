@@ -249,9 +249,7 @@ class NeuralPolicyExplanation:
 
 
 type DecisionExplanation = (
-    HeuristicBidExplanation
-    | OpponentAwareHeuristicBidExplanation
-    | NeuralPolicyExplanation
+    HeuristicBidExplanation | OpponentAwareHeuristicBidExplanation | NeuralPolicyExplanation
 )
 
 

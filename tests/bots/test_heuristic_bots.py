@@ -3,12 +3,20 @@ from __future__ import annotations
 import pickle
 from collections.abc import Callable
 from dataclasses import replace
+from typing import cast
 
 import pytest
 from pocketrocks import OBJECTIVES, ActionId, BotDecision, DecisionContext, Suit
 from pocketrocks.sim.constants import VALUE_CHARTS
 
 import garboid_pocketrocks.bots.heuristic as heuristic_module
+from garboid_pocketrocks.adapters.public_history import (
+    PublicAuctionResolved,
+    PublicEventKind,
+    PublicGameSetup,
+    PublicHistory,
+    PublicTurnOpened,
+)
 from garboid_pocketrocks.bots import (
     AggressiveHeuristicBot,
     AggressiveHeuristicBrain,
@@ -37,14 +45,30 @@ from garboid_pocketrocks.bots.heuristic import (
     BALANCED_HEURISTIC_V1_BOT_SPEC,
     BALANCED_HEURISTIC_V2_BOT_SPEC,
     BALANCED_HEURISTIC_V3_BOT_SPEC,
+    BALANCED_HEURISTIC_V5_CANDIDATE_BOT_SPEC,
+    BALANCED_HEURISTIC_V5_CANDIDATE_MODEL_CONFIG,
     PASSIVE_HEURISTIC_BOT_SPEC,
     PASSIVE_HEURISTIC_V1_BOT_SPEC,
     PASSIVE_HEURISTIC_V2_BOT_SPEC,
     PASSIVE_HEURISTIC_V3_BOT_SPEC,
+    BalancedHeuristicV5CandidateBrain,
     HeuristicBotBrain,
+    OpponentAwareHeuristicBotBrain,
 )
-from garboid_pocketrocks.diagnostics.trace import HeuristicBidExplanation
+from garboid_pocketrocks.bots.registry import BOT_SPECS, DEFAULT_TOURNAMENT_BOT_SPECS
+from garboid_pocketrocks.diagnostics.trace import (
+    HeuristicBidExplanation,
+    OpponentAwareHeuristicBidExplanation,
+)
 from garboid_pocketrocks.heuristics.errors import HeuristicInputError
+from garboid_pocketrocks.heuristics.opponent_bids import (
+    OPPONENT_BID_MODEL_NAME,
+    LegalBidWinningForecast,
+    OpponentBidForecast,
+    OpponentBidModelConfig,
+    forecast_opponent_bids,
+    opponent_bid_model_config_digest,
+)
 from garboid_pocketrocks.heuristics.profiles import (
     BALANCED_PROFILE,
     HEURISTIC_V1,
@@ -113,6 +137,46 @@ def make_context(
     )
 
 
+def make_public_history(
+    context: DecisionContext,
+    *,
+    completed_round_count: int = 0,
+) -> PublicHistory:
+    events: list[object] = [
+        PublicGameSetup(
+            kind=PublicEventKind.GAME_SETUP,
+            player_count=context.player_count,
+            starting_cash=context.starting_cash,
+            value_chart=context.value_chart,
+            initial_tiebreak_seat=context.tiebreak_seat,
+            objective_ids=context.objective_ids,
+        )
+    ]
+    for _ in range(completed_round_count):
+        events.extend(
+            (
+                PublicTurnOpened(
+                    kind=PublicEventKind.TURN_OPENED,
+                    action_id=int(ActionId.AUCTION1),
+                    resource_ids=(int(Suit.BRICK), 0),
+                ),
+                PublicAuctionResolved(
+                    kind=PublicEventKind.AUCTION_RESOLVED,
+                    bids_by_seat=(0, 0, 1),
+                ),
+            )
+        )
+    if context.current_action_id is not None:
+        events.append(
+            PublicTurnOpened(
+                kind=PublicEventKind.TURN_OPENED,
+                action_id=context.current_action_id,
+                resource_ids=context.current_resource_ids,
+            )
+        )
+    return cast(PublicHistory, tuple(events))
+
+
 def test_heuristic_bots_have_distinct_static_public_identities() -> None:
     assert issubclass(AggressiveHeuristicBot, PocketRocksFastBot)
     assert issubclass(BalancedHeuristicBot, PocketRocksFastBot)
@@ -152,6 +216,37 @@ def test_versioned_heuristic_specs_use_names_as_private_simulation_ids() -> None
         "passive-v3",
     )
     assert all(spec.bot_id == spec.name for spec in specs)
+
+
+def test_balanced_v5_candidate_has_a_frozen_local_only_identity() -> None:
+    brain = BALANCED_HEURISTIC_V5_CANDIDATE_BOT_SPEC.make_brain(seed=42)
+    digest = opponent_bid_model_config_digest(
+        BALANCED_HEURISTIC_V5_CANDIDATE_MODEL_CONFIG,
+    )
+
+    assert isinstance(brain, BalancedHeuristicV5CandidateBrain)
+    assert isinstance(brain, OpponentAwareHeuristicBotBrain)
+    assert brain.valuator.profile is HEURISTIC_V3.balanced
+    assert brain.model_config is BALANCED_HEURISTIC_V5_CANDIDATE_MODEL_CONFIG
+    assert BALANCED_HEURISTIC_V5_CANDIDATE_MODEL_CONFIG == OpponentBidModelConfig(
+        prior_strength=4.0,
+        minimum_history_rounds=2,
+        same_action_phase_weight=4.0,
+        partial_match_weight=2.0,
+        fallback_weight=1.0,
+    )
+    assert BALANCED_HEURISTIC_V5_CANDIDATE_BOT_SPEC.name == (
+        f"balanced-v5-candidate-opponent-aware-{digest[:12]}"
+    )
+    assert (
+        BALANCED_HEURISTIC_V5_CANDIDATE_BOT_SPEC.bot_id
+        == BALANCED_HEURISTIC_V5_CANDIDATE_BOT_SPEC.name
+    )
+    assert BALANCED_HEURISTIC_V5_CANDIDATE_BOT_SPEC not in BOT_SPECS
+    assert BALANCED_HEURISTIC_V5_CANDIDATE_BOT_SPEC not in DEFAULT_TOURNAMENT_BOT_SPECS
+    assert pickle.loads(pickle.dumps(BALANCED_HEURISTIC_V5_CANDIDATE_BOT_SPEC)) == (
+        BALANCED_HEURISTIC_V5_CANDIDATE_BOT_SPEC
+    )
 
 
 @pytest.mark.parametrize(
@@ -222,6 +317,165 @@ def test_unversioned_brains_match_v3_decisions(
         context,
         knowledge,
     )
+
+
+def _representative_legacy_explanation(
+    *,
+    liquidity_value: float,
+    total_value: float,
+    reservation_bid: int,
+    chosen_bid: int,
+) -> HeuristicBidExplanation:
+    return HeuristicBidExplanation(
+        resource_value=5.8181818181818175,
+        objective_completion_value=0,
+        objective_progress_value=0,
+        terminal_cash_value=-float(chosen_bid),
+        liquidity_value=liquidity_value,
+        future_cash_value=0.0,
+        total_value=total_value,
+        reservation_bid=reservation_bid,
+        chosen_bid=chosen_bid,
+    )
+
+
+def test_v1_through_v3_representative_decisions_and_explanations_are_unchanged() -> None:
+    context = make_context(
+        action_id=ActionId.AUCTION2,
+        current_resources=(int(Suit.BRICK), int(Suit.WOOD)),
+        hand=(int(Suit.ORE), int(Suit.SHEEP)),
+        legal_max=9,
+    )
+    knowledge = make_knowledge(private_cards=2, resource_counts=(3, 3, 3, 3, 3))
+    brain_classes = (
+        AggressiveHeuristicV1Brain,
+        BalancedHeuristicV1Brain,
+        PassiveHeuristicV1Brain,
+        AggressiveHeuristicV2Brain,
+        BalancedHeuristicV2Brain,
+        PassiveHeuristicV2Brain,
+        AggressiveHeuristicV3Brain,
+        BalancedHeuristicV3Brain,
+        PassiveHeuristicV3Brain,
+    )
+
+    actual = tuple(
+        brain_class().choose_explained_decision(context, knowledge, ())
+        for brain_class in brain_classes
+    )
+
+    expected = (
+        (
+            BotDecision.submit_bid(3),
+            _representative_legacy_explanation(
+                liquidity_value=-0.6036876255108243,
+                total_value=2.214494192670993,
+                reservation_bid=4,
+                chosen_bid=3,
+            ),
+        ),
+        (
+            BotDecision.submit_bid(3),
+            _representative_legacy_explanation(
+                liquidity_value=-0.3219667336057732,
+                total_value=2.4962150845760442,
+                reservation_bid=5,
+                chosen_bid=3,
+            ),
+        ),
+        (
+            BotDecision.submit_bid(2),
+            _representative_legacy_explanation(
+                liquidity_value=-0.0795591546343255,
+                total_value=3.738622663547492,
+                reservation_bid=5,
+                chosen_bid=2,
+            ),
+        ),
+        (
+            BotDecision.submit_bid(3),
+            _representative_legacy_explanation(
+                liquidity_value=-0.6036876255108243,
+                total_value=2.214494192670993,
+                reservation_bid=4,
+                chosen_bid=3,
+            ),
+        ),
+        (
+            BotDecision.submit_bid(3),
+            _representative_legacy_explanation(
+                liquidity_value=-0.3219667336057732,
+                total_value=2.4962150845760442,
+                reservation_bid=5,
+                chosen_bid=3,
+            ),
+        ),
+        (
+            BotDecision.submit_bid(3),
+            _representative_legacy_explanation(
+                liquidity_value=-0.12073752510216496,
+                total_value=2.6974442930796525,
+                reservation_bid=5,
+                chosen_bid=3,
+            ),
+        ),
+        (
+            BotDecision.submit_bid(3),
+            _representative_legacy_explanation(
+                liquidity_value=-1.2073752510216487,
+                total_value=1.6108065671601688,
+                reservation_bid=4,
+                chosen_bid=3,
+            ),
+        ),
+        (
+            BotDecision.submit_bid(2),
+            _representative_legacy_explanation(
+                liquidity_value=-0.7425521099203714,
+                total_value=3.075629708261446,
+                reservation_bid=4,
+                chosen_bid=2,
+            ),
+        ),
+        (
+            BotDecision.submit_bid(2),
+            _representative_legacy_explanation(
+                liquidity_value=-0.1325985910572096,
+                total_value=3.685583227124608,
+                reservation_bid=5,
+                chosen_bid=2,
+            ),
+        ),
+    )
+
+    assert tuple(item.decision for item in actual) == tuple(
+        decision for decision, _explanation in expected
+    )
+    for item, (_decision, expected_explanation) in zip(actual, expected, strict=True):
+        assert isinstance(item.explanation, HeuristicBidExplanation)
+        assert item.explanation.reservation_bid == expected_explanation.reservation_bid
+        assert item.explanation.chosen_bid == expected_explanation.chosen_bid
+        assert (
+            item.explanation.resource_value,
+            item.explanation.objective_completion_value,
+            item.explanation.objective_progress_value,
+            item.explanation.terminal_cash_value,
+            item.explanation.liquidity_value,
+            item.explanation.future_cash_value,
+            item.explanation.total_value,
+        ) == pytest.approx(
+            (
+                expected_explanation.resource_value,
+                expected_explanation.objective_completion_value,
+                expected_explanation.objective_progress_value,
+                expected_explanation.terminal_cash_value,
+                expected_explanation.liquidity_value,
+                expected_explanation.future_cash_value,
+                expected_explanation.total_value,
+            ),
+            rel=1e-14,
+            abs=1e-14,
+        )
 
 
 @pytest.mark.parametrize(
@@ -333,6 +587,177 @@ def test_heuristic_explanation_reuses_the_single_bid_evaluation(
         reservation_bid=evaluation.reservation_bid,
         chosen_bid=evaluation.chosen_bid,
     )
+
+
+def test_opponent_aware_candidate_requires_history_for_bids_but_not_reveals() -> None:
+    bid_context = make_context(legal_max=30)
+    reveal_context = make_context(
+        decision_kind="selectInfoToReveal",
+        current_resources=(0, 0),
+        hand=(int(Suit.ORE), int(Suit.SHEEP)),
+        legal_max=None,
+    )
+    reveal_knowledge = make_knowledge(private_cards=2, resource_counts=(3, 3, 3, 3, 3))
+    candidate = BalancedHeuristicV5CandidateBrain()
+
+    with pytest.raises(HeuristicInputError, match="public history"):
+        candidate.choose_decision(bid_context, make_knowledge())
+    assert candidate.choose_decision(reveal_context, reveal_knowledge) == (
+        BalancedHeuristicV3Brain().choose_decision(reveal_context, reveal_knowledge)
+    )
+
+
+def test_opponent_aware_candidate_values_and_forecasts_once_for_its_explanation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = make_context(
+        action_id=ActionId.AUCTION2,
+        current_resources=(int(Suit.BRICK), int(Suit.WOOD)),
+        legal_max=30,
+    )
+    history = make_public_history(context)
+    knowledge = make_knowledge()
+    candidate = BalancedHeuristicV5CandidateBrain()
+    original_evaluate = HeuristicValuator.evaluate_bid
+    original_forecast = forecast_opponent_bids
+    evaluations: list[BidEvaluation] = []
+    forecasts: list[OpponentBidForecast] = []
+
+    def record_evaluation(
+        valuator: HeuristicValuator,
+        context: DecisionContext,
+        ruleset: RulesetKnowledge,
+    ) -> BidEvaluation:
+        evaluation = original_evaluate(valuator, context, ruleset)
+        evaluations.append(evaluation)
+        return evaluation
+
+    def record_forecast(*args: object, **kwargs: object) -> OpponentBidForecast:
+        forecast = original_forecast(*args, **kwargs)  # type: ignore[arg-type]
+        forecasts.append(forecast)
+        return forecast
+
+    monkeypatch.setattr(HeuristicValuator, "evaluate_bid", record_evaluation)
+    monkeypatch.setattr(heuristic_module, "forecast_opponent_bids", record_forecast)
+
+    explained = candidate.choose_explained_decision(context, knowledge, history)
+
+    assert len(evaluations) == 1
+    assert len(forecasts) == 1
+    assert isinstance(explained.explanation, OpponentAwareHeuristicBidExplanation)
+    explanation = explained.explanation
+    chosen_point = evaluations[0].points[explanation.chosen_bid]
+    assert explanation.model_name == OPPONENT_BID_MODEL_NAME
+    assert explanation.model_config_digest == opponent_bid_model_config_digest(
+        BALANCED_HEURISTIC_V5_CANDIDATE_MODEL_CONFIG,
+    )
+    assert explanation.opponent_distributions == forecasts[0].opponent_distributions
+    assert explanation.total_value == chosen_point.breakdown.total
+    assert explanation.terminal_cash_value == chosen_point.breakdown.terminal_cash
+    assert tuple(point.effective_bid for point in explanation.competitive_bid_points) == (
+        tuple(range(31))
+    )
+    assert explained.decision == candidate.choose_decision(
+        context,
+        knowledge,
+        history,
+    )
+
+
+def test_opponent_aware_candidate_uses_the_lower_bid_when_surplus_ties(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = make_context(legal_max=30)
+    history = make_public_history(context)
+    original_forecast = forecast_opponent_bids
+
+    def zero_win_forecast(*args: object, **kwargs: object) -> OpponentBidForecast:
+        forecast = original_forecast(*args, **kwargs)  # type: ignore[arg-type]
+        return OpponentBidForecast(
+            opponent_distributions=forecast.opponent_distributions,
+            legal_bid_forecasts=tuple(
+                LegalBidWinningForecast(
+                    effective_bid=point.effective_bid,
+                    win_probability=0.0,
+                )
+                for point in forecast.legal_bid_forecasts
+            ),
+        )
+
+    monkeypatch.setattr(heuristic_module, "forecast_opponent_bids", zero_win_forecast)
+
+    assert (
+        BalancedHeuristicV5CandidateBrain().choose_decision(
+            context,
+            make_knowledge(),
+            history,
+        )
+        == BotDecision.pass_turn()
+    )
+
+
+def test_opponent_aware_candidate_rejects_an_incomplete_forecast(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = make_context(legal_max=30)
+    history = make_public_history(context)
+    complete_forecast = forecast_opponent_bids
+
+    def omit_highest_bid(*args: object, **kwargs: object) -> OpponentBidForecast:
+        forecast = complete_forecast(*args, **kwargs)  # type: ignore[arg-type]
+        return OpponentBidForecast(
+            opponent_distributions=forecast.opponent_distributions,
+            legal_bid_forecasts=forecast.legal_bid_forecasts[:-1],
+        )
+
+    monkeypatch.setattr(heuristic_module, "forecast_opponent_bids", omit_highest_bid)
+
+    with pytest.raises(HeuristicInputError, match="every legal bid"):
+        BalancedHeuristicV5CandidateBrain().choose_decision(
+            context,
+            make_knowledge(),
+            history,
+        )
+
+
+def test_opponent_aware_candidate_is_deterministic_and_responds_to_public_history() -> None:
+    context = make_context(legal_max=30)
+    sparse_history = make_public_history(context)
+    learned_history = make_public_history(context, completed_round_count=2)
+    candidate = BalancedHeuristicV5CandidateBrain()
+    knowledge = make_knowledge()
+
+    first = candidate.choose_explained_decision(context, knowledge, sparse_history)
+    second = candidate.choose_explained_decision(context, knowledge, sparse_history)
+    learned = candidate.choose_explained_decision(context, knowledge, learned_history)
+
+    assert first == second
+    assert isinstance(first.explanation, OpponentAwareHeuristicBidExplanation)
+    assert isinstance(learned.explanation, OpponentAwareHeuristicBidExplanation)
+    assert first.explanation.opponent_distributions != learned.explanation.opponent_distributions
+
+
+def test_opponent_aware_candidate_derives_phase_only_from_completed_public_rounds() -> None:
+    context = make_context(legal_max=30)
+    history = make_public_history(context, completed_round_count=5)
+
+    explained = BalancedHeuristicV5CandidateBrain().choose_explained_decision(
+        context,
+        make_knowledge(),
+        history,
+    )
+
+    assert isinstance(explained.explanation, OpponentAwareHeuristicBidExplanation)
+    assert explained.explanation.public_game_phase == "middle"
+
+
+def test_opponent_aware_candidate_rejects_malformed_public_history() -> None:
+    with pytest.raises(HeuristicInputError, match="public history"):
+        BalancedHeuristicV5CandidateBrain().choose_decision(
+            make_context(legal_max=30),
+            make_knowledge(),
+            (),
+        )
 
 
 def test_ordinary_heuristic_choice_does_not_construct_an_explanation(
