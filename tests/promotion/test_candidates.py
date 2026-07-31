@@ -22,6 +22,7 @@ from garboid_pocketrocks.promotion.candidates import (
     validate_promotion_candidate,
 )
 from garboid_pocketrocks.promotion.corpus import (
+    PromotionCorpus,
     load_promotion_corpus,
     recompute_promotion_corpus_digest,
 )
@@ -50,7 +51,7 @@ _DIAGNOSTIC_NAMES = (
 )
 
 
-def _development_for_frozen(frozen: Any):
+def _development_for_frozen(frozen: Any) -> PromotionCorpus:
     corpus_file = (
         "development-heuristic-v4-v1.json"
         if isinstance(frozen, FrozenPhaseAwareCandidate)
