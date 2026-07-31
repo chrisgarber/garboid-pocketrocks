@@ -10,13 +10,23 @@ from typing import cast
 
 import pytest
 
-import garboid_pocketrocks.neural.bootstrap_selection as selection_module
-from garboid_pocketrocks.bots import BOT_SPECS_BY_NAME, BotSpec
-from garboid_pocketrocks.evolution.evaluation import CandidateEvaluation, evaluate_candidate
-from garboid_pocketrocks.evolution.planning import DevelopmentPlan, plan_development_games
-from garboid_pocketrocks.knowledge import ruleset_name
-from garboid_pocketrocks.neural.bootstrap_freeze import FrozenBootstrapCandidate
-from garboid_pocketrocks.neural.bootstrap_selection import (
+pytest.importorskip("torch")
+
+import garboid_pocketrocks.neural.bootstrap_selection as selection_module  # noqa: E402
+from garboid_pocketrocks.bots import BOT_SPECS_BY_NAME, BotSpec  # noqa: E402
+from garboid_pocketrocks.evolution.evaluation import (  # noqa: E402
+    CandidateEvaluation,
+    evaluate_candidate,
+)
+from garboid_pocketrocks.evolution.planning import (  # noqa: E402
+    DevelopmentPlan,
+    plan_development_games,
+)
+from garboid_pocketrocks.knowledge import ruleset_name  # noqa: E402
+from garboid_pocketrocks.neural.bootstrap_freeze import (  # noqa: E402
+    FrozenBootstrapCandidate,
+)
+from garboid_pocketrocks.neural.bootstrap_selection import (  # noqa: E402
     DEVELOPMENT_CORPUS_DIGEST,
     BootstrapCandidateResult,
     BootstrapSelectionError,

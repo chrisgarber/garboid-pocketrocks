@@ -10,14 +10,18 @@ from typing import Any, cast
 
 import pytest
 
-import garboid_pocketrocks.neural.bootstrap_promotion as promotion
-from garboid_pocketrocks.bots import BOT_SPECS_BY_NAME, BotSpec
-from garboid_pocketrocks.neural.heuristic_bootstrap import REFERENCE_PARAMETER_DIGEST
-from garboid_pocketrocks.neural.tournament_bot import (
+pytest.importorskip("torch")
+
+import garboid_pocketrocks.neural.bootstrap_promotion as promotion  # noqa: E402
+from garboid_pocketrocks.bots import BOT_SPECS_BY_NAME, BotSpec  # noqa: E402
+from garboid_pocketrocks.neural.heuristic_bootstrap import (  # noqa: E402
+    REFERENCE_PARAMETER_DIGEST,
+)
+from garboid_pocketrocks.neural.tournament_bot import (  # noqa: E402
     VECTOR_PPO_LARGE_V1_G350K_BOT_SPEC,
     FrozenBootstrapBrainFactory,
 )
-from garboid_pocketrocks.promotion.corpus import (
+from garboid_pocketrocks.promotion.corpus import (  # noqa: E402
     CorpusPurpose,
     PromotionCase,
     PromotionCorpus,
@@ -25,7 +29,11 @@ from garboid_pocketrocks.promotion.corpus import (
     load_promotion_corpus,
     recompute_promotion_corpus_digest,
 )
-from garboid_pocketrocks.promotion.runner import PromotionRun, PromotionRunConfig, PromotionRunner
+from garboid_pocketrocks.promotion.runner import (  # noqa: E402
+    PromotionRun,
+    PromotionRunConfig,
+    PromotionRunner,
+)
 
 _STRATEGY = "fixed-compute-control-v1"
 _IDENTITY = "vector_ppo_large_fixed_compute_control_v1_test"
