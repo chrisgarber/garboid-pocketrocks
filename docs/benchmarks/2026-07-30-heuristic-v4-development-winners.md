@@ -1,10 +1,11 @@
 # Heuristic v4 development winners
 
-These are locally frozen candidates selected on the development corpus. They
-are not released bots, and they have not been evaluated on the held-out
-promotion corpus. The held-out evidence remains untouched, so these results
-support only the next promotion-evaluation step; they are not promotion
-claims.
+These are locally frozen candidates selected on the development corpus. At
+the time this development-only report was recorded, they were not released
+bots and had not been evaluated on the held-out promotion corpus. This report
+therefore makes no promotion claim. The later one-shot evaluations and the
+decision to keep v3 released are recorded in the
+[promotion summary](2026-07-30-heuristic-v4-candidate-promotions.md).
 
 ## Shared search contract
 

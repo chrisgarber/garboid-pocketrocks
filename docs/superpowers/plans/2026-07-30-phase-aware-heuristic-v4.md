@@ -103,9 +103,7 @@ pytest, mypy, and Ruff.
   In `phases.py`, calculate:
 
   ```python
-  total = sum(ruleset.resource_counts) - (
-      context.player_count * ruleset.private_cards_per_player
-  )
+  total = sum(ruleset.resource_counts) - (context.player_count * ruleset.private_cards_per_player)
   already_won = sum(sum(row) for row in context.won_resource_counts_by_seat)
   currently_offered = public_resource_count_awarded_by_current_action(context)
   future = total - already_won - currently_offered
