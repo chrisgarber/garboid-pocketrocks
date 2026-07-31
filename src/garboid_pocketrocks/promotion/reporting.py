@@ -11,6 +11,12 @@ from pathlib import Path
 
 from garboid_pocketrocks.bots import BotSpec
 from garboid_pocketrocks.promotion.analysis import PromotionAnalysis
+from garboid_pocketrocks.promotion.candidates import (
+    FrozenCandidateProvenance,
+    ResolvedPromotionCandidate,
+    validate_frozen_promotion_opponents,
+    validate_promotion_candidate,
+)
 from garboid_pocketrocks.promotion.corpus import (
     PromotionCorpus,
     corpus_snapshot_payload,
@@ -46,6 +52,7 @@ class PromotionReport:
     batch_size: int
     analysis: PromotionAnalysis
     artifact_names: tuple[str, ...]
+    candidate_provenance: FrozenCandidateProvenance | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,6 +91,7 @@ def build_promotion_report(
     workers: int,
     batch_size: int,
     analysis: PromotionAnalysis,
+    candidate_provenance: FrozenCandidateProvenance | None = None,
 ) -> PromotionReport:
     """Collect immutable inputs and analysis into the authoritative report model."""
 
@@ -101,6 +109,7 @@ def build_promotion_report(
         batch_size=batch_size,
         analysis=analysis,
         artifact_names=_ARTIFACT_NAMES,
+        candidate_provenance=candidate_provenance,
     )
 
 
@@ -112,9 +121,24 @@ def write_promotion_artifacts(
     development: PromotionCorpus,
     held_out: PromotionCorpus,
     overwrite: bool = False,
+    registry: Mapping[str, BotSpec] | None = None,
 ) -> PromotionArtifacts:
     """Write one rollback-protected generation of promotion artifacts."""
 
+    validate_promotion_candidate(
+        ResolvedPromotionCandidate(
+            bot_spec=report.candidate,
+            frozen_provenance=report.candidate_provenance,
+        ),
+        incumbent=report.incumbent,
+        development=report.development,
+        registry=registry,
+    )
+    validate_frozen_promotion_opponents(
+        report.candidate_provenance,
+        report.opponents,
+        required_names=report.held_out.recipe.opponent_names,
+    )
     validate_artifact_output_dir(output_dir, overwrite=overwrite)
     _require_report_corpora(
         report,
@@ -174,7 +198,7 @@ def promotion_report_payload(report: PromotionReport) -> dict[str, object]:
     total_faults = analysis.unattributed_faults + sum(
         count for _, count in analysis.faults_by_identity
     )
-    return {
+    payload: dict[str, object] = {
         "schema_version": report.schema_version,
         "repository_commit": report.repository_commit,
         "candidate": _bot_identity_payload(report.candidate),
@@ -225,10 +249,35 @@ def promotion_report_payload(report: PromotionReport) -> dict[str, object]:
         "promoted": analysis.promoted,
         "artifacts": list(report.artifact_names),
     }
+    if report.candidate_provenance is not None:
+        payload["candidate_provenance"] = _frozen_candidate_provenance_payload(
+            report.candidate_provenance
+        )
+    return payload
 
 
 def _bot_identity_payload(bot: BotSpec) -> dict[str, object]:
     return {"name": bot.name, "bot_id": bot.bot_id}
+
+
+def _frozen_candidate_provenance_payload(
+    provenance: FrozenCandidateProvenance,
+) -> dict[str, object]:
+    return {
+        "kind": "frozen_heuristic_candidate",
+        "candidate_name": provenance.candidate_name,
+        "candidate_bot_id": provenance.candidate_bot_id,
+        "predecessor_name": provenance.predecessor_name,
+        "development_corpus_name": provenance.development_corpus_name,
+        "development_corpus_digest": provenance.development_corpus_digest,
+        "search_name": provenance.search_name,
+        "repository_commit": provenance.repository_commit,
+        "freeze_digest": provenance.freeze_digest,
+        "profile_digest": provenance.profile_digest,
+        "manifest_digest": provenance.manifest_digest,
+        "search_report_digest": provenance.search_report_digest,
+        "candidate_evaluations_digest": provenance.candidate_evaluations_digest,
+    }
 
 
 def _corpus_report_payload(corpus: PromotionCorpus) -> dict[str, object]:

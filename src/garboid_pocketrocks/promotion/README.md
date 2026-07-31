@@ -24,11 +24,24 @@ uv run --extra neural garboid-promote \
   --output-dir promotion-results/neural-comparison
 ```
 
-Candidate and incumbent are registered bot names. The committed corpus files
-cover charts A through E, three through five players, every focal seat, and
-fixed opponent mixtures. Development and held-out seeds must not overlap.
-Use `--overwrite` only when intentionally replacing the three known files in
-an existing output directory.
+The candidate may be either a released registered bot name or the exact
+identity of a candidate in the committed frozen-candidate catalog. The
+incumbent and every corpus opponent must still be released registered bots.
+File paths, “latest” aliases, and other names are not accepted as frozen
+candidates.
+
+A frozen candidate also carries its development evidence forward. Before the
+final exam starts, the command checks the candidate itself and every
+provenance field against the committed catalog record. It also checks that the
+declared predecessor is the invoked incumbent, that the development-corpus
+name and digest match, and that recomputing the digest from the loaded recipe
+and cases gives the same result. A mismatch exits with code `2` instead of
+loading or running the held-out games.
+
+The committed corpus files cover charts A through E, three through five
+players, every focal seat, and fixed opponent mixtures. Development and
+held-out seeds must not overlap. Use `--overwrite` only when intentionally
+replacing the three known files in an existing output directory.
 
 The process exits with:
 
@@ -48,7 +61,11 @@ Every attempted run that reaches reporting writes three files:
   source commit; all bot names and IDs; execution settings; corpus names,
   digests, and seeds; requested and completed coverage; rating difference;
   uncertainty interval; bootstrap progress; faults; failure reasons; artifact
-  names; and the final `promoted` value.
+  names; and the final `promoted` value. For a frozen heuristic candidate it
+  also records the exact candidate name and bot ID; search name and source
+  commit; frozen file, profile, search manifest, search report, and
+  candidate-evaluation digests; and the predecessor and development-corpus
+  name-and-digest binding.
 - `paired-games.jsonl` contains one canonical summary for each executed game.
   For pair `n`, game index `2n` is the candidate game and `2n+1` is its
   incumbent twin. Failed evidence may have gaps where a game did not finish.
@@ -91,7 +108,8 @@ input code identifies the problem: `duplicate_json_key`, `malformed_json`,
 `invalid_corpus_name`, `invalid_purpose`, `invalid_root_seed`,
 `invalid_repetitions`, `unsupported_chart`, `unsupported_player_count`,
 `insufficient_opponents`, `unknown_opponent`, `duplicate_opponent`, or
-`duplicate_engine_seed`. Unknown command-line bot names, invalid numeric
+`duplicate_engine_seed`. Unknown command-line bot names, invalid frozen
+provenance, a predecessor or development-corpus mismatch, invalid numeric
 options, unavailable Git metadata, and filesystem failures also exit `2` with
 a direct message.
 

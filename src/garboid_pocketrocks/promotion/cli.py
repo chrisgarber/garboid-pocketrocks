@@ -10,6 +10,13 @@ from pathlib import Path
 from typing import NoReturn
 
 from garboid_pocketrocks.bots import BOT_SPECS_BY_NAME, BotSpec
+from garboid_pocketrocks.promotion.candidates import (
+    load_frozen_candidate_catalog as load_frozen_candidate_catalog,
+)
+from garboid_pocketrocks.promotion.candidates import (
+    resolve_promotion_candidate,
+    validate_promotion_candidate,
+)
 from garboid_pocketrocks.promotion.corpus import (
     PromotionCorpusError,
     load_promotion_corpus,
@@ -54,7 +61,10 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--candidate",
         required=True,
-        help="registered candidate bot that may replace the incumbent",
+        help=(
+            "registered candidate bot, or exact frozen candidate name, "
+            "that may replace the incumbent"
+        ),
     )
     parser.add_argument(
         "--incumbent",
@@ -119,11 +129,25 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         args = parser.parse_args(argv)
         report_path = args.output_dir / "promotion-report.json"
-        candidate = _registered_bot(args.candidate)
+        frozen_candidate_catalog = (
+            {} if args.candidate in _BOT_REGISTRY else load_frozen_candidate_catalog()
+        )
+        resolved_candidate = resolve_promotion_candidate(
+            args.candidate,
+            registry=_BOT_REGISTRY,
+            frozen_candidates=frozen_candidate_catalog,
+        )
+        candidate = resolved_candidate.bot_spec
         incumbent = _registered_bot(args.incumbent)
         _require_distinct_compared_bots(candidate, incumbent)
         development = load_promotion_corpus(
             args.development_corpus,
+            registry=_BOT_REGISTRY,
+        )
+        validate_promotion_candidate(
+            resolved_candidate,
+            incumbent=incumbent,
+            development=development,
             registry=_BOT_REGISTRY,
         )
         held_out = load_promotion_corpus(
@@ -139,6 +163,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 bootstrap_samples=args.bootstrap_samples,
                 bootstrap_seed=args.bootstrap_seed,
                 batch_size=args.batch_size,
+                candidate_provenance=resolved_candidate.frozen_provenance,
             ),
             registry=_BOT_REGISTRY,
             workers=args.workers,

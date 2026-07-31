@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import json
 import math
 import os
@@ -9,16 +10,24 @@ from typing import Any
 
 import pytest
 
+from garboid_pocketrocks.bots import BOT_SPECS_BY_NAME, BotSpec, RandomBot
+from garboid_pocketrocks.heuristics.frozen import FROZEN_CANDIDATES_BY_NAME
 from garboid_pocketrocks.promotion.analysis import (
     PromotionAnalysis,
     PromotionFailure,
     RatingDifferenceInterval,
+)
+from garboid_pocketrocks.promotion.candidates import (
+    PromotionCandidateError,
+    resolve_promotion_candidate,
 )
 from garboid_pocketrocks.promotion.corpus import (
     CorpusPurpose,
     PromotionCorpus,
     PromotionCorpusRecipe,
     corpus_snapshot_payload,
+    load_promotion_corpus,
+    recompute_promotion_corpus_digest,
 )
 from garboid_pocketrocks.promotion.reporting import (
     PromotionReport,
@@ -29,7 +38,15 @@ from garboid_pocketrocks.promotion.reporting import (
 )
 from garboid_pocketrocks.simulator.monte_carlo import GameSummary
 
-from .helpers import promotion_plan, result_for_plan
+from .helpers import (
+    EvilFactory,
+    EvilString,
+    FrozenCandidateFixture,
+    evil_provenance,
+    frozen_candidate_fixture,
+    promotion_plan,
+    result_for_plan,
+)
 
 _ARTIFACT_NAMES = (
     "promotion-report.json",
@@ -126,6 +143,58 @@ def _report_inputs() -> tuple[
     return report, summaries, development, held_out
 
 
+def _frozen_report_inputs() -> tuple[
+    PromotionReport,
+    tuple[GameSummary, ...],
+    PromotionCorpus,
+    PromotionCorpus,
+    dict[str, FrozenCandidateFixture],
+]:
+    report, summaries, development, held_out = _report_inputs()
+    report = replace(
+        report,
+        incumbent=BOT_SPECS_BY_NAME["balanced-v2"],
+        opponents=(
+            BOT_SPECS_BY_NAME["random"],
+            BOT_SPECS_BY_NAME["aggressive-v1"],
+        ),
+    )
+    held_out = replace(
+        held_out,
+        recipe=replace(
+            held_out.recipe,
+            opponent_names=tuple(opponent.name for opponent in report.opponents),
+        ),
+    )
+    report = replace(report, held_out=held_out)
+    development = replace(
+        development,
+        digest=recompute_promotion_corpus_digest(development),
+    )
+    frozen = frozen_candidate_fixture(
+        bot_spec=report.candidate,
+        predecessor_name=report.incumbent.name,
+        development=development,
+    )
+    catalog = {report.candidate.name: frozen}
+    resolved = resolve_promotion_candidate(
+        report.candidate.name,
+        registry={},
+        frozen_candidates=catalog,
+    )
+    return (
+        replace(
+            report,
+            development=development,
+            candidate_provenance=resolved.frozen_provenance,
+        ),
+        summaries,
+        development,
+        held_out,
+        catalog,
+    )
+
+
 def test_report_payload_has_complete_explicit_schema() -> None:
     report, _, development, held_out = _report_inputs()
 
@@ -214,6 +283,474 @@ def test_report_payload_has_complete_explicit_schema() -> None:
     encoded = json.dumps(payload, allow_nan=False, sort_keys=True)
     assert "brain_factory" not in encoded
     assert "build_brain" not in encoded
+
+
+def test_frozen_candidate_report_records_complete_search_provenance() -> None:
+    report, _, _, _, _ = _frozen_report_inputs()
+
+    payload = promotion_report_payload(report)
+
+    assert payload["candidate_provenance"] == {
+        "kind": "frozen_heuristic_candidate",
+        "candidate_name": report.candidate.name,
+        "candidate_bot_id": report.candidate.bot_id,
+        "predecessor_name": report.incumbent.name,
+        "development_corpus_name": report.development.recipe.name,
+        "development_corpus_digest": report.development.digest,
+        "search_name": "fixture-v3-search-v1",
+        "repository_commit": "1" * 40,
+        "freeze_digest": "a" * 64,
+        "profile_digest": "b" * 64,
+        "manifest_digest": "c" * 64,
+        "search_report_digest": "d" * 64,
+        "candidate_evaluations_digest": "e" * 64,
+    }
+
+
+def test_writer_does_not_accept_an_alternate_frozen_candidate_catalog() -> None:
+    fake_catalog = {"forged-candidate": object()}
+
+    with pytest.raises(TypeError, match="unexpected keyword"):
+        inspect.signature(write_promotion_artifacts).bind_partial(
+            frozen_candidates=fake_catalog,
+        )
+
+
+def test_writer_rejects_a_forged_frozen_identity_in_the_caller_registry(
+    tmp_path: Path,
+) -> None:
+    frozen = next(iter(FROZEN_CANDIDATES_BY_NAME.values()))
+    forged = BotSpec.for_simulation(frozen.bot_spec.name, RandomBot.build_brain)
+    report, summaries, development, held_out = _report_inputs()
+
+    with pytest.raises(PromotionCandidateError, match="provenance"):
+        write_promotion_artifacts(
+            tmp_path,
+            report=replace(report, candidate=forged),
+            game_summaries=summaries,
+            development=development,
+            held_out=held_out,
+            registry={forged.name: forged},
+        )
+
+    assert not tuple(tmp_path.iterdir())
+
+
+def test_writer_rejects_a_forged_predecessor_for_a_real_frozen_candidate(
+    tmp_path: Path,
+) -> None:
+    frozen = next(iter(FROZEN_CANDIDATES_BY_NAME.values()))
+    resolved = resolve_promotion_candidate(
+        frozen.bot_spec.name,
+        registry=BOT_SPECS_BY_NAME,
+        frozen_candidates=FROZEN_CANDIDATES_BY_NAME,
+    )
+    forged_predecessor = BotSpec.for_simulation(
+        frozen.predecessor_name,
+        RandomBot.build_brain,
+    )
+    report, summaries, development, held_out = _report_inputs()
+
+    with pytest.raises(PromotionCandidateError, match="exact canonical predecessor"):
+        write_promotion_artifacts(
+            tmp_path,
+            report=replace(
+                report,
+                candidate=frozen.bot_spec,
+                incumbent=forged_predecessor,
+                candidate_provenance=resolved.frozen_provenance,
+            ),
+            game_summaries=summaries,
+            development=development,
+            held_out=held_out,
+            registry={forged_predecessor.name: forged_predecessor},
+        )
+
+    assert not tuple(tmp_path.iterdir())
+
+
+def test_writer_rejects_a_different_equal_frozen_bot_spec(
+    tmp_path: Path,
+) -> None:
+    frozen = next(iter(FROZEN_CANDIDATES_BY_NAME.values()))
+    resolved = resolve_promotion_candidate(
+        frozen.bot_spec.name,
+        registry=BOT_SPECS_BY_NAME,
+        frozen_candidates=FROZEN_CANDIDATES_BY_NAME,
+    )
+    forged = replace(frozen.bot_spec, brain_factory=EvilFactory())
+    development = load_promotion_corpus(
+        Path("configs/promotion/development-v1.json"),
+        registry=BOT_SPECS_BY_NAME,
+    )
+    report, summaries, _, held_out = _report_inputs()
+    held_out = replace(
+        held_out,
+        recipe=replace(
+            held_out.recipe,
+            opponent_names=("random", "aggressive-v1"),
+        ),
+    )
+    report = replace(
+        report,
+        candidate=forged,
+        incumbent=BOT_SPECS_BY_NAME[frozen.predecessor_name],
+        opponents=(
+            BOT_SPECS_BY_NAME["random"],
+            BOT_SPECS_BY_NAME["aggressive-v1"],
+        ),
+        development=development,
+        held_out=held_out,
+        candidate_provenance=resolved.frozen_provenance,
+    )
+    assert forged == frozen.bot_spec
+
+    with pytest.raises(PromotionCandidateError, match="trusted frozen candidate record"):
+        write_promotion_artifacts(
+            tmp_path,
+            report=report,
+            game_summaries=summaries,
+            development=development,
+            held_out=held_out,
+            registry=BOT_SPECS_BY_NAME,
+        )
+
+    assert not tuple(tmp_path.iterdir())
+
+
+@pytest.mark.parametrize(
+    ("field_name", "forged_value"),
+    (
+        ("search_name", "forged-search-name"),
+        ("profile_digest", "f" * 64),
+    ),
+)
+def test_writer_rejects_lying_provenance_string_subclasses(
+    tmp_path: Path,
+    field_name: str,
+    forged_value: str,
+) -> None:
+    frozen = next(iter(FROZEN_CANDIDATES_BY_NAME.values()))
+    resolved = resolve_promotion_candidate(
+        frozen.bot_spec.name,
+        registry=BOT_SPECS_BY_NAME,
+        frozen_candidates=FROZEN_CANDIDATES_BY_NAME,
+    )
+    assert resolved.frozen_provenance is not None
+    forged_provenance = replace(
+        resolved.frozen_provenance,
+        **{field_name: EvilString(forged_value)},
+    )
+    development = load_promotion_corpus(
+        Path("configs/promotion/development-v1.json"),
+        registry=BOT_SPECS_BY_NAME,
+    )
+    report, summaries, _, held_out = _report_inputs()
+    held_out = replace(
+        held_out,
+        recipe=replace(
+            held_out.recipe,
+            opponent_names=("random", "aggressive-v1"),
+        ),
+    )
+    report = replace(
+        report,
+        candidate=frozen.bot_spec,
+        incumbent=BOT_SPECS_BY_NAME[frozen.predecessor_name],
+        opponents=(
+            BOT_SPECS_BY_NAME["random"],
+            BOT_SPECS_BY_NAME["aggressive-v1"],
+        ),
+        development=development,
+        held_out=held_out,
+        candidate_provenance=forged_provenance,
+    )
+
+    with pytest.raises(PromotionCandidateError, match="built-in strings"):
+        write_promotion_artifacts(
+            tmp_path,
+            report=report,
+            game_summaries=summaries,
+            development=development,
+            held_out=held_out,
+            registry=BOT_SPECS_BY_NAME,
+        )
+
+    assert not tuple(tmp_path.iterdir())
+
+
+def test_writer_rejects_a_lying_provenance_subclass(
+    tmp_path: Path,
+) -> None:
+    frozen = next(iter(FROZEN_CANDIDATES_BY_NAME.values()))
+    resolved = resolve_promotion_candidate(
+        frozen.bot_spec.name,
+        registry=BOT_SPECS_BY_NAME,
+        frozen_candidates=FROZEN_CANDIDATES_BY_NAME,
+    )
+    assert resolved.frozen_provenance is not None
+    forged_provenance = evil_provenance(resolved.frozen_provenance)
+    development = load_promotion_corpus(
+        Path("configs/promotion/development-v1.json"),
+        registry=BOT_SPECS_BY_NAME,
+    )
+    report, summaries, _, held_out = _report_inputs()
+    held_out = replace(
+        held_out,
+        recipe=replace(
+            held_out.recipe,
+            opponent_names=("random", "aggressive-v1"),
+        ),
+    )
+    report = replace(
+        report,
+        candidate=frozen.bot_spec,
+        incumbent=BOT_SPECS_BY_NAME[frozen.predecessor_name],
+        opponents=(
+            BOT_SPECS_BY_NAME["random"],
+            BOT_SPECS_BY_NAME["aggressive-v1"],
+        ),
+        development=development,
+        held_out=held_out,
+        candidate_provenance=forged_provenance,
+    )
+
+    with pytest.raises(PromotionCandidateError, match="exact provenance type"):
+        write_promotion_artifacts(
+            tmp_path,
+            report=report,
+            game_summaries=summaries,
+            development=development,
+            held_out=held_out,
+            registry=BOT_SPECS_BY_NAME,
+        )
+
+    assert not tuple(tmp_path.iterdir())
+
+
+def test_frozen_writer_rejects_a_forged_canonical_name_opponent(
+    tmp_path: Path,
+) -> None:
+    frozen = next(iter(FROZEN_CANDIDATES_BY_NAME.values()))
+    resolved = resolve_promotion_candidate(
+        frozen.bot_spec.name,
+        registry=BOT_SPECS_BY_NAME,
+        frozen_candidates=FROZEN_CANDIDATES_BY_NAME,
+    )
+    development = load_promotion_corpus(
+        Path("configs/promotion/development-v1.json"),
+        registry=BOT_SPECS_BY_NAME,
+    )
+    forged_opponent = BotSpec.for_simulation("random", RandomBot.build_brain)
+    report, summaries, _, held_out = _report_inputs()
+    held_out = replace(
+        held_out,
+        recipe=replace(
+            held_out.recipe,
+            opponent_names=("random", "aggressive-v1"),
+        ),
+    )
+    report = replace(
+        report,
+        candidate=frozen.bot_spec,
+        incumbent=BOT_SPECS_BY_NAME[frozen.predecessor_name],
+        opponents=(forged_opponent, BOT_SPECS_BY_NAME["aggressive-v1"]),
+        development=development,
+        held_out=held_out,
+        candidate_provenance=resolved.frozen_provenance,
+    )
+
+    with pytest.raises(
+        PromotionCandidateError,
+        match="exact canonical released opponent",
+    ):
+        write_promotion_artifacts(
+            tmp_path,
+            report=report,
+            game_summaries=summaries,
+            development=development,
+            held_out=held_out,
+            registry={forged_opponent.name: forged_opponent},
+        )
+
+    assert not tuple(tmp_path.iterdir())
+
+
+@pytest.mark.parametrize("reported_opponents", ("empty", "subset", "extra"))
+def test_frozen_writer_requires_exactly_the_held_out_opponent_set(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    reported_opponents: str,
+) -> None:
+    report, summaries, development, held_out, catalog = _frozen_report_inputs()
+    required_names = tuple(opponent.name for opponent in report.opponents)
+    held_out = replace(
+        held_out,
+        recipe=replace(held_out.recipe, opponent_names=required_names),
+    )
+    if reported_opponents == "empty":
+        opponents: tuple[BotSpec, ...] = ()
+    elif reported_opponents == "subset":
+        opponents = report.opponents[:1]
+    else:
+        opponents = (*report.opponents, BOT_SPECS_BY_NAME["passive-v1"])
+    report = replace(
+        report,
+        opponents=opponents,
+        held_out=held_out,
+    )
+    monkeypatch.setattr(
+        "garboid_pocketrocks.promotion.candidates.load_frozen_candidate_catalog",
+        lambda: catalog,
+    )
+
+    with pytest.raises(
+        PromotionCandidateError,
+        match="exactly cover the held-out opponent names",
+    ):
+        write_promotion_artifacts(
+            tmp_path,
+            report=report,
+            game_summaries=summaries,
+            development=development,
+            held_out=held_out,
+            registry={},
+        )
+
+    assert not tuple(tmp_path.iterdir())
+
+
+@pytest.mark.parametrize(
+    "tampered_field",
+    (
+        "predecessor_name",
+        "development_corpus_digest",
+        "freeze_digest",
+    ),
+)
+def test_tampered_frozen_provenance_is_rejected_before_artifacts(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tampered_field: str,
+) -> None:
+    report, summaries, development, held_out, catalog = _frozen_report_inputs()
+    monkeypatch.setattr(
+        "garboid_pocketrocks.promotion.candidates.load_frozen_candidate_catalog",
+        lambda: catalog,
+    )
+    assert report.candidate_provenance is not None
+    if tampered_field == "predecessor_name":
+        provenance = replace(
+            report.candidate_provenance,
+            predecessor_name="other-incumbent",
+        )
+    elif tampered_field == "development_corpus_digest":
+        provenance = replace(
+            report.candidate_provenance,
+            development_corpus_digest="f" * 64,
+        )
+    else:
+        provenance = replace(
+            report.candidate_provenance,
+            freeze_digest="not-a-digest",
+        )
+
+    with pytest.raises(PromotionCandidateError, match="frozen candidate"):
+        write_promotion_artifacts(
+            tmp_path,
+            report=replace(report, candidate_provenance=provenance),
+            game_summaries=summaries,
+            development=development,
+            held_out=held_out,
+            registry={},
+        )
+
+    assert not tuple(tmp_path.iterdir())
+
+
+@pytest.mark.parametrize("tampering", ("candidate", "provenance"))
+def test_writer_rejects_identity_swap_and_fabricated_frozen_provenance(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tampering: str,
+) -> None:
+    report, summaries, development, held_out, catalog = _frozen_report_inputs()
+    monkeypatch.setattr(
+        "garboid_pocketrocks.promotion.candidates.load_frozen_candidate_catalog",
+        lambda: catalog,
+    )
+    assert report.candidate_provenance is not None
+    provenance = report.candidate_provenance
+    if tampering == "candidate":
+        report = replace(
+            report,
+            candidate=BotSpec.for_simulation(
+                report.candidate.name,
+                lambda seed: RandomBot.build_brain(seed),
+            ),
+        )
+    else:
+        report = replace(
+            report,
+            candidate_provenance=replace(
+                provenance,
+                manifest_digest="f" * 64,
+            ),
+        )
+
+    with pytest.raises(PromotionCandidateError, match="trusted frozen candidate"):
+        write_promotion_artifacts(
+            tmp_path,
+            report=report,
+            game_summaries=summaries,
+            development=development,
+            held_out=held_out,
+            registry={},
+        )
+
+    assert not tuple(tmp_path.iterdir())
+
+
+@pytest.mark.parametrize(
+    "corpus_tampering",
+    ("name", "stored_digest", "content"),
+)
+def test_writer_recomputes_and_rebinds_the_development_corpus_before_output(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    corpus_tampering: str,
+) -> None:
+    report, summaries, development, held_out, catalog = _frozen_report_inputs()
+    monkeypatch.setattr(
+        "garboid_pocketrocks.promotion.candidates.load_frozen_candidate_catalog",
+        lambda: catalog,
+    )
+    if corpus_tampering == "name":
+        development = replace(
+            development,
+            recipe=replace(development.recipe, name="other-development"),
+        )
+        development = replace(
+            development,
+            digest=recompute_promotion_corpus_digest(development),
+        )
+    elif corpus_tampering == "stored_digest":
+        development = replace(development, digest="f" * 64)
+    else:
+        development = replace(development, cases=())
+    report = replace(report, development=development)
+
+    with pytest.raises(PromotionCandidateError, match="development corpus"):
+        write_promotion_artifacts(
+            tmp_path,
+            report=report,
+            game_summaries=summaries,
+            development=development,
+            held_out=held_out,
+            registry={},
+        )
+
+    assert not tuple(tmp_path.iterdir())
 
 
 def test_writes_byte_identical_sorted_newline_terminated_artifacts(

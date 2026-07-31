@@ -1,0 +1,50 @@
+{
+  "candidates": [
+    {
+      "candidate_evaluations_sha256": "4140270b3fe1d744aef103b012ca85970aa561c3f36cb28d70e4e4aa39f9c7a5",
+      "development_corpus_digest": "17c016350dbe717641b8cd499b0908e3bc0faa811a3b4f5e574f8713a5bf2b3d",
+      "development_corpus_name": "development-v1",
+      "file": "aggressive-v3-candidate-g007-s008-c70e11540db9.json",
+      "identity": "aggressive-v3-candidate-g007-s008-c70e11540db9",
+      "manifest_digest": "627eb77836f8dceace745a8fb7f60573e2dad05aa47a423d902850c32a98f5e0",
+      "personality": "aggressive",
+      "predecessor_name": "aggressive-v2",
+      "profile_digest": "c70e11540db92d0c77ce5085670ff48105c91aede1ed52c4abb7874a64687b58",
+      "repository_commit": "5fb33de9734234ce0902bf79b85a75c3a5585c23",
+      "search_name": "aggressive-v3-search-v1",
+      "search_report_sha256": "01ca66301d633be7228c3bc535fa2d84b0c5ee3898b92f9d06e98c0fdf13b902",
+      "sha256": "218e9682d8d174125d4b9e7550fec9afda01ddb4433084143968b6d525d335da"
+    },
+    {
+      "candidate_evaluations_sha256": "fcf8985f40beddac274f5aa31523ec93b1cfecf0657047e30144ba97140b15e6",
+      "development_corpus_digest": "17c016350dbe717641b8cd499b0908e3bc0faa811a3b4f5e574f8713a5bf2b3d",
+      "development_corpus_name": "development-v1",
+      "file": "balanced-v3-candidate-g006-s010-e3971899626c.json",
+      "identity": "balanced-v3-candidate-g006-s010-e3971899626c",
+      "manifest_digest": "da9e2162eec9dd934dc80e59d9950b49c74a3a4cd4d72e6273134b502e705152",
+      "personality": "balanced",
+      "predecessor_name": "balanced-v2",
+      "profile_digest": "e3971899626ca3f651b2992d0cc429dc3ffd57fcdbb7cfac8249e6f0f9d9b03e",
+      "repository_commit": "5fb33de9734234ce0902bf79b85a75c3a5585c23",
+      "search_name": "balanced-v3-search-v1",
+      "search_report_sha256": "95fd24f688ed2bb18cd08d00483fbef2a42b2b66809afa26860f71deba2d3f87",
+      "sha256": "05bcd898e7fc79062585cb989b67cb2e5641eed6cc59b1a60255de84c8ee2988"
+    },
+    {
+      "candidate_evaluations_sha256": "582836d5beb184da26f8b5c27c9d96cea728a867017a9081e1bd137ce57f2b25",
+      "development_corpus_digest": "17c016350dbe717641b8cd499b0908e3bc0faa811a3b4f5e574f8713a5bf2b3d",
+      "development_corpus_name": "development-v1",
+      "file": "passive-v3-candidate-g006-s001-812832214cd5.json",
+      "identity": "passive-v3-candidate-g006-s001-812832214cd5",
+      "manifest_digest": "bf533a434a4208e7b018606c53488fcc3a09499b6da2fcb4b1d020346001a9c1",
+      "personality": "passive",
+      "predecessor_name": "passive-v2",
+      "profile_digest": "812832214cd5a16115104c50d33e94cba9929a3cc355b4779d6002b52b25e734",
+      "repository_commit": "5fb33de9734234ce0902bf79b85a75c3a5585c23",
+      "search_name": "passive-v3-search-v1",
+      "search_report_sha256": "46a1d7de4fed02520b384d119464ed7c0af239e1e8300fdb7485956ebc7203a2",
+      "sha256": "0617870c8641e9d25237354b5fe5a1df4f15637af0e46e8c11b1c13e7054adee"
+    }
+  ],
+  "schema_version": 1
+}
