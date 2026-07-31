@@ -7,7 +7,22 @@ from pocketrocks.sim.constants import VALUE_CHARTS
 from garboid_pocketrocks.knowledge import (
     canonical_knowledge,
     knowledge_for_context,
+    ruleset_name,
+    value_chart_from_ruleset_name,
 )
+
+
+def test_ruleset_names_are_canonical_sdk_boundaries() -> None:
+    assert ruleset_name("a") == "live-A"
+    assert ruleset_name("E", objectives_enabled=False) == "live-E-no-objectives"
+    assert value_chart_from_ruleset_name("live-A") == "A"
+    assert value_chart_from_ruleset_name("live-E-no-objectives") == "E"
+
+
+@pytest.mark.parametrize("name", ("A", "live-Z", "live-", ""))
+def test_unknown_ruleset_name_is_rejected(name: str) -> None:
+    with pytest.raises(ValueError, match="ruleset"):
+        value_chart_from_ruleset_name(name)
 
 
 @pytest.mark.parametrize("player_count", (3, 4, 5))

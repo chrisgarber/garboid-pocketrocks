@@ -8,8 +8,6 @@ import pytest
 torch = pytest.importorskip("torch")
 
 from garboid_pocketrocks.neural.config import (  # noqa: E402
-    stage1_encoder_config,
-    stage1_model_config,
     training_encoder_config,
     training_model_config,
 )
@@ -75,7 +73,7 @@ def _batch(batch_size: int) -> NeuralBatch:
 
 def _model() -> NeuralPolicy:
     torch.manual_seed(41)
-    return NeuralPolicy(stage1_encoder_config(), stage1_model_config())
+    return NeuralPolicy(training_encoder_config(), training_model_config("small"))
 
 
 def _assert_output_close(

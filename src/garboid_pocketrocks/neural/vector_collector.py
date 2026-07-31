@@ -25,10 +25,15 @@ from garboid_pocketrocks.adapters.public_history import (
     PublicInformationRevealed,
     PublicTurnOpened,
 )
-from garboid_pocketrocks.knowledge import canonical_knowledge
+from garboid_pocketrocks.knowledge import (
+    RulesetKnowledge,
+    canonical_knowledge,
+    value_chart_from_ruleset_name,
+)
 from garboid_pocketrocks.neural.collector import (
     CollectorMetrics,
     _freeze_policies,
+    _infer_policy_requests,
     _percentile,
     _restore_policy_modes,
     _validate_collection,
@@ -37,14 +42,12 @@ from garboid_pocketrocks.neural.config import NeuralEncoderConfig
 from garboid_pocketrocks.neural.encoding import (
     NeuralObservation,
     NeuralObservationEncoder,
-    batch_observations,
 )
 from garboid_pocketrocks.neural.model import NeuralPolicy
 from garboid_pocketrocks.neural.planning import (
     SelfPlayEpisodePlan,
     decision_seed,
 )
-from garboid_pocketrocks.neural.policy import evaluate_row_seeded_policy
 from garboid_pocketrocks.neural.rollout import (
     MultiSeatEpisode,
     RolloutBatch,
@@ -188,36 +191,14 @@ def _collect_engine_batch(
     engine = BatchSimEngine.start(
         player_count=player_count,
         seeds=tuple(plan.engine_seed for plan in plans),
-        value_charts=tuple(plan.ruleset_name.removeprefix("live-") for plan in plans),
+        value_charts=tuple(value_chart_from_ruleset_name(plan.ruleset_name) for plan in plans),
     )
     bounds = EnvironmentBounds(
         max_bid=encoder_config.max_bid,
         max_hand_size=encoder_config.max_hand_size,
     )
     encoder = NeuralObservationEncoder(encoder_config, bounds)
-    histories: list[list[PublicEvent]] = []
-    knowledge = []
-    for row, plan in enumerate(plans):
-        chart = plan.ruleset_name.removeprefix("live-")
-        game_knowledge = canonical_knowledge(
-            player_count,
-            value_chart=chart,
-        )
-        knowledge.append(game_knowledge)
-        histories.append(
-            [
-                PublicGameSetup(
-                    kind=PublicEventKind.GAME_SETUP,
-                    player_count=player_count,
-                    starting_cash=game_knowledge.starting_cash,
-                    value_chart=game_knowledge.value_chart,
-                    initial_tiebreak_seat=int(engine.tiebreak_seats[row]),
-                    objective_ids=tuple(
-                        int(value) for value in engine.objective_ids[row] if value > 0
-                    ),
-                )
-            ]
-        )
+    histories, knowledge = _initialize_public_histories(engine, plans)
 
     pending_rewards = [[RewardBreakdown() for _ in range(player_count)] for _ in plans]
     decision_counts = [[0 for _ in range(player_count)] for _ in plans]
@@ -236,91 +217,46 @@ def _collect_engine_batch(
             break
         resources = engine.upcoming.copy()
         legal = engine.legal_max_bids()
-        for row_value in active_rows:
-            row_index = int(row_value)
-            histories[row_index].append(
-                PublicTurnOpened(
-                    kind=PublicEventKind.TURN_OPENED,
-                    action_id=int(action_ids[row_index]),
-                    resource_ids=(
-                        int(resources[row_index, 0]),
-                        int(resources[row_index, 1]),
-                    ),
-                )
-            )
+        _append_turn_opened_events(
+            histories,
+            active_rows,
+            action_ids,
+            resources,
+        )
+        bid_requests, bid_contexts = _prepare_bid_requests(
+            engine,
+            plans,
+            active_rows,
+            action_ids,
+            resources,
+            legal,
+            encoder,
+            knowledge,
+            histories,
+            decision_counts,
+            opened,
+            pending_rewards,
+            completed,
+        )
 
-        bid_requests = []
-        bid_contexts = {}
-        for row_value in active_rows:
-            row = int(row_value)
-            plan = plans[row]
-            for seat in range(player_count):
-                _finalize_if_open(
-                    row,
-                    seat,
-                    plans=plans,
-                    opened=opened,
-                    pending_rewards=pending_rewards,
-                    completed=completed,
-                    terminated=False,
-                )
-                context = build_batch_context(
-                    engine,
-                    row=row,
-                    seat=seat,
-                    decision_kind="submitBid",
-                    action_id=int(action_ids[row]),
-                    resource_ids=(
-                        int(resources[row, 0]),
-                        int(resources[row, 1]),
-                    ),
-                    turn_index=int(engine.turn_indices[row]),
-                    legal_max_amount=int(legal[row, seat]),
-                )
-                request = _request(
-                    plan,
-                    seat,
-                    decision_counts[row][seat],
-                    encoder._encode_trusted(
-                        context,
-                        knowledge[row],
-                        tuple(histories[row]),
-                    ),
-                )
-                bid_requests.append(request)
-                bid_contexts[(row, seat)] = context
-
-        bid_responses, elapsed = _infer_requests(
+        bid_responses, elapsed = _infer_policy_requests(
             policies,
             tuple(bid_requests),
             device=device,
             max_inference_batch=max_inference_batch,
-            inference_sizes=inference_sizes,
+            inference_batch_sizes=inference_sizes,
         )
         inference_seconds += elapsed
         decisions += len(bid_responses)
-        response_by_key = {
-            (response.episode_index, response.seat): response for response in bid_responses
-        }
-        request_by_key = {
-            (request.episode_index, request.seat): request for request in bid_requests
-        }
-        bids = np.zeros(
-            (len(plans), player_count),
-            dtype=np.int16,
+        bids = _record_bid_responses(
+            plans,
+            active_rows,
+            bid_requests,
+            bid_contexts,
+            bid_responses,
+            opened,
+            decision_counts,
         )
-        for row_value in active_rows:
-            row = int(row_value)
-            plan = plans[row]
-            for seat in range(player_count):
-                response = response_by_key[(plan.episode_index, seat)]
-                opened[(row, seat)] = _OpenTransition(
-                    request=request_by_key[(plan.episode_index, seat)],
-                    context=bid_contexts[(row, seat)],
-                    response=response,
-                )
-                decision_counts[row][seat] += 1
-                bids[row, seat] = response.action
 
         objectives_before = engine.owned_objectives.copy()
         outcome = engine.resolve_bids(bids)
@@ -347,11 +283,135 @@ def _collect_engine_batch(
         previous_potential = current_potential
 
         choice_rows = np.flatnonzero(outcome.reveal_modes == 2)
-        reveal_requests = []
-        reveal_contexts = {}
-        for row_value in choice_rows:
-            row = int(row_value)
-            seat = int(outcome.winner_seats[row])
+        reveal_requests, reveal_contexts = _prepare_reveal_requests(
+            engine,
+            plans,
+            choice_rows,
+            outcome.winner_seats,
+            action_ids,
+            resources,
+            encoder,
+            knowledge,
+            histories,
+            decision_counts,
+            opened,
+            pending_rewards,
+            completed,
+        )
+
+        reveal_responses, elapsed = _infer_policy_requests(
+            policies,
+            tuple(reveal_requests),
+            device=device,
+            max_inference_batch=max_inference_batch,
+            inference_batch_sizes=inference_sizes,
+        )
+        inference_seconds += elapsed
+        decisions += len(reveal_responses)
+        reveal_indices = _record_reveal_responses(
+            plans,
+            choice_rows,
+            outcome.winner_seats,
+            outcome.reveal_modes,
+            reveal_requests,
+            reveal_contexts,
+            reveal_responses,
+            encoder_config.max_bid,
+            opened,
+            decision_counts,
+        )
+        _apply_and_record_reveals(
+            engine,
+            outcome.winner_seats,
+            outcome.reveal_modes,
+            reveal_indices,
+            histories,
+            pending_rewards,
+            reward_config,
+        )
+
+    episodes = _finalize_batch_episodes(
+        engine,
+        plans,
+        previous_potential,
+        pending_rewards,
+        opened,
+        completed,
+        reward_config,
+    )
+    return episodes, decisions, inference_seconds
+
+
+def _initialize_public_histories(
+    engine: BatchSimEngine,
+    plans: tuple[SelfPlayEpisodePlan, ...],
+) -> tuple[list[list[PublicEvent]], list[RulesetKnowledge]]:
+    histories: list[list[PublicEvent]] = []
+    knowledge: list[RulesetKnowledge] = []
+    for row, plan in enumerate(plans):
+        game_knowledge = canonical_knowledge(
+            engine.player_count,
+            value_chart=value_chart_from_ruleset_name(plan.ruleset_name),
+        )
+        knowledge.append(game_knowledge)
+        histories.append(
+            [
+                PublicGameSetup(
+                    kind=PublicEventKind.GAME_SETUP,
+                    player_count=engine.player_count,
+                    starting_cash=game_knowledge.starting_cash,
+                    value_chart=game_knowledge.value_chart,
+                    initial_tiebreak_seat=int(engine.tiebreak_seats[row]),
+                    objective_ids=tuple(
+                        int(value) for value in engine.objective_ids[row] if value > 0
+                    ),
+                )
+            ]
+        )
+    return histories, knowledge
+
+
+def _append_turn_opened_events(
+    histories: list[list[PublicEvent]],
+    active_rows: np.ndarray,
+    action_ids: np.ndarray,
+    resources: np.ndarray,
+) -> None:
+    for row_value in active_rows:
+        row = int(row_value)
+        histories[row].append(
+            PublicTurnOpened(
+                kind=PublicEventKind.TURN_OPENED,
+                action_id=int(action_ids[row]),
+                resource_ids=(
+                    int(resources[row, 0]),
+                    int(resources[row, 1]),
+                ),
+            )
+        )
+
+
+def _prepare_bid_requests(
+    engine: BatchSimEngine,
+    plans: tuple[SelfPlayEpisodePlan, ...],
+    active_rows: np.ndarray,
+    action_ids: np.ndarray,
+    resources: np.ndarray,
+    legal: np.ndarray,
+    encoder: NeuralObservationEncoder,
+    knowledge: Sequence[RulesetKnowledge],
+    histories: list[list[PublicEvent]],
+    decision_counts: list[list[int]],
+    opened: dict[tuple[int, int], _OpenTransition],
+    pending_rewards: list[list[RewardBreakdown]],
+    completed: list[list[list[RolloutTransition]]],
+) -> tuple[list[PendingPolicyRequest], dict[tuple[int, int], DecisionContext]]:
+    requests: list[PendingPolicyRequest] = []
+    contexts: dict[tuple[int, int], DecisionContext] = {}
+    for row_value in active_rows:
+        row = int(row_value)
+        plan = plans[row]
+        for seat in range(engine.player_count):
             _finalize_if_open(
                 row,
                 seat,
@@ -365,16 +425,103 @@ def _collect_engine_batch(
                 engine,
                 row=row,
                 seat=seat,
-                decision_kind="selectInfoToReveal",
+                decision_kind="submitBid",
                 action_id=int(action_ids[row]),
                 resource_ids=(
                     int(resources[row, 0]),
                     int(resources[row, 1]),
                 ),
-                turn_index=int(engine.turn_indices[row]) - 1,
-                legal_max_amount=None,
+                turn_index=int(engine.turn_indices[row]),
+                legal_max_amount=int(legal[row, seat]),
             )
-            request = _request(
+            requests.append(
+                _request(
+                    plan,
+                    seat,
+                    decision_counts[row][seat],
+                    encoder._encode_trusted(
+                        context,
+                        knowledge[row],
+                        tuple(histories[row]),
+                    ),
+                )
+            )
+            contexts[(row, seat)] = context
+    return requests, contexts
+
+
+def _record_bid_responses(
+    plans: tuple[SelfPlayEpisodePlan, ...],
+    active_rows: np.ndarray,
+    requests: Sequence[PendingPolicyRequest],
+    contexts: Mapping[tuple[int, int], DecisionContext],
+    responses: Sequence[PolicyResponse],
+    opened: dict[tuple[int, int], _OpenTransition],
+    decision_counts: list[list[int]],
+) -> np.ndarray:
+    response_by_key = {(response.episode_index, response.seat): response for response in responses}
+    request_by_key = {(request.episode_index, request.seat): request for request in requests}
+    player_count = plans[0].player_count
+    bids = np.zeros((len(plans), player_count), dtype=np.int16)
+    for row_value in active_rows:
+        row = int(row_value)
+        plan = plans[row]
+        for seat in range(player_count):
+            response = response_by_key[(plan.episode_index, seat)]
+            opened[(row, seat)] = _OpenTransition(
+                request=request_by_key[(plan.episode_index, seat)],
+                context=contexts[(row, seat)],
+                response=response,
+            )
+            decision_counts[row][seat] += 1
+            bids[row, seat] = response.action
+    return bids
+
+
+def _prepare_reveal_requests(
+    engine: BatchSimEngine,
+    plans: tuple[SelfPlayEpisodePlan, ...],
+    choice_rows: np.ndarray,
+    winner_seats: np.ndarray,
+    action_ids: np.ndarray,
+    resources: np.ndarray,
+    encoder: NeuralObservationEncoder,
+    knowledge: Sequence[RulesetKnowledge],
+    histories: list[list[PublicEvent]],
+    decision_counts: list[list[int]],
+    opened: dict[tuple[int, int], _OpenTransition],
+    pending_rewards: list[list[RewardBreakdown]],
+    completed: list[list[list[RolloutTransition]]],
+) -> tuple[list[PendingPolicyRequest], dict[tuple[int, int], DecisionContext]]:
+    requests: list[PendingPolicyRequest] = []
+    contexts: dict[tuple[int, int], DecisionContext] = {}
+    for row_value in choice_rows:
+        row = int(row_value)
+        seat = int(winner_seats[row])
+        _finalize_if_open(
+            row,
+            seat,
+            plans=plans,
+            opened=opened,
+            pending_rewards=pending_rewards,
+            completed=completed,
+            terminated=False,
+        )
+        context = build_batch_context(
+            engine,
+            row=row,
+            seat=seat,
+            decision_kind="selectInfoToReveal",
+            action_id=int(action_ids[row]),
+            resource_ids=(
+                int(resources[row, 0]),
+                int(resources[row, 1]),
+            ),
+            turn_index=int(engine.turn_indices[row]) - 1,
+            legal_max_amount=None,
+        )
+        requests.append(
+            _request(
                 plans[row],
                 seat,
                 decision_counts[row][seat],
@@ -384,71 +531,92 @@ def _collect_engine_batch(
                     tuple(histories[row]),
                 ),
             )
-            reveal_requests.append(request)
-            reveal_contexts[(row, seat)] = context
-
-        reveal_responses, elapsed = _infer_requests(
-            policies,
-            tuple(reveal_requests),
-            device=device,
-            max_inference_batch=max_inference_batch,
-            inference_sizes=inference_sizes,
         )
-        inference_seconds += elapsed
-        decisions += len(reveal_responses)
-        reveal_by_key = {
-            (response.episode_index, response.seat): response for response in reveal_responses
-        }
-        reveal_request_by_key = {
-            (request.episode_index, request.seat): request for request in reveal_requests
-        }
-        reveal_indices = np.full(len(plans), -1, dtype=np.int16)
-        reveal_indices[outcome.reveal_modes == 1] = 0
-        for row_value in choice_rows:
-            row = int(row_value)
-            seat = int(outcome.winner_seats[row])
-            response = reveal_by_key[(plans[row].episode_index, seat)]
-            opened[(row, seat)] = _OpenTransition(
-                request=reveal_request_by_key[(plans[row].episode_index, seat)],
-                context=reveal_contexts[(row, seat)],
-                response=response,
-            )
-            decision_counts[row][seat] += 1
-            reveal_indices[row] = (
-                0 if response.action == 0 else response.action - encoder_config.max_bid - 1
-            )
+        contexts[(row, seat)] = context
+    return requests, contexts
 
-        reveal_rows = np.flatnonzero(outcome.reveal_modes > 0)
-        revealed: list[tuple[int, int, int]] = []
-        for row_value in reveal_rows:
-            row = int(row_value)
-            seat = int(outcome.winner_seats[row])
-            index = int(reveal_indices[row])
-            revealed.append(
-                (
-                    row,
-                    seat,
-                    int(engine.hand_cards[row, seat, index]),
-                )
-            )
-        engine.apply_reveals(reveal_indices)
-        information_bonus = dict(reward_config.event_bonuses).get(
-            "information_revealed",
-            0.0,
+
+def _record_reveal_responses(
+    plans: tuple[SelfPlayEpisodePlan, ...],
+    choice_rows: np.ndarray,
+    winner_seats: np.ndarray,
+    reveal_modes: np.ndarray,
+    requests: Sequence[PendingPolicyRequest],
+    contexts: Mapping[tuple[int, int], DecisionContext],
+    responses: Sequence[PolicyResponse],
+    max_bid: int,
+    opened: dict[tuple[int, int], _OpenTransition],
+    decision_counts: list[list[int]],
+) -> np.ndarray:
+    response_by_key = {(response.episode_index, response.seat): response for response in responses}
+    request_by_key = {(request.episode_index, request.seat): request for request in requests}
+    reveal_indices = np.full(len(plans), -1, dtype=np.int16)
+    reveal_indices[reveal_modes == 1] = 0
+    for row_value in choice_rows:
+        row = int(row_value)
+        seat = int(winner_seats[row])
+        response = response_by_key[(plans[row].episode_index, seat)]
+        opened[(row, seat)] = _OpenTransition(
+            request=request_by_key[(plans[row].episode_index, seat)],
+            context=contexts[(row, seat)],
+            response=response,
         )
-        for row, seat, suit in revealed:
-            histories[row].append(
-                PublicInformationRevealed(
-                    kind=PublicEventKind.INFORMATION_REVEALED,
-                    seat=seat,
-                    suit_id=suit,
-                )
-            )
-            pending_rewards[row][seat] = _add_breakdowns(
-                pending_rewards[row][seat],
-                RewardBreakdown(shaping=information_bonus),
-            )
+        decision_counts[row][seat] += 1
+        reveal_indices[row] = 0 if response.action == 0 else response.action - max_bid - 1
+    return reveal_indices
 
+
+def _apply_and_record_reveals(
+    engine: BatchSimEngine,
+    winner_seats: np.ndarray,
+    reveal_modes: np.ndarray,
+    reveal_indices: np.ndarray,
+    histories: list[list[PublicEvent]],
+    pending_rewards: list[list[RewardBreakdown]],
+    reward_config: RewardConfig,
+) -> None:
+    revealed = tuple(
+        (
+            int(row_value),
+            int(winner_seats[int(row_value)]),
+            int(
+                engine.hand_cards[
+                    int(row_value),
+                    int(winner_seats[int(row_value)]),
+                    int(reveal_indices[int(row_value)]),
+                ]
+            ),
+        )
+        for row_value in np.flatnonzero(reveal_modes > 0)
+    )
+    engine.apply_reveals(reveal_indices)
+    information_bonus = dict(reward_config.event_bonuses).get(
+        "information_revealed",
+        0.0,
+    )
+    for row, seat, suit in revealed:
+        histories[row].append(
+            PublicInformationRevealed(
+                kind=PublicEventKind.INFORMATION_REVEALED,
+                seat=seat,
+                suit_id=suit,
+            )
+        )
+        pending_rewards[row][seat] = _add_breakdowns(
+            pending_rewards[row][seat],
+            RewardBreakdown(shaping=information_bonus),
+        )
+
+
+def _finalize_batch_episodes(
+    engine: BatchSimEngine,
+    plans: tuple[SelfPlayEpisodePlan, ...],
+    previous_potential: np.ndarray,
+    pending_rewards: list[list[RewardBreakdown]],
+    opened: dict[tuple[int, int], _OpenTransition],
+    completed: list[list[list[RolloutTransition]]],
+    reward_config: RewardConfig,
+) -> tuple[MultiSeatEpisode, ...]:
     results = _results(engine)
     _apply_terminal_rewards(
         engine,
@@ -459,7 +627,7 @@ def _collect_engine_batch(
     )
     episodes: list[MultiSeatEpisode] = []
     for row, plan in enumerate(plans):
-        for seat in range(player_count):
+        for seat in range(engine.player_count):
             _finalize_if_open(
                 row,
                 seat,
@@ -479,12 +647,12 @@ def _collect_engine_batch(
                         trainable=plan.seat_policies[seat].trainable,
                         transitions=tuple(completed[row][seat]),
                     )
-                    for seat in range(player_count)
+                    for seat in range(engine.player_count)
                 ),
                 result=results[row],
             )
         )
-    return tuple(episodes), decisions, inference_seconds
+    return tuple(episodes)
 
 
 def _request(
@@ -503,60 +671,6 @@ def _request(
         sampling_seed=decision_seed(plan, seat, decision_index),
         observation=_immutable_observation(observation),
     )
-
-
-def _infer_requests(
-    policies: Mapping[str, NeuralPolicy],
-    requests: tuple[PendingPolicyRequest, ...],
-    *,
-    device: torch.device,
-    max_inference_batch: int,
-    inference_sizes: list[int],
-) -> tuple[tuple[PolicyResponse, ...], float]:
-    if not requests:
-        return (), 0.0
-    by_policy: dict[str, list[PendingPolicyRequest]] = defaultdict(list)
-    for request in requests:
-        by_policy[request.policy_identity].append(request)
-    responses: list[PolicyResponse] = []
-    elapsed = 0.0
-    for identity in sorted(by_policy):
-        ordered = sorted(
-            by_policy[identity],
-            key=lambda request: (
-                request.episode_index,
-                request.seat,
-                request.decision_index,
-            ),
-        )
-        for offset in range(0, len(ordered), max_inference_batch):
-            chunk = ordered[offset : offset + max_inference_batch]
-            started = time.perf_counter()
-            batch = batch_observations(
-                tuple(request.observation for request in chunk),
-                device,
-            )
-            with torch.no_grad():
-                output = policies[identity](batch)
-                selection = evaluate_row_seeded_policy(
-                    output,
-                    batch,
-                    row_seeds=tuple(request.sampling_seed for request in chunk),
-                )
-            elapsed += time.perf_counter() - started
-            inference_sizes.append(len(chunk))
-            for row, request in enumerate(chunk):
-                responses.append(
-                    PolicyResponse(
-                        episode_index=request.episode_index,
-                        seat=request.seat,
-                        decision_index=request.decision_index,
-                        action=int(selection.actions[row].item()),
-                        old_log_probability=float(selection.log_probability[row].item()),
-                        old_value=float(selection.value[row].item()),
-                    )
-                )
-    return tuple(responses), elapsed
 
 
 def _potential(engine: BatchSimEngine) -> np.ndarray:

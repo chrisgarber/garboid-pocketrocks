@@ -37,6 +37,18 @@ class BeliefState:
     normalized_horizon: float
 
 
+@dataclass(frozen=True, slots=True)
+class _PublicCardAccounting:
+    known_terminal_reveals: tuple[int, ...]
+    unseen_by_suit: tuple[int, ...]
+    known_future_by_suit: tuple[int, ...]
+    opponent_hidden_slots: int
+    unseen_population: int
+    unknown_future_biddable: int
+    future_biddable: int
+    total_biddable: int
+
+
 def _hypergeometric_probability(
     population: int,
     successes: int,
@@ -261,15 +273,11 @@ def _terminal_price_pmf(
     return tuple(probability / total_probability for probability in buckets)
 
 
-def build_belief(
+def _account_public_cards(
     context: DecisionContext,
     knowledge: RulesetKnowledge,
-) -> BeliefState:
-    """Build exact public-information resource beliefs for an SDK decision."""
-
-    _validate_knowledge(knowledge)
-    action = _validate_context(context, knowledge)
-
+    action: ActionId,
+) -> _PublicCardAccounting:
     revealed_by_suit = tuple(
         sum(row[index] for row in context.revealed_info_counts_by_seat)
         for index in range(_SUIT_COUNT)
@@ -324,58 +332,100 @@ def build_belief(
     if unknown_future_biddable + sum(known_future_by_suit) != future_biddable:
         raise HeuristicInputError("public card counts violate finite-population conservation")
 
-    if unseen_population:
-        expected_future_biddable_counts = tuple(
-            known_future + (unseen * unknown_future_biddable / unseen_population)
+    return _PublicCardAccounting(
+        known_terminal_reveals=known_terminal_reveals,
+        unseen_by_suit=unseen_by_suit,
+        known_future_by_suit=known_future_by_suit,
+        opponent_hidden_slots=opponent_hidden_slots,
+        unseen_population=unseen_population,
+        unknown_future_biddable=unknown_future_biddable,
+        future_biddable=future_biddable,
+        total_biddable=total_biddable,
+    )
+
+
+def _expected_future_biddable_counts(
+    accounting: _PublicCardAccounting,
+) -> tuple[float, ...]:
+    if accounting.unseen_population:
+        return tuple(
+            known_future
+            + (unseen * accounting.unknown_future_biddable / accounting.unseen_population)
             for known_future, unseen in zip(
-                known_future_by_suit,
-                unseen_by_suit,
+                accounting.known_future_by_suit,
+                accounting.unseen_by_suit,
                 strict=True,
             )
         )
-    else:
-        expected_future_biddable_counts = tuple(float(count) for count in known_future_by_suit)
+    return tuple(float(count) for count in accounting.known_future_by_suit)
 
+
+def _expected_terminal_price(
+    terminal_price_pmf: tuple[float, ...],
+    value_chart: tuple[int, ...],
+) -> float:
+    try:
+        expected_terminal_price = sum(
+            probability * price
+            for probability, price in zip(
+                terminal_price_pmf,
+                value_chart,
+                strict=True,
+            )
+        )
+    except OverflowError as error:
+        raise HeuristicInputError("expected terminal price is not finite") from error
+    if not math.isfinite(expected_terminal_price):
+        raise HeuristicInputError("expected terminal price is not finite")
+    return expected_terminal_price
+
+
+def _build_suit_beliefs(
+    accounting: _PublicCardAccounting,
+    value_chart: tuple[int, ...],
+) -> tuple[SuitBelief, ...]:
     suits: list[SuitBelief] = []
     for suit, known, unseen in zip(
         Suit,
-        known_terminal_reveals,
-        unseen_by_suit,
+        accounting.known_terminal_reveals,
+        accounting.unseen_by_suit,
         strict=True,
     ):
         terminal_price_pmf = _terminal_price_pmf(
             known_reveals=known,
-            unseen_population=unseen_population,
+            unseen_population=accounting.unseen_population,
             unseen_suit_count=unseen,
-            opponent_hidden_slots=opponent_hidden_slots,
+            opponent_hidden_slots=accounting.opponent_hidden_slots,
         )
-        try:
-            expected_terminal_price = sum(
-                probability * price
-                for probability, price in zip(
-                    terminal_price_pmf,
-                    context.value_chart,
-                    strict=True,
-                )
-            )
-        except OverflowError as error:
-            raise HeuristicInputError("expected terminal price is not finite") from error
-        if not math.isfinite(expected_terminal_price):
-            raise HeuristicInputError("expected terminal price is not finite")
         suits.append(
             SuitBelief(
                 suit=suit,
                 known_terminal_reveals=known,
                 unseen_suit_count=unseen,
-                unseen_population=unseen_population,
-                opponent_hidden_slots=opponent_hidden_slots,
+                unseen_population=accounting.unseen_population,
+                opponent_hidden_slots=accounting.opponent_hidden_slots,
                 terminal_price_pmf=terminal_price_pmf,
-                expected_terminal_price=expected_terminal_price,
+                expected_terminal_price=_expected_terminal_price(
+                    terminal_price_pmf,
+                    value_chart,
+                ),
             )
         )
+    return tuple(suits)
+
+
+def build_belief(
+    context: DecisionContext,
+    knowledge: RulesetKnowledge,
+) -> BeliefState:
+    """Build exact public-information resource beliefs for an SDK decision."""
+
+    _validate_knowledge(knowledge)
+    action = _validate_context(context, knowledge)
+    accounting = _account_public_cards(context, knowledge, action)
 
     return BeliefState(
-        suits=tuple(suits),
-        expected_future_biddable_counts=expected_future_biddable_counts,
-        normalized_horizon=future_biddable / total_biddable,
+        suits=_build_suit_beliefs(accounting, context.value_chart),
+        expected_future_biddable_counts=_expected_future_biddable_counts(accounting),
+        normalized_horizon=accounting.future_biddable / accounting.total_biddable,
     )

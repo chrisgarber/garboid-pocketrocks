@@ -195,25 +195,15 @@ def gameplay_metrics(rollout: RolloutBatch) -> tuple[GameplayMetricSlice, ...]:
     """Aggregate gameplay globally and by chart/player-count cell."""
 
     records: list[tuple[str, int, int, float, tuple[RolloutTransition, ...]]] = []
-    for stage1_episode in rollout.episodes:
-        records.append(
-            (
-                stage1_episode.transitions[0].metadata.ruleset_name,
-                stage1_episode.transitions[0].metadata.player_count,
-                stage1_episode.rank,
-                float(stage1_episode.final_money),
-                stage1_episode.transitions,
-            )
-        )
-    for multi_seat_episode in rollout.multi_seat_episodes:
-        scores = {score.seat: score for score in multi_seat_episode.result.scores}
-        for trajectory in multi_seat_episode.trajectories:
+    for episode in rollout.episodes:
+        scores = {score.seat: score for score in episode.result.scores}
+        for trajectory in episode.trajectories:
             if trajectory.trainable:
                 score = scores[trajectory.seat]
                 records.append(
                     (
-                        multi_seat_episode.plan.ruleset_name,
-                        multi_seat_episode.plan.player_count,
+                        episode.plan.ruleset_name,
+                        episode.plan.player_count,
                         score.rank,
                         float(score.final_money),
                         trajectory.transitions,

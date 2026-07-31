@@ -10,12 +10,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from garboid_pocketrocks.neural.run_config import TrainingRunConfig
-from garboid_pocketrocks.neural.smoke import (
-    SmokeConfig,
-    run_self_play_smoke,
-    run_smoke,
-    smoke_run_config,
-)
+from garboid_pocketrocks.neural.smoke import run_smoke, smoke_run_config
 from garboid_pocketrocks.neural.trainer import (
     inspect_checkpoint,
     resume,
@@ -69,15 +64,6 @@ def main(argv: Sequence[str] | None = None) -> int:
                 for key, value in payload.items():
                     print(f"{key}: {value}")
             return 0
-        if arguments.command == "evaluate":
-            payload = inspect_checkpoint(arguments.checkpoint)
-            payload["evaluation_config"] = str(arguments.config)
-            arguments.output.write_text(
-                json.dumps(payload, indent=2, sort_keys=True) + "\n",
-                encoding="utf-8",
-            )
-            print(f"wrote checkpoint evaluation metadata: {arguments.output}")
-            return 0
         raise AssertionError("argparse returned an unknown command")
     except (OSError, RuntimeError, ValueError) as error:
         parser.print_usage(sys.stderr)
@@ -86,34 +72,20 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 
 def _smoke(arguments: argparse.Namespace) -> int:
-    if arguments.updates is not None or arguments.games_per_update is not None:
-        legacy_config = SmokeConfig(
-            root_seed=arguments.seed,
-            updates=arguments.updates or 2,
-            games_per_update=arguments.games_per_update or 16,
-            device=arguments.device or "cpu",
-        )
-        legacy_result = run_smoke(legacy_config, arguments.output_dir)
-        games = legacy_config.updates * legacy_config.games_per_update
-        print(
-            f"completed {legacy_config.updates} legacy updates and {games} games; "
-            f"checkpoint: {legacy_result.output_dir / 'checkpoint'}"
-        )
-        return 0
-    self_play_config = smoke_run_config()
-    workers = self_play_config.parallel.workers if arguments.workers is None else arguments.workers
+    config = smoke_run_config()
+    workers = config.parallel.workers if arguments.workers is None else arguments.workers
     resolved = replace(
-        self_play_config,
+        config,
         root_seed=arguments.seed,
-        device=arguments.device or self_play_config.device,
-        games_per_cell=arguments.games_per_cell or self_play_config.games_per_cell,
-        parallel=replace(self_play_config.parallel, workers=workers),
+        device=arguments.device or config.device,
+        games_per_cell=arguments.games_per_cell or config.games_per_cell,
+        parallel=replace(config.parallel, workers=workers),
     )
-    self_play_result = run_self_play_smoke(resolved, arguments.output_dir)
+    result = run_smoke(resolved, arguments.output_dir)
     print(
-        f"completed {self_play_result.completed_episodes} games "
-        f"({self_play_result.games_per_second:.2f} games/s, "
-        f"{self_play_result.decisions_per_second:.2f} decisions/s); "
+        f"completed {result.completed_episodes} games "
+        f"({result.games_per_second:.2f} games/s, "
+        f"{result.decisions_per_second:.2f} decisions/s); "
         f"checkpoint: {arguments.output_dir / 'checkpoints/latest'}"
     )
     return 0
@@ -128,21 +100,19 @@ def _parser() -> argparse.ArgumentParser:
     )
     smoke.add_argument("--output-dir", type=Path, required=True)
     smoke.add_argument("--seed", type=int, default=42, help="root seed (default: 42)")
-    smoke.add_argument("--games-per-cell", type=_positive_int)
+    smoke.add_argument(
+        "--games-per-cell",
+        type=_positive_int,
+        help="games per ruleset/player-count cell",
+    )
     smoke.add_argument(
         "--device",
         choices=("auto", "cpu", "cuda", "mps"),
     )
-    smoke.add_argument("--workers", type=_workers)
     smoke.add_argument(
-        "--updates",
-        type=_positive_int,
-        help="legacy Stage 1 updates (legacy default: 2)",
-    )
-    smoke.add_argument(
-        "--games-per-update",
-        type=_positive_int,
-        help="legacy Stage 1 games (legacy default: 16)",
+        "--workers",
+        type=_workers,
+        help="collector worker count or auto",
     )
 
     train_parser = commands.add_parser("train", help="start a durable run")
@@ -157,11 +127,6 @@ def _parser() -> argparse.ArgumentParser:
         "--max-additional-updates",
         type=_positive_int,
     )
-
-    evaluate = commands.add_parser("evaluate", help="write evaluation metadata")
-    evaluate.add_argument("--checkpoint", type=Path, required=True)
-    evaluate.add_argument("--config", type=Path, required=True)
-    evaluate.add_argument("--output", type=Path, required=True)
 
     inspect = commands.add_parser("inspect", help="inspect a training checkpoint")
     inspect.add_argument("--checkpoint", type=Path, required=True)
