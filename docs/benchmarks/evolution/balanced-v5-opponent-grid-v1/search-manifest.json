@@ -1,0 +1,52 @@
+{
+  "algorithm": {
+    "elite_count": 1,
+    "generation_count": 1,
+    "name": "fixed-grid-v1",
+    "population_size": 18
+  },
+  "development_corpus": {
+    "digest": "17c016350dbe717641b8cd499b0908e3bc0faa811a3b4f5e574f8713a5bf2b3d",
+    "name": "development-v1"
+  },
+  "digest": "b2b2729f71ec87946cb725e98b7ff8ff01bda69aaebb639941c319d5ac44e67f",
+  "name": "balanced-v5-opponent-grid-v1",
+  "opponent_model": {
+    "name": "public-opponent-bids-v1"
+  },
+  "parameter_grid": {
+    "history_weight_tuples": [
+      {
+        "fallback_weight": "1",
+        "partial_match_weight": "2",
+        "same_action_phase_weight": "3"
+      },
+      {
+        "fallback_weight": "1",
+        "partial_match_weight": "2",
+        "same_action_phase_weight": "4"
+      },
+      {
+        "fallback_weight": "1",
+        "partial_match_weight": "3",
+        "same_action_phase_weight": "6"
+      }
+    ],
+    "minimum_history_rounds": [
+      2,
+      3
+    ],
+    "prior_strength": [
+      "2",
+      "4",
+      "8"
+    ]
+  },
+  "personality": "balanced",
+  "predecessor_name": "balanced-v3",
+  "profile_binding": {
+    "digest": "e3971899626ca3f651b2992d0cc429dc3ffd57fcdbb7cfac8249e6f0f9d9b03e",
+    "name": "balanced-v3"
+  },
+  "schema_version": 3
+}
