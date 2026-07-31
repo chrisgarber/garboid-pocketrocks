@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 import garboid_pocketrocks.evolution.runner as runner_module
-from garboid_pocketrocks.bots import BOT_SPECS_BY_NAME
+from garboid_pocketrocks.bots import BOT_SPECS_BY_NAME, BotSpec, RandomBot
 from garboid_pocketrocks.evolution.candidates import (
     build_initial_population,
     build_mutation_population,
@@ -210,6 +210,72 @@ def test_rejects_a_corpus_that_does_not_match_the_manifest_binding() -> None:
         )
 
     assert raised.value.code == "development_corpus_mismatch"
+
+
+def test_rejects_a_forged_predecessor_before_simulation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manifest, corpus = _small_inputs(generations=1, population=2, elites=1, cases=1)
+    canonical = BOT_SPECS_BY_NAME[manifest.predecessor_name]
+    forged = BotSpec(
+        name=canonical.name,
+        bot_id=canonical.bot_id,
+        brain_factory=RandomBot.build_brain,
+    )
+    registry = {**BOT_SPECS_BY_NAME, forged.name: forged}
+    assert forged is not canonical
+    assert (forged.name, forged.bot_id) == (canonical.name, canonical.bot_id)
+
+    def forbidden(*args: object, **kwargs: object) -> None:
+        del args, kwargs
+        raise AssertionError("simulation started with a forged predecessor")
+
+    monkeypatch.setattr(MonteCarloRunner, "run_jobs", forbidden)
+
+    with pytest.raises(SearchRunError) as raised:
+        run_search(
+            manifest,
+            corpus,
+            registry=registry,
+            workers=1,
+            batch_size=1,
+        )
+
+    assert raised.value.code == "noncanonical_predecessor"
+
+
+def test_rejects_each_forged_development_opponent_before_simulation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manifest, corpus = _small_inputs(generations=1, population=2, elites=1, cases=1)
+
+    def forbidden(*args: object, **kwargs: object) -> None:
+        del args, kwargs
+        raise AssertionError("simulation started with a forged development opponent")
+
+    monkeypatch.setattr(MonteCarloRunner, "run_jobs", forbidden)
+
+    for opponent_name in corpus.recipe.opponent_names:
+        canonical = BOT_SPECS_BY_NAME[opponent_name]
+        forged = BotSpec(
+            name=canonical.name,
+            bot_id=canonical.bot_id,
+            brain_factory=RandomBot.build_brain,
+        )
+        registry = {**BOT_SPECS_BY_NAME, forged.name: forged}
+        assert forged is not canonical
+        assert (forged.name, forged.bot_id) == (canonical.name, canonical.bot_id)
+
+        with pytest.raises(SearchRunError) as raised:
+            run_search(
+                manifest,
+                corpus,
+                registry=registry,
+                workers=1,
+                batch_size=1,
+            )
+
+        assert raised.value.code == "noncanonical_opponent"
 
 
 @pytest.mark.parametrize("stale_source", ("manifest", "corpus"))

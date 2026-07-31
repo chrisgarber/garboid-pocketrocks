@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 
-from garboid_pocketrocks.bots import BotSpec
+from garboid_pocketrocks.bots import BOT_SPECS_BY_NAME, BotSpec
 from garboid_pocketrocks.evolution.candidates import (
     HeuristicCandidate,
     build_initial_population,
@@ -283,6 +283,21 @@ def _validate_invocation(
             "unknown_predecessor",
             f"Manifest predecessor {manifest.predecessor_name!r} is not registered.",
         )
+    canonical_incumbent = BOT_SPECS_BY_NAME.get(manifest.predecessor_name)
+    if canonical_incumbent is None or incumbent is not canonical_incumbent:
+        raise SearchRunError(
+            "noncanonical_predecessor",
+            f"Manifest predecessor {manifest.predecessor_name!r} must be the "
+            "exact canonical released registry spec.",
+        )
+    for opponent_name in development_corpus.recipe.opponent_names:
+        canonical_opponent = BOT_SPECS_BY_NAME.get(opponent_name)
+        if canonical_opponent is None or registry.get(opponent_name) is not canonical_opponent:
+            raise SearchRunError(
+                "noncanonical_opponent",
+                f"Development opponent {opponent_name!r} must be the "
+                "exact canonical released registry spec.",
+            )
     algorithm = manifest.algorithm
     if (
         algorithm.generation_count <= 0
