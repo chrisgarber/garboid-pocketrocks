@@ -102,6 +102,26 @@ def test_simulate_cli_runs_heuristic_bots_identically_across_worker_counts() -> 
     assert parallel["configuration"]["workers"] == 2
 
 
+def test_normal_fixed_candidate_is_reproducible_across_worker_counts() -> None:
+    arguments = (
+        "--bots",
+        "fixed-bid-tuned-normal-v1,fixed-bid-tuned-v1,fixed-objective-overlay-v2",
+        "--games",
+        "6",
+        "--players",
+        "3",
+        "--seed",
+        "2026073105",
+        "--format",
+        "json",
+    )
+
+    serial = json.loads(_run_cli(*arguments, "--workers", "1").stdout)
+    parallel = json.loads(_run_cli(*arguments, "--workers", "2").stdout)
+
+    assert serial["result"] == parallel["result"]
+
+
 def test_simulate_cli_json_includes_exact_raw_behavior_shape() -> None:
     completed = _run_cli(
         "--bots",
