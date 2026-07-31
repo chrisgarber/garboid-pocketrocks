@@ -90,6 +90,18 @@ uv run --extra neural garboid-tournament \
 See the [tournament runbook](src/garboid_pocketrocks/tournament/README.md) for
 scheduling, rating semantics, artifacts, and reproduction.
 
+Turn any tournament artifact directory into an interactive field and bot
+behavior report:
+
+```bash
+uv run garboid-visualize tournament-results
+```
+
+Use `--decision-reports` on the tournament command for objective, auction,
+loan, opponent, and cash-pressure insights. See the
+[visualizer runbook](src/garboid_pocketrocks/visualizer/README.md) for metric
+definitions and the visualization roadmap.
+
 Run the held-out final exam before promoting a candidate:
 
 ```bash

@@ -39,6 +39,7 @@ _DIAGNOSTIC_ARTIFACT_NAMES = (
     "summary.json",
     "report.html",
     "game-summaries.jsonl",
+    "game-details.jsonl",
     "decision-traces.jsonl",
     "decision-slices.csv",
 )
@@ -139,6 +140,7 @@ def test_decision_report_adds_sanitized_artifacts_summary_and_html_links(tmp_pat
     )
 
     assert artifacts.game_summaries_jsonl == tmp_path / "game-summaries.jsonl"
+    assert artifacts.game_details_jsonl == tmp_path / "game-details.jsonl"
     assert artifacts.decision_traces_jsonl == tmp_path / "decision-traces.jsonl"
     assert artifacts.decision_slices_csv == tmp_path / "decision-slices.csv"
     assert {path.name for path in tmp_path.iterdir()} == {
@@ -146,6 +148,7 @@ def test_decision_report_adds_sanitized_artifacts_summary_and_html_links(tmp_pat
         "summary.json",
         "report.html",
         "game-summaries.jsonl",
+        "game-details.jsonl",
         "decision-traces.jsonl",
         "decision-slices.csv",
     }
@@ -168,6 +171,7 @@ def test_decision_report_adds_sanitized_artifacts_summary_and_html_links(tmp_pat
         "summary_json": "summary.json",
         "report_html": "report.html",
         "game_summaries_jsonl": "game-summaries.jsonl",
+        "game_details_jsonl": "game-details.jsonl",
         "decision_traces_jsonl": "decision-traces.jsonl",
         "decision_slices_csv": "decision-slices.csv",
     }
@@ -176,6 +180,7 @@ def test_decision_report_adds_sanitized_artifacts_summary_and_html_links(tmp_pat
     assert "Seed withheld for decision-trace privacy" in html
     assert "seed 42" not in html
     assert '<a href="game-summaries.jsonl">Game summaries</a>' in html
+    assert '<a href="game-details.jsonl">Game details</a>' in html
     assert '<a href="decision-traces.jsonl">Decision traces</a>' in html
     assert '<a href="decision-slices.csv">Decision slices</a>' in html
 
@@ -263,7 +268,7 @@ def test_overwrite_preserves_unrelated_files_and_renders_na(tmp_path: Path) -> N
     assert "confidence intervals are unavailable" in html
 
 
-@pytest.mark.parametrize("failure_position", range(1, 7))
+@pytest.mark.parametrize("failure_position", range(1, 8))
 @pytest.mark.parametrize("existing_generation", (False, True))
 def test_replace_failure_restores_the_complete_known_generation(
     tmp_path: Path,

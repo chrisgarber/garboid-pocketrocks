@@ -12,6 +12,11 @@ from itertools import batched
 from pocketrocks.sim.constants import ACTION_WIRE_IDS, VALUE_CHARTS
 
 from garboid_pocketrocks.bots.base import BotSpec
+from garboid_pocketrocks.diagnostics.game_detail import (
+    PublicGameDetail,
+    PublicScoreDetail,
+    PublicTurnDetail,
+)
 from garboid_pocketrocks.diagnostics.trace import DecisionTrace
 from garboid_pocketrocks.knowledge import ruleset_name
 from garboid_pocketrocks.simulator.batch_match import run_batch_matches
@@ -217,6 +222,7 @@ class MonteCarloResult:
     bot_statistics: tuple[BotStatistics, ...]
     replays: tuple[MatchReplay, ...]
     decision_traces: tuple[DecisionTrace, ...] = ()
+    game_details: tuple[PublicGameDetail, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -522,6 +528,7 @@ def _aggregate(
     summaries: list[GameSummary] = []
     replays: list[MatchReplay] = []
     decision_traces: list[DecisionTrace] = []
+    game_details: list[PublicGameDetail] = []
     for completed in sorted(completed_games, key=lambda item: item.job.game_index):
         job = completed.job
         match = completed.match
@@ -561,6 +568,20 @@ def _aggregate(
             )
         if config.capture_decision_traces:
             decision_traces.extend(match.decision_traces)
+            if not match.decision_traces:
+                raise SimulationError("diagnostic game completed without decision traces")
+            game_details.append(
+                PublicGameDetail(
+                    game_index=job.game_index,
+                    chart=job.value_chart.upper(),
+                    player_count=job.player_count,
+                    bot_names=tuple(spec.name for spec in job.lineup),
+                    bot_ids=tuple(spec.bot_id for spec in job.lineup),
+                    value_chart=match.decision_traces[0].context.value_chart,
+                    turns=tuple(PublicTurnDetail.from_sdk(turn) for turn in match.turns),
+                    scores=tuple(PublicScoreDetail.from_sdk(row) for row in match.result.rows),
+                )
+            )
 
         _record_behavior(
             match.replay,
@@ -602,6 +623,7 @@ def _aggregate(
         bot_statistics=statistics_by_bot,
         replays=tuple(replays),
         decision_traces=tuple(decision_traces),
+        game_details=tuple(game_details),
     )
 
 

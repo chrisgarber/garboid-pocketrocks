@@ -91,6 +91,8 @@ Each successful run writes:
 With `--decision-reports`, the same generation also writes:
 
 - `game-summaries.jsonl`: public per-game outcomes and decision counts;
+- `game-details.jsonl`: public resolved turns, objective claims, auction prices,
+  resource bundles, and terminal score components;
 - `decision-traces.jsonl`: one public row per policy decision;
 - `decision-slices.csv`: filterable additive decision aggregates.
 
@@ -99,6 +101,15 @@ generations withhold the root seed from all published artifacts because it
 could be used to reconstruct hidden state; games are identified only by their
 opaque `game_index`. Without the flag, output and the original three artifacts
 remain unchanged.
+
+Build the two-engine interactive report from any completed output directory:
+
+```bash
+uv run garboid-visualize tournament-results
+```
+
+See the [visualizer runbook](../visualizer/README.md) for data availability,
+metric definitions, and chart ideas.
 
 Writes are atomic. A bootstrap failure still preserves primary ratings and
 reports the missing uncertainty explicitly.

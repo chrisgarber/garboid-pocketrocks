@@ -219,6 +219,7 @@ def test_cli_writes_and_prints_decision_reports_only_when_requested(
     assert repeated_diagnostic.returncode == 0, repeated_diagnostic.stderr
     diagnostic_names = (
         "game-summaries.jsonl",
+        "game-details.jsonl",
         "decision-traces.jsonl",
         "decision-slices.csv",
     )
