@@ -16,13 +16,17 @@ from garboid_pocketrocks.bots import (
     DEFAULT_TOURNAMENT_BOT_SPECS,
     HeuristicBotBrain,
 )
+from garboid_pocketrocks.bots.heuristic import PhaseAwareHeuristicBotBrain
 from garboid_pocketrocks.evolution.planning import plan_development_games
 from garboid_pocketrocks.heuristics.frozen import (
     FROZEN_CANDIDATES,
     FROZEN_CANDIDATES_BY_NAME,
+    FrozenCandidate,
     FrozenCandidateCatalogError,
+    FrozenPhaseAwareCandidate,
     load_frozen_candidates,
 )
+from garboid_pocketrocks.heuristics.phases import PHASE_SELECTOR_NAME
 from garboid_pocketrocks.promotion.corpus import load_promotion_corpus
 from garboid_pocketrocks.simulator.monte_carlo import MonteCarloRunner
 
@@ -64,6 +68,172 @@ EXPECTED_PROVENANCE = {
     },
 }
 DEVELOPMENT_DIGEST = "17c016350dbe717641b8cd499b0908e3bc0faa811a3b4f5e574f8713a5bf2b3d"
+V4_EXPERTS = {
+    "early": {
+        "liquidity_strength": "0.3",
+        "future_cash_weight": "1.4",
+        "objective_progress_weight": "0.2",
+        "bid_shading": "0.25",
+    },
+    "middle": {
+        "liquidity_strength": "0.5",
+        "future_cash_weight": "1.2",
+        "objective_progress_weight": "0.4",
+        "bid_shading": "0.35",
+    },
+    "late": {
+        "liquidity_strength": "0.7",
+        "future_cash_weight": "0.8",
+        "objective_progress_weight": "0.6",
+        "bid_shading": "0.45",
+    },
+}
+V4_PHASE_SELECTOR = {
+    "kind": PHASE_SELECTOR_NAME,
+    "early": "3*future>=2*total",
+    "middle": "3*future>=total",
+    "late": "otherwise",
+}
+V4_BOUNDARY_EVIDENCE = {
+    "report_path": "docs/benchmarks/2026-07-30-heuristic-v4-phase-boundaries.md",
+    "report_digest": "9961f26f32270dcebc98df443588e96cbde2f953858cd131c66a37aeecaa9b01",
+    "slices_path": (
+        "docs/benchmarks/tournaments/"
+        "2026-07-30-heuristic-v3-phase-boundaries-development/phase-boundary-slices.csv"
+    ),
+    "slices_digest": "4f8aa60edf31b28c746cb8004a4dd5468ee8ab1b26462550c914b2e3fa50d7ae",
+}
+V4_WINNER_DIAGNOSTICS = {
+    "winner-decision-slices.csv": "1" * 64,
+    "winner-diagnostics.json": "2" * 64,
+    "winner-diagnostics.md": "3" * 64,
+}
+
+
+def _phase_profile_digest() -> str:
+    payload = {
+        "experts": V4_EXPERTS,
+        "phase_selector": PHASE_SELECTOR_NAME,
+    }
+    encoded = (
+        json.dumps(payload, allow_nan=False, separators=(",", ":"), sort_keys=True) + "\n"
+    ).encode()
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _expert_profile_digest(coefficients: dict[str, str]) -> str:
+    encoded = (
+        json.dumps(coefficients, allow_nan=False, separators=(",", ":"), sort_keys=True) + "\n"
+    ).encode()
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _schema_v2_frozen_payload() -> dict[str, Any]:
+    profile_digest = _phase_profile_digest()
+    return {
+        "boundary_evidence": V4_BOUNDARY_EVIDENCE,
+        "development_corpus": {
+            "digest": DEVELOPMENT_DIGEST,
+            "name": "development-v1",
+        },
+        "development_scores": {
+            "final_money_delta": 17,
+            "normalized_finish_delta": 1.25,
+            "rating_delta": 9.5,
+        },
+        "experts": V4_EXPERTS,
+        "generation": 1,
+        "identity": f"aggressive-v4-candidate-g001-s002-{profile_digest[:12]}",
+        "parent_identity": "aggressive-v4-candidate-g000-s000-000000000000",
+        "personality": "aggressive",
+        "phase_selector": V4_PHASE_SELECTOR,
+        "predecessor_name": "aggressive-v3",
+        "profile_digest": profile_digest,
+        "repository_commit": "a" * 40,
+        "schema_version": 2,
+        "search": {
+            "manifest_digest": "b" * 64,
+            "name": "aggressive-v4-search-v2",
+        },
+        "slot": 2,
+        "source_evidence": {
+            "candidate_evaluations_sha256": "c" * 64,
+            "development_games_sha256": "d" * 64,
+            "search_report_sha256": "e" * 64,
+            "selection_log_sha256": "f" * 64,
+            "winner_diagnostics": V4_WINNER_DIAGNOSTICS,
+        },
+    }
+
+
+def _schema_v2_catalog_entry(
+    payload: dict[str, Any],
+    *,
+    candidate_bytes: bytes,
+) -> dict[str, Any]:
+    source_evidence = payload["source_evidence"]
+    boundary_evidence = payload["boundary_evidence"]
+    winner_diagnostics = source_evidence["winner_diagnostics"]
+    return {
+        "boundary_report_digest": boundary_evidence["report_digest"],
+        "boundary_slices_digest": boundary_evidence["slices_digest"],
+        "candidate_evaluations_sha256": source_evidence["candidate_evaluations_sha256"],
+        "development_corpus_digest": payload["development_corpus"]["digest"],
+        "development_corpus_name": payload["development_corpus"]["name"],
+        "development_games_sha256": source_evidence["development_games_sha256"],
+        "file": f"{payload['identity']}.json",
+        "identity": payload["identity"],
+        "manifest_digest": payload["search"]["manifest_digest"],
+        "personality": payload["personality"],
+        "predecessor_name": payload["predecessor_name"],
+        "profile_digest": payload["profile_digest"],
+        "repository_commit": payload["repository_commit"],
+        "search_name": payload["search"]["name"],
+        "search_report_sha256": source_evidence["search_report_sha256"],
+        "selection_log_sha256": source_evidence["selection_log_sha256"],
+        "sha256": hashlib.sha256(candidate_bytes).hexdigest(),
+        "winner_decision_slices_sha256": winner_diagnostics["winner-decision-slices.csv"],
+        "winner_diagnostics_json_sha256": winner_diagnostics["winner-diagnostics.json"],
+        "winner_diagnostics_markdown_sha256": winner_diagnostics["winner-diagnostics.md"],
+    }
+
+
+def _write_mixed_schema_catalog(
+    tmp_path: Path,
+    *,
+    payload_mutation: Any | None = None,
+    entry_mutation: Any | None = None,
+    mirror_mutated_payload_in_entry: bool = False,
+) -> Path:
+    source_index = json.loads((CATALOG_DIR / "index.json").read_text(encoding="utf-8"))
+    for entry in source_index["candidates"]:
+        source = CATALOG_DIR / entry["file"]
+        (tmp_path / entry["file"]).write_bytes(source.read_bytes())
+
+    payload = json.loads(json.dumps(_schema_v2_frozen_payload()))
+    if payload_mutation is not None:
+        payload_mutation(payload)
+    candidate_bytes = (
+        json.dumps(payload, allow_nan=False, indent=2, sort_keys=True) + "\n"
+    ).encode()
+    entry_payload = payload if mirror_mutated_payload_in_entry else _schema_v2_frozen_payload()
+    candidate_path = tmp_path / f"{entry_payload['identity']}.json"
+    candidate_path.write_bytes(candidate_bytes)
+
+    entry = _schema_v2_catalog_entry(
+        entry_payload,
+        candidate_bytes=candidate_bytes,
+    )
+    if entry_mutation is not None:
+        entry_mutation(entry)
+    source_index["candidates"].append(entry)
+    source_index["candidates"].sort(key=lambda item: item["identity"])
+    index_path = tmp_path / "index.json"
+    index_path.write_text(
+        json.dumps(source_index, allow_nan=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    return index_path
 
 
 def test_catalog_exposes_exact_frozen_records_and_provenance() -> None:
@@ -71,6 +241,7 @@ def test_catalog_exposes_exact_frozen_records_and_provenance() -> None:
     assert tuple(FROZEN_CANDIDATES_BY_NAME) == EXPECTED_IDENTITIES
 
     for candidate in FROZEN_CANDIDATES:
+        assert type(candidate) is FrozenCandidate
         expected = EXPECTED_PROVENANCE[candidate.identity]
         assert candidate.bot_spec.name == candidate.identity
         assert candidate.bot_spec.bot_id == candidate.identity
@@ -138,6 +309,412 @@ def test_frozen_specs_are_picklable_local_only_and_not_released() -> None:
         assert brain.valuator.profile == candidate.profile
 
 
+def test_mixed_catalog_loads_a_strict_local_only_phase_aware_candidate(
+    tmp_path: Path,
+) -> None:
+    candidates = load_frozen_candidates(_write_mixed_schema_catalog(tmp_path))
+    phase_candidate = next(
+        candidate for candidate in candidates if isinstance(candidate, FrozenPhaseAwareCandidate)
+    )
+
+    assert (
+        tuple(
+            candidate.identity
+            for candidate in candidates
+            if not isinstance(candidate, FrozenPhaseAwareCandidate)
+        )
+        == EXPECTED_IDENTITIES
+    )
+    assert phase_candidate.identity == _schema_v2_frozen_payload()["identity"]
+    assert phase_candidate.predecessor_name == "aggressive-v3"
+    assert phase_candidate.search_name == "aggressive-v4-search-v2"
+    assert phase_candidate.profile_digest == _phase_profile_digest()
+    assert phase_candidate.profile.phase_selector == PHASE_SELECTOR_NAME
+    assert dict(phase_candidate.phase_selector_rules) == V4_PHASE_SELECTOR
+    expert_digests = dict(phase_candidate.expert_digests)
+    assert expert_digests == {
+        phase: _expert_profile_digest(V4_EXPERTS[phase]) for phase in ("early", "middle", "late")
+    }
+    assert expert_digests["early"] != expert_digests["middle"]
+    assert expert_digests["middle"] != expert_digests["late"]
+    assert phase_candidate.profile.early.liquidity_strength == 0.3
+    assert phase_candidate.profile.middle.future_cash_weight == 1.2
+    assert phase_candidate.profile.late.bid_shading == 0.45
+    assert phase_candidate.boundary_report_digest == V4_BOUNDARY_EVIDENCE["report_digest"]
+    assert phase_candidate.boundary_slices_digest == V4_BOUNDARY_EVIDENCE["slices_digest"]
+    assert phase_candidate.selection_log_digest == "f" * 64
+    assert phase_candidate.development_games_digest == "d" * 64
+    assert dict(phase_candidate.winner_diagnostics_digests) == V4_WINNER_DIAGNOSTICS
+
+    spec = phase_candidate.bot_spec
+    assert spec.name == phase_candidate.identity
+    assert spec.bot_id == phase_candidate.identity
+    assert isinstance(spec.brain_factory, partial)
+    restored = pickle.loads(pickle.dumps(spec))
+    brain = restored.make_brain(seed=8675309)
+    assert isinstance(brain, PhaseAwareHeuristicBotBrain)
+    assert brain.profile == phase_candidate.profile
+
+    released_names = {item.name for item in BOT_SPECS}
+    default_names = {item.name for item in DEFAULT_TOURNAMENT_BOT_SPECS}
+    assert phase_candidate.identity not in BOT_SPECS_BY_NAME
+    assert phase_candidate.identity not in released_names
+    assert phase_candidate.identity not in default_names
+
+
+def _swap_early_and_middle_experts(payload: dict[str, Any]) -> None:
+    experts = payload["experts"]
+    experts["early"], experts["middle"] = experts["middle"], experts["early"]
+
+
+def _use_out_of_range_generation(payload: dict[str, Any]) -> None:
+    payload["generation"] = 12
+    payload["identity"] = payload["identity"].replace("-g001-", "-g012-")
+
+
+def _use_out_of_range_slot(payload: dict[str, Any]) -> None:
+    payload["slot"] = 16
+    payload["identity"] = payload["identity"].replace("-s002-", "-s016-")
+
+
+def _forge_identity_profile_prefix(payload: dict[str, Any]) -> None:
+    payload["identity"] = f"{payload['identity'][:-12]}000000000000"
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    (
+        (lambda payload: payload.update({"schema_version": 1}), "keys|schema"),
+        (lambda payload: payload.update({"schema_version": True}), "integer"),
+        (lambda payload: payload.update({"generation": True}), "integer"),
+        (lambda payload: payload.update({"personality": "balanced"}), "identity"),
+        (lambda payload: payload.update({"slot": 3}), "identity"),
+        (
+            lambda payload: payload["experts"]["early"].update({"liquidity_strength": True}),
+            "decimal",
+        ),
+        (
+            lambda payload: payload["experts"]["early"].update({"liquidity_strength": "0.30"}),
+            "canonical",
+        ),
+        (
+            lambda payload: payload["experts"]["early"].update({"liquidity_strength": "0.31"}),
+            "0.05",
+        ),
+        (
+            lambda payload: payload["experts"]["early"].update({"future_cash_weight": "2.05"}),
+            "0.05",
+        ),
+        (
+            lambda payload: payload["experts"].pop("middle"),
+            "expert|missing",
+        ),
+        (
+            lambda payload: payload["experts"]["late"].update({"unknown": "0"}),
+            "unknown",
+        ),
+        (_swap_early_and_middle_experts, "profile digest"),
+        (
+            lambda payload: payload["phase_selector"].update({"middle": "forged"}),
+            "selector",
+        ),
+        (
+            lambda payload: payload["phase_selector"].pop("early"),
+            "selector|missing",
+        ),
+        (
+            lambda payload: payload["phase_selector"].update({"unknown": "value"}),
+            "selector|unknown",
+        ),
+        (
+            lambda payload: payload["phase_selector"].update(
+                {
+                    "early": V4_PHASE_SELECTOR["late"],
+                    "late": V4_PHASE_SELECTOR["early"],
+                }
+            ),
+            "selector",
+        ),
+        (
+            lambda payload: payload["boundary_evidence"].update({"report_digest": "0" * 64}),
+            "boundary",
+        ),
+        (
+            lambda payload: payload["boundary_evidence"].update(
+                {"report_path": "docs/benchmarks/forged.md"}
+            ),
+            "boundary",
+        ),
+        (
+            lambda payload: payload["boundary_evidence"].update(
+                {"slices_path": "docs/benchmarks/forged.csv"}
+            ),
+            "boundary",
+        ),
+        (
+            lambda payload: payload["boundary_evidence"].update({"slices_digest": "0" * 64}),
+            "boundary",
+        ),
+        (
+            lambda payload: payload.update({"predecessor_name": "balanced-v3"}),
+            "predecessor",
+        ),
+        (
+            lambda payload: payload["search"].update({"name": "aggressive-v3-search-v1"}),
+            "search",
+        ),
+        (
+            lambda payload: payload["search"].update({"name": "balanced-v4-search-v2"}),
+            "search",
+        ),
+        (
+            lambda payload: payload.update(
+                {"parent_identity": ("aggressive-v3-candidate-g000-s000-000000000000")}
+            ),
+            "parent",
+        ),
+        (
+            lambda payload: payload.update(
+                {"parent_identity": ("balanced-v4-candidate-g000-s000-000000000000")}
+            ),
+            "parent",
+        ),
+        (
+            lambda payload: payload.update(
+                {"parent_identity": ("aggressive-v4-candidate-g001-s000-000000000000")}
+            ),
+            "parent",
+        ),
+        (
+            lambda payload: payload.update(
+                {"parent_identity": ("aggressive-v4-candidate-g000-s999-000000000000")}
+            ),
+            "parent",
+        ),
+        (
+            lambda payload: payload["development_corpus"].update({"name": "held-out-v1"}),
+            "development",
+        ),
+        (
+            lambda payload: payload["development_corpus"].update({"digest": "0" * 64}),
+            "development",
+        ),
+        (
+            lambda payload: payload["source_evidence"].pop("candidate_evaluations_sha256"),
+            "source evidence|missing",
+        ),
+        (
+            lambda payload: payload["source_evidence"].update({"unknown": "value"}),
+            "source evidence|unknown",
+        ),
+        (
+            lambda payload: payload["source_evidence"].update({"search_report_sha256": True}),
+            "search report|digest",
+        ),
+        (
+            lambda payload: payload["source_evidence"].update(
+                {"candidate_evaluations_sha256": True}
+            ),
+            "candidate evaluations|digest",
+        ),
+        (
+            lambda payload: payload["source_evidence"].update({"selection_log_sha256": True}),
+            "selection log|digest",
+        ),
+        (
+            lambda payload: payload["source_evidence"].update({"development_games_sha256": True}),
+            "development games|digest",
+        ),
+        (
+            lambda payload: payload["source_evidence"]["winner_diagnostics"].pop(
+                "winner-decision-slices.csv"
+            ),
+            "winner diagnostics|missing",
+        ),
+        (
+            lambda payload: payload["source_evidence"]["winner_diagnostics"].pop(
+                "winner-diagnostics.json"
+            ),
+            "winner diagnostics|missing",
+        ),
+        (
+            lambda payload: payload["source_evidence"]["winner_diagnostics"].pop(
+                "winner-diagnostics.md"
+            ),
+            "winner diagnostics|missing",
+        ),
+        (
+            lambda payload: payload["source_evidence"]["winner_diagnostics"].update(
+                {"winner-decision-slices.csv": True}
+            ),
+            "winner diagnostics|digest",
+        ),
+        (
+            lambda payload: payload["source_evidence"]["winner_diagnostics"].update(
+                {"winner-diagnostics.json": True}
+            ),
+            "winner diagnostics|digest",
+        ),
+        (
+            lambda payload: payload["source_evidence"]["winner_diagnostics"].update(
+                {"winner-diagnostics.md": True}
+            ),
+            "winner diagnostics|digest",
+        ),
+        (
+            lambda payload: payload["development_scores"].update({"rating_delta": True}),
+            "finite",
+        ),
+        (
+            lambda payload: payload["development_scores"].update({"rating_delta": 0}),
+            "positive",
+        ),
+        (
+            lambda payload: payload["development_scores"].update({"final_money_delta": False}),
+            "integer",
+        ),
+    ),
+)
+def test_schema_v2_catalog_rejects_tampered_frozen_payload(
+    tmp_path: Path,
+    mutation: Any,
+    message: str,
+) -> None:
+    index_path = _write_mixed_schema_catalog(
+        tmp_path,
+        payload_mutation=mutation,
+    )
+
+    with pytest.raises(FrozenCandidateCatalogError, match=message):
+        load_frozen_candidates(index_path)
+
+
+@pytest.mark.parametrize(
+    ("entry_mutation", "message"),
+    (
+        (
+            lambda entry: entry.update({"selection_log_sha256": True}),
+            "selection log|digest|string",
+        ),
+        (
+            lambda entry: entry.update({"selection_log_sha256": "0" * 64}),
+            "selection log|catalog",
+        ),
+        (
+            lambda entry: entry.update({"search_report_sha256": "0" * 64}),
+            "search report|catalog",
+        ),
+        (
+            lambda entry: entry.update({"candidate_evaluations_sha256": "0" * 64}),
+            "candidate evaluations|catalog",
+        ),
+        (
+            lambda entry: entry.update({"development_games_sha256": "0" * 64}),
+            "development games|catalog",
+        ),
+        (
+            lambda entry: entry.update({"boundary_report_digest": "0" * 64}),
+            "boundary report|catalog",
+        ),
+        (
+            lambda entry: entry.update({"boundary_slices_digest": "0" * 64}),
+            "boundary slices|catalog",
+        ),
+        (
+            lambda entry: entry.update({"winner_decision_slices_sha256": "0" * 64}),
+            "winner decision slices|catalog",
+        ),
+        (
+            lambda entry: entry.update({"winner_diagnostics_json_sha256": "0" * 64}),
+            "winner diagnostics|catalog",
+        ),
+        (
+            lambda entry: entry.update({"winner_diagnostics_markdown_sha256": "0" * 64}),
+            "winner diagnostics|catalog",
+        ),
+        (
+            lambda entry: entry.pop("development_games_sha256"),
+            "missing",
+        ),
+        (
+            lambda entry: entry.update({"unknown": "value"}),
+            "unknown",
+        ),
+    ),
+)
+def test_schema_v2_catalog_rejects_tampered_index_provenance(
+    tmp_path: Path,
+    entry_mutation: Any,
+    message: str,
+) -> None:
+    index_path = _write_mixed_schema_catalog(
+        tmp_path,
+        entry_mutation=entry_mutation,
+    )
+
+    with pytest.raises(FrozenCandidateCatalogError, match=message):
+        load_frozen_candidates(index_path)
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    (
+        (_use_out_of_range_generation, "identity|generation"),
+        (_use_out_of_range_slot, "identity|slot"),
+        (_forge_identity_profile_prefix, "profile digest"),
+    ),
+)
+def test_schema_v2_catalog_rejects_invalid_v4_identity_bounds_and_digest_prefix(
+    tmp_path: Path,
+    mutation: Any,
+    message: str,
+) -> None:
+    index_path = _write_mixed_schema_catalog(
+        tmp_path,
+        payload_mutation=mutation,
+        mirror_mutated_payload_in_entry=True,
+    )
+
+    with pytest.raises(FrozenCandidateCatalogError, match=message):
+        load_frozen_candidates(index_path)
+
+
+def test_schema_v2_catalog_rejects_duplicate_nested_json_keys(tmp_path: Path) -> None:
+    index_path = _write_mixed_schema_catalog(tmp_path)
+    index = json.loads(index_path.read_text(encoding="utf-8"))
+    phase_entry = next(entry for entry in index["candidates"] if "-v4-" in entry["identity"])
+    candidate_path = tmp_path / phase_entry["file"]
+    source = candidate_path.read_text(encoding="utf-8")
+    source = source.replace(
+        '"winner_diagnostics": {',
+        '"winner_diagnostics": {}, "winner_diagnostics": {',
+        1,
+    )
+    candidate_path.write_text(source, encoding="utf-8")
+    phase_entry["sha256"] = hashlib.sha256(candidate_path.read_bytes()).hexdigest()
+    index_path.write_text(
+        json.dumps(index, allow_nan=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(FrozenCandidateCatalogError, match="duplicate JSON key"):
+        load_frozen_candidates(index_path)
+
+
+def test_v4_identity_rejects_schema_v1_payload_before_payload_key_dispatch(
+    tmp_path: Path,
+) -> None:
+    index_path = _write_mixed_schema_catalog(
+        tmp_path,
+        payload_mutation=lambda payload: payload.update({"schema_version": 1}),
+    )
+
+    with pytest.raises(FrozenCandidateCatalogError) as captured:
+        load_frozen_candidates(index_path)
+
+    assert captured.value.code == "candidate_schema_identity_mismatch"
+
+
 def _write_modified_catalog(
     tmp_path: Path,
     *,
@@ -180,6 +757,10 @@ def _write_modified_catalog(
             "file",
         ),
         (
+            lambda index: index["candidates"][0].pop("identity"),
+            "missing.*identity",
+        ),
+        (
             lambda index: index["candidates"].append(index["candidates"][0].copy()),
             "duplicate",
         ),
@@ -194,6 +775,39 @@ def test_catalog_rejects_invalid_index(
 
     with pytest.raises(FrozenCandidateCatalogError, match=message):
         load_frozen_candidates(index_path)
+
+
+def test_schema_v1_catalog_rejects_unknown_entry_keys_before_file_checks(
+    tmp_path: Path,
+) -> None:
+    def mutate_entry_and_file(index: dict[str, Any]) -> None:
+        entry = index["candidates"][0]
+        entry["unknown"] = True
+        entry["file"] = "../escape.json"
+
+    index_path = _write_modified_catalog(
+        tmp_path,
+        index_mutation=mutate_entry_and_file,
+    )
+
+    with pytest.raises(FrozenCandidateCatalogError) as captured:
+        load_frozen_candidates(index_path)
+
+    assert captured.value.code == "invalid_object_keys"
+
+
+def test_v3_identity_rejects_schema_v2_payload_before_payload_key_dispatch(
+    tmp_path: Path,
+) -> None:
+    index_path = _write_modified_catalog(
+        tmp_path,
+        payload_mutation=lambda payload: payload.update({"schema_version": 2}),
+    )
+
+    with pytest.raises(FrozenCandidateCatalogError) as captured:
+        load_frozen_candidates(index_path)
+
+    assert captured.value.code == "candidate_schema_identity_mismatch"
 
 
 @pytest.mark.parametrize(
