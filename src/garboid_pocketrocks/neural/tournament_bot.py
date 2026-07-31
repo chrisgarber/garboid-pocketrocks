@@ -158,6 +158,74 @@ class _FrozenNeuralBrain:
         )
 
 
+class FrozenBootstrapCandidateBrain(_FrozenNeuralBrain):
+    """Deterministic brain backed only by a verified bootstrap freeze."""
+
+    def __init__(
+        self,
+        candidate_path: Path,
+        expected_identity: str,
+        seed: int | None = None,
+    ) -> None:
+        del seed
+        from garboid_pocketrocks.neural.bootstrap_freeze import (
+            BootstrapFreezeError,
+            load_frozen_bootstrap_candidate,
+        )
+
+        frozen = load_frozen_bootstrap_candidate(candidate_path)
+        if frozen.manifest.identity != expected_identity:
+            raise BootstrapFreezeError(
+                "frozen bootstrap candidate identity changed after BotSpec creation"
+            )
+        self._runtime = _runtime(candidate_path / "inference")
+
+
+@dataclass(frozen=True, slots=True)
+class FrozenBootstrapBrainFactory:
+    """Picklable factory that re-verifies a frozen candidate in each worker."""
+
+    candidate_path: Path
+    expected_identity: str
+
+    def __post_init__(self) -> None:
+        if not self.candidate_path.is_absolute():
+            raise ValueError("frozen bootstrap candidate path must be absolute")
+        if not self.expected_identity:
+            raise ValueError("frozen bootstrap candidate identity must be nonempty")
+
+    def __call__(self, seed: int | None = None) -> FrozenBootstrapCandidateBrain:
+        return FrozenBootstrapCandidateBrain(
+            self.candidate_path,
+            self.expected_identity,
+            seed,
+        )
+
+
+def frozen_bootstrap_bot_spec(candidate_path: Path) -> BotSpec:
+    """Build a local BotSpec from one fully verified bootstrap freeze directory.
+
+    This deliberately accepts neither a raw training checkpoint nor a raw
+    inference checkpoint.  Verification runs now and again whenever a worker
+    constructs the brain, so later payload tampering fails closed.
+    """
+
+    from garboid_pocketrocks.neural.bootstrap_freeze import (
+        load_frozen_bootstrap_candidate,
+    )
+
+    resolved_path = candidate_path.resolve()
+    frozen = load_frozen_bootstrap_candidate(resolved_path)
+    identity = frozen.manifest.identity
+    return BotSpec.for_simulation(
+        identity,
+        FrozenBootstrapBrainFactory(
+            candidate_path=resolved_path,
+            expected_identity=identity,
+        ),
+    )
+
+
 class VectorPpoSmallV1G1500Brain(_FrozenNeuralBrain):
     """Frozen 1,500-game smoke policy."""
 

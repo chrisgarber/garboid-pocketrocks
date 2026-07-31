@@ -166,13 +166,38 @@ large policy from the released v3 heuristics:
 - `heuristic-opponent-curriculum-v1.json` trains one focal neural seat against
   explicit v3 opponents, gradually mixing self-play back in.
 
+Behavior cloning uses the pinned `sequential-shard-major-epochs-v1` order: it
+fully trains each bounded shard, epoch by epoch, before moving to the next shard,
+while preserving one Adam optimizer across shards. Shard size is therefore part
+of the experiment identity and changing it can change the learned weights. If
+cloning fails before the first PPO checkpoint, restart the complete deterministic
+cloning stage in a fresh run directory; there is intentionally no cloning-stage
+resume checkpoint.
+
 `heuristic-bootstrap-control-v1.json` is the fixed-compute control. The loader
 rejects combined strategies so each result remains attributable to one
-change. Every profile uses root seed 42 and exactly 349,860 complete training
-games; cloning substitutes four demonstration rounds for four PPO updates.
+change. `heuristic-opponent-control-v1.json` is the matched focal-seat control
+for the opponent curriculum, so those two arms expose the same number of
+trajectories to PPO. Every profile uses root seed 42 and exactly 349,860
+complete training games; cloning substitutes four demonstration rounds for
+four PPO updates.
 The [experiment plan](../../../docs/superpowers/plans/2026-07-31-heuristic-neural-bootstrapping.md)
 records the exact budget, information boundary, immutable teacher identities,
 and freeze-before-held-out rule.
+
+Development selection is intentionally a two-step process. First, the five
+final checkpoints are checked against one complete, privacy-safe training
+summary and frozen into immutable inference bundles. Then the same fixed
+development games compare every bundle with `vector_ppo_large_v1_g350k`; the
+incumbent games run once and are reused for all five matched comparisons. The
+winner is chosen by rating improvement, then normalized finish, then final
+money, with the immutable identity breaking an exact tie. A winner must be
+complete, fault-free, and have a positive rating improvement. The resulting
+selection decision binds the exact freeze digest. Later held-out evaluation
+loads the complete checksummed evidence generation through
+`selected_bootstrap_bot_spec`; it cannot substitute a manually chosen arm or
+an edited decision. The selection code has no held-out corpus input and
+records raw development utilities and fault counts transactionally.
 
 These profiles create research checkpoints. Losses, teacher agreement,
 rewards, and development scores cannot move a released alias. A checkpoint
