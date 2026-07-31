@@ -35,7 +35,7 @@ def test_live_bot_uses_raw_sdk_history_to_return_a_legal_decision() -> None:
         )
     )
     context = game.to_context()
-    transport = FakeTransport((game.to_bytes(),))
+    transport = FakeTransport([game.to_bytes()])
     bot = PpoLargeTeenBot(
         api_key="test-key",
         server_url="ws://example.test",
