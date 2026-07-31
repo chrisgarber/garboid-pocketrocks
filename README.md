@@ -129,6 +129,21 @@ uv run garboid-simulate \
   --workers 4
 ```
 
+The pinned SDK also supplies `GreedyValueBot`, which bids according to the
+value its private hand implies for the offered suits. Garboid imports that
+policy directly under the frozen local identity `sdk-greedy-value-v1`:
+
+```bash
+uv run garboid-simulate \
+  --bots sdk-greedy-value-v1,balanced-v2,passive-v2 \
+  --games 1000 \
+  --players 3 \
+  --seed 42
+```
+
+This is a local SDK sample opponent, not a Garboid live bot, so it has no
+remote bot ID.
+
 Evaluation reports games, outright wins, first-place ties, rank counts, final
 money samples, first-place margins, seat buckets, ruleset buckets, decision
 counts, and faults. Distribution helpers provide mean, median, population
@@ -151,13 +166,14 @@ produces identical game summaries, rankings, and bootstrap intervals regardless
 of worker count. Workers accelerate both match simulation and interval fitting.
 
 The shared registry includes the random bot, the latest unversioned heuristic
-profiles, the explicit v1 and v2 heuristic generations, the frozen
-`vector_ppo_small_v1_g1500` smoke policy, and the large
-`vector_ppo_large_v1_g350k` policy trained for exactly 349,860 games. The
-curated default field uses random, the six distinct versioned heuristic
-policies, and both neural policies; it omits the unversioned aliases because
-they duplicate v2 behavior. Use `--bots` or `--exclude-bots` for a reproducible
-subset and `--bootstrap-samples 0` for quick experiments.
+profiles, the explicit v1 and v2 heuristic generations, the frozen SDK
+`sdk-greedy-value-v1` policy, the frozen `vector_ppo_small_v1_g1500` smoke
+policy, and the large `vector_ppo_large_v1_g350k` policy trained for exactly
+349,860 games. The curated default field uses random, the six distinct
+versioned heuristic policies, the SDK greedy-value policy, and both neural
+policies; it omits the unversioned aliases because they duplicate v2 behavior.
+Use `--bots` or `--exclude-bots` for a reproducible subset and
+`--bootstrap-samples 0` for quick experiments.
 
 The estimator fits complete multiplayer finishes with a tie-aware
 Plackett–Luce model. `worth` is the fitted positive strength normalized across

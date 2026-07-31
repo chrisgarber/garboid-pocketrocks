@@ -288,9 +288,9 @@ def test_sdk_greedy_value_v1_spec_is_pickle_safe_and_deterministic() -> None:
     knowledge = canonical_knowledge(3)
 
     assert restored == SDK_GREEDY_VALUE_V1_BOT_SPEC
-    assert restored.make_brain(seed=1).choose_decision(
-        context, knowledge
-    ) == restored.make_brain(seed=999).choose_decision(context, knowledge)
+    assert restored.make_brain(seed=1).choose_decision(context, knowledge) == restored.make_brain(
+        seed=999
+    ).choose_decision(context, knowledge)
 
 
 async def _suspending_decision() -> BotDecision:
@@ -451,9 +451,7 @@ assertions:
 ```python
 summary = json.loads((tmp_path / "summary.json").read_text(encoding="utf-8"))
 configured_names = tuple(item["name"] for item in summary["configuration"]["bots"])
-sdk_row = next(
-    row for row in summary["leaderboard"] if row["bot_name"] == "sdk-greedy-value-v1"
-)
+sdk_row = next(row for row in summary["leaderboard"] if row["bot_name"] == "sdk-greedy-value-v1")
 
 assert "sdk-greedy-value-v1" in configured_names
 assert sdk_row["faults"] == 0
@@ -485,17 +483,21 @@ Add it after the six explicit heuristic generations and before the neural
 policies in `BOT_SPECS`:
 
 ```python
+BOT_SPECS = (
     PASSIVE_HEURISTIC_V2_BOT_SPEC,
     SDK_GREEDY_VALUE_V1_BOT_SPEC,
     VECTOR_PPO_SMALL_V1_G1500_BOT_SPEC,
+)
 ```
 
 Add it in the same position in `DEFAULT_TOURNAMENT_BOT_SPECS`:
 
 ```python
+DEFAULT_TOURNAMENT_BOT_SPECS = (
     PASSIVE_HEURISTIC_V2_BOT_SPEC,
     SDK_GREEDY_VALUE_V1_BOT_SPEC,
     VECTOR_PPO_SMALL_V1_G1500_BOT_SPEC,
+)
 ```
 
 Do not modify the live launcher registry.
