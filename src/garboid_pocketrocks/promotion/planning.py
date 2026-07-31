@@ -435,6 +435,7 @@ def _promotion_plan_digest_payload(plan: PromotionPlan) -> dict[str, object]:
         "candidate": _bot_identity_payload(plan.candidate),
         "incumbent": _bot_identity_payload(plan.incumbent),
         "opponent_pool": effective_opponent_pool_payload(plan.opponent_pool),
+        "execution": _monte_carlo_config_payload(plan.monte_carlo_config),
         "pairs": [
             {
                 "pair_index": pair.pair_index,
@@ -446,15 +447,37 @@ def _promotion_plan_digest_payload(plan: PromotionPlan) -> dict[str, object]:
                     "engine_seed": pair.case.engine_seed,
                     "opponent_names_by_seat": list(pair.case.opponent_names_by_seat),
                 },
-                "candidate_lineup": [
-                    _bot_identity_payload(spec) for spec in pair.candidate_game.lineup
-                ],
-                "incumbent_lineup": [
-                    _bot_identity_payload(spec) for spec in pair.incumbent_game.lineup
-                ],
+                "candidate_game": _game_job_payload(pair.candidate_game),
+                "incumbent_game": _game_job_payload(pair.incumbent_game),
             }
             for pair in plan.pairs
         ],
+    }
+
+
+def _monte_carlo_config_payload(config: MonteCarloConfig) -> dict[str, object]:
+    return {
+        "bot_specs": [_bot_identity_payload(spec) for spec in config.bot_specs],
+        "games": config.games,
+        "player_counts": list(config.player_counts),
+        "value_charts": list(config.value_charts),
+        "root_seed": config.root_seed,
+        "objectives_enabled": list(config.objectives_enabled),
+        "fault_mode": config.fault_mode.value,
+        "capture_replays": config.capture_replays,
+    }
+
+
+def _game_job_payload(job: GameJob) -> dict[str, object]:
+    return {
+        "game_index": job.game_index,
+        "root_seed": job.root_seed,
+        "seed": job.seed,
+        "player_count": job.player_count,
+        "value_chart": job.value_chart,
+        "objectives_enabled": job.objectives_enabled,
+        "lineup": [_bot_identity_payload(spec) for spec in job.lineup],
+        "fault_mode": job.fault_mode.value,
     }
 
 
