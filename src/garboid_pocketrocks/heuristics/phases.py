@@ -11,6 +11,7 @@ from garboid_pocketrocks.heuristics.errors import HeuristicInputError
 from garboid_pocketrocks.knowledge import RulesetKnowledge
 
 type HeuristicPhase = Literal["early", "middle", "late"]
+PHASE_SELECTOR_NAME = "public-resource-horizon-v1"
 
 
 class _PublicResourceContext(Protocol):

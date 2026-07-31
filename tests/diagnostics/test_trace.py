@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from dataclasses import FrozenInstanceError, fields, replace
 from typing import cast
 
@@ -18,6 +20,7 @@ from garboid_pocketrocks.diagnostics.trace import (
     HeuristicBidExplanation,
     NeuralPolicyExplanation,
     PendingDecisionTrace,
+    PhaseAwareHeuristicBidExplanation,
     PublicDecisionOutcome,
     RecordedAction,
     decision_trace_from_payload,
@@ -90,7 +93,9 @@ def _history() -> PublicHistory:
 def _pending(
     *,
     selected_action: RecordedAction | None = None,
-    explanation: HeuristicBidExplanation | NeuralPolicyExplanation | None = None,
+    explanation: (
+        HeuristicBidExplanation | PhaseAwareHeuristicBidExplanation | NeuralPolicyExplanation | None
+    ) = None,
 ) -> PendingDecisionTrace:
     return PendingDecisionTrace(
         game_index=2,
@@ -342,6 +347,37 @@ def test_typed_explanations_round_trip_without_arbitrary_metadata() -> None:
         decision_trace_from_payload({**payload, "explanation": explanation_payload})
 
 
+def test_ordinary_heuristic_trace_schema_v1_canonical_json_bytes_are_unchanged() -> None:
+    explanation = HeuristicBidExplanation(
+        resource_value=6.5,
+        objective_completion_value=0.0,
+        objective_progress_value=1.25,
+        terminal_cash_value=-3.0,
+        liquidity_value=-0.5,
+        future_cash_value=-0.75,
+        total_value=3.5,
+        reservation_bid=4,
+        chosen_bid=3,
+    )
+    trace = DecisionTrace.from_pending(_pending(explanation=explanation), _outcome())
+
+    canonical_json_line = (
+        json.dumps(
+            decision_trace_payload(trace),
+            allow_nan=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+        + "\n"
+    ).encode()
+
+    assert len(canonical_json_line) == 1694
+    assert (
+        hashlib.sha256(canonical_json_line).hexdigest()
+        == "58b445f7e9006c7d1d2b9c521e4409f88059af573a9c7bc9cbfc4f622fc899a5"
+    )
+
+
 def test_neural_explanation_probabilities_round_trip_in_canonical_action_order() -> None:
     explanation = _neural_explanation()
     payload = decision_trace_payload(
@@ -353,3 +389,124 @@ def test_neural_explanation_probabilities_round_trip_in_canonical_action_order()
     assert explanation_payload["legal_action_probabilities"] == list(
         explanation.legal_action_probabilities
     )
+
+
+def _phase_aware_explanation(
+    *,
+    selected_expert_phase: str = "early",
+    future_biddable_resources: int = 11,
+    total_biddable_resources: int = 15,
+) -> PhaseAwareHeuristicBidExplanation:
+    return PhaseAwareHeuristicBidExplanation(
+        resource_value=6.5,
+        objective_completion_value=0.0,
+        objective_progress_value=1.25,
+        terminal_cash_value=-3.0,
+        liquidity_value=-0.5,
+        future_cash_value=-0.75,
+        total_value=3.5,
+        reservation_bid=4,
+        chosen_bid=3,
+        selected_expert_phase=selected_expert_phase,  # type: ignore[arg-type]
+        future_biddable_resources=future_biddable_resources,
+        total_biddable_resources=total_biddable_resources,
+    )
+
+
+def test_phase_aware_bid_uses_strict_trace_schema_v2() -> None:
+    explanation = _phase_aware_explanation()
+    trace = DecisionTrace.from_pending(_pending(explanation=explanation), _outcome())
+
+    payload = decision_trace_payload(trace)
+
+    assert payload["schema_version"] == 2
+    assert payload["explanation"] == {
+        "kind": "phase_aware_heuristic_bid",
+        "resource_value": 6.5,
+        "objective_completion_value": 0.0,
+        "objective_progress_value": 1.25,
+        "terminal_cash_value": -3.0,
+        "liquidity_value": -0.5,
+        "future_cash_value": -0.75,
+        "total_value": 3.5,
+        "reservation_bid": 4,
+        "chosen_bid": 3,
+        "selected_expert_phase": "early",
+        "future_biddable_resources": 11,
+        "total_biddable_resources": 15,
+    }
+    assert decision_trace_from_payload(payload) == trace
+
+
+def test_trace_decoder_rejects_v1_v2_explanation_mixing() -> None:
+    ordinary_payload = decision_trace_payload(
+        DecisionTrace.from_pending(
+            _pending(
+                explanation=HeuristicBidExplanation(
+                    resource_value=6.5,
+                    objective_completion_value=0.0,
+                    objective_progress_value=1.25,
+                    terminal_cash_value=-3.0,
+                    liquidity_value=-0.5,
+                    future_cash_value=-0.75,
+                    total_value=3.5,
+                    reservation_bid=4,
+                    chosen_bid=3,
+                ),
+            ),
+            _outcome(),
+        )
+    )
+    phase_payload = decision_trace_payload(
+        DecisionTrace.from_pending(
+            _pending(explanation=_phase_aware_explanation()),
+            _outcome(),
+        )
+    )
+
+    with pytest.raises(ValueError, match="schema|explanation"):
+        decision_trace_from_payload({**ordinary_payload, "schema_version": 2})
+    with pytest.raises(ValueError, match="schema|explanation"):
+        decision_trace_from_payload({**phase_payload, "schema_version": 1})
+    with pytest.raises(ValueError, match="schema|explanation"):
+        decision_trace_from_payload({**phase_payload, "explanation": None})
+
+
+def test_phase_aware_trace_rejects_horizon_values_inconsistent_with_public_context() -> None:
+    trace = DecisionTrace.from_pending(
+        _pending(explanation=_phase_aware_explanation()),
+        _outcome(),
+    )
+    payload = decision_trace_payload(trace)
+    explanation_payload = dict(cast(dict[str, object], payload["explanation"]))
+    explanation_payload["future_biddable_resources"] = 10
+
+    with pytest.raises(ValueError, match="public context|horizon"):
+        decision_trace_from_payload({**payload, "explanation": explanation_payload})
+
+    explanation_payload["future_biddable_resources"] = 11
+    explanation_payload["total_biddable_resources"] = 16
+    with pytest.raises(ValueError, match="public context|horizon"):
+        decision_trace_from_payload({**payload, "explanation": explanation_payload})
+
+
+def test_phase_aware_explanation_rejects_a_phase_that_disagrees_with_its_counts() -> None:
+    with pytest.raises(ValueError, match="phase"):
+        _phase_aware_explanation(selected_expert_phase="late")
+
+
+@pytest.mark.parametrize(
+    "pending",
+    (
+        _pending(),
+        replace(_pending(), selected_action=RecordedAction("pass")),
+        replace(_pending(), selection_source="fault_fallback"),
+    ),
+)
+def test_null_explanation_paths_remain_trace_schema_v1(
+    pending: PendingDecisionTrace,
+) -> None:
+    payload = decision_trace_payload(DecisionTrace.from_pending(pending, _outcome()))
+
+    assert payload["schema_version"] == 1
+    assert payload["explanation"] is None

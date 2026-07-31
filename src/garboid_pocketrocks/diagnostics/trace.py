@@ -18,6 +18,13 @@ from garboid_pocketrocks.adapters.public_history import (
     PublicInformationRevealed,
     PublicTurnOpened,
 )
+from garboid_pocketrocks.heuristics.phases import (
+    HeuristicPhase,
+    PublicResourceHorizon,
+    public_resource_horizon,
+    select_expert_phase,
+)
+from garboid_pocketrocks.knowledge import canonical_knowledge
 
 type RecordedActionKind = Literal["pass", "submitBid", "selectInfoToReveal"]
 type SelectionSource = Literal["policy", "fault_fallback"]
@@ -215,6 +222,18 @@ class HeuristicBidExplanation:
 
 
 @dataclass(frozen=True, slots=True)
+class PhaseAwareHeuristicBidExplanation(HeuristicBidExplanation):
+    """A heuristic bid plus the public resource phase that selected its expert."""
+
+    selected_expert_phase: HeuristicPhase
+    future_biddable_resources: int
+    total_biddable_resources: int
+
+    def __post_init__(self) -> None:
+        _validate_explanation(self)
+
+
+@dataclass(frozen=True, slots=True)
 class NeuralPolicyExplanation:
     """Closed explanation for one masked neural-policy selection."""
 
@@ -227,7 +246,9 @@ class NeuralPolicyExplanation:
         _validate_explanation(self)
 
 
-type DecisionExplanation = HeuristicBidExplanation | NeuralPolicyExplanation
+type DecisionExplanation = (
+    HeuristicBidExplanation | PhaseAwareHeuristicBidExplanation | NeuralPolicyExplanation
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -344,6 +365,11 @@ def _validate_pending(trace: PendingDecisionTrace | DecisionTrace) -> None:
                 raise ValueError("heuristic bid explanation requires a bid action")
             if trace.explanation.chosen_bid != selected_bid:
                 raise ValueError("heuristic chosen bid must agree with selected action")
+            if isinstance(trace.explanation, PhaseAwareHeuristicBidExplanation):
+                _validate_phase_explanation_against_context(
+                    trace.explanation,
+                    trace.context,
+                )
         elif isinstance(trace.explanation, NeuralPolicyExplanation):
             probabilities = trace.explanation.legal_action_probabilities
             if len(probabilities) != len(trace.legal_actions):
@@ -372,6 +398,32 @@ def _validate_pending(trace: PendingDecisionTrace | DecisionTrace) -> None:
         raise ValueError("trace actor identity must match the lineup seat")
 
 
+def _validate_phase_explanation_against_context(
+    explanation: PhaseAwareHeuristicBidExplanation,
+    context: PublicDecisionContext,
+) -> None:
+    try:
+        expected_horizon = public_resource_horizon(
+            context,
+            canonical_knowledge(context.player_count),
+        )
+    except ValueError as error:
+        raise ValueError(
+            "phase-aware explanation cannot be reconciled with the public context",
+        ) from error
+    if (
+        explanation.future_biddable_resources != expected_horizon.future_biddable_resources
+        or explanation.total_biddable_resources != expected_horizon.total_biddable_resources
+    ):
+        raise ValueError(
+            "phase-aware explanation horizon counts must agree with the public context",
+        )
+    if explanation.selected_expert_phase != select_expert_phase(expected_horizon):
+        raise ValueError(
+            "phase-aware explanation phase must agree with the public context",
+        )
+
+
 def _validate_explanation(explanation: DecisionExplanation) -> None:
     if isinstance(explanation, HeuristicBidExplanation):
         heuristic_values = (
@@ -395,6 +447,18 @@ def _validate_explanation(explanation: DecisionExplanation) -> None:
             or explanation.chosen_bid > explanation.reservation_bid
         ):
             raise ValueError("heuristic explanation bids are invalid")
+        if isinstance(explanation, PhaseAwareHeuristicBidExplanation):
+            try:
+                horizon = PublicResourceHorizon(
+                    total_biddable_resources=explanation.total_biddable_resources,
+                    future_biddable_resources=explanation.future_biddable_resources,
+                )
+            except ValueError as error:
+                raise ValueError("phase-aware explanation horizon counts are invalid") from error
+            if select_expert_phase(horizon) != explanation.selected_expert_phase:
+                raise ValueError(
+                    "phase-aware explanation phase must agree with its horizon counts",
+                )
         return
     neural_values = (
         explanation.predicted_value,
@@ -429,7 +493,9 @@ def decision_trace_payload(trace: DecisionTrace) -> dict[str, object]:
     """Encode a complete trace without recursively inspecting foreign objects."""
 
     return {
-        "schema_version": 1,
+        "schema_version": (
+            2 if isinstance(trace.explanation, PhaseAwareHeuristicBidExplanation) else 1
+        ),
         "game_index": trace.game_index,
         "chart": trace.chart,
         "step_index": trace.step_index,
@@ -453,7 +519,8 @@ def decision_trace_from_payload(payload: Mapping[str, object]) -> DecisionTrace:
     """Strictly decode a trace, rejecting every unrecognized schema field."""
 
     _require_exact_fields(payload, _TRACE_FIELDS, "decision trace")
-    if _integer(payload["schema_version"], "schema_version") != 1:
+    schema_version = _integer(payload["schema_version"], "schema_version")
+    if schema_version not in (1, 2):
         raise ValueError("unsupported decision trace schema version")
     context = _public_context_from_payload(_mapping(payload["context"], "context"))
     return DecisionTrace(
@@ -478,7 +545,10 @@ def decision_trace_from_payload(payload: Mapping[str, object]) -> DecisionTrace:
         selected_action=_action_from_payload(
             _mapping(payload["selected_action"], "selected_action")
         ),
-        explanation=_explanation_from_payload(payload["explanation"]),
+        explanation=_explanation_from_payload(
+            payload["explanation"],
+            schema_version=schema_version,
+        ),
         selection_source=_selection_source(payload["selection_source"]),
         outcome=_outcome_from_payload(_mapping(payload["outcome"], "outcome")),
     )
@@ -629,6 +699,22 @@ def _public_event_from_payload(payload: Mapping[str, object]) -> PublicEvent:
 def _explanation_payload(explanation: DecisionExplanation | None) -> dict[str, object] | None:
     if explanation is None:
         return None
+    if isinstance(explanation, PhaseAwareHeuristicBidExplanation):
+        return {
+            "kind": "phase_aware_heuristic_bid",
+            "resource_value": explanation.resource_value,
+            "objective_completion_value": explanation.objective_completion_value,
+            "objective_progress_value": explanation.objective_progress_value,
+            "terminal_cash_value": explanation.terminal_cash_value,
+            "liquidity_value": explanation.liquidity_value,
+            "future_cash_value": explanation.future_cash_value,
+            "total_value": explanation.total_value,
+            "reservation_bid": explanation.reservation_bid,
+            "chosen_bid": explanation.chosen_bid,
+            "selected_expert_phase": explanation.selected_expert_phase,
+            "future_biddable_resources": explanation.future_biddable_resources,
+            "total_biddable_resources": explanation.total_biddable_resources,
+        }
     if isinstance(explanation, HeuristicBidExplanation):
         return {
             "kind": "heuristic_bid",
@@ -651,12 +737,78 @@ def _explanation_payload(explanation: DecisionExplanation | None) -> dict[str, o
     }
 
 
-def _explanation_from_payload(payload: object) -> DecisionExplanation | None:
+def _explanation_from_payload(
+    payload: object,
+    *,
+    schema_version: int,
+) -> DecisionExplanation | None:
     if payload is None:
+        if schema_version == 2:
+            raise ValueError("decision trace schema v2 requires a phase-aware explanation")
         return None
     explanation = _mapping(payload, "explanation")
     kind = explanation.get("kind")
+    if kind == "phase_aware_heuristic_bid":
+        if schema_version != 2:
+            raise ValueError("phase-aware explanation requires decision trace schema v2")
+        fields = frozenset(
+            {
+                "kind",
+                "resource_value",
+                "objective_completion_value",
+                "objective_progress_value",
+                "terminal_cash_value",
+                "liquidity_value",
+                "future_cash_value",
+                "total_value",
+                "reservation_bid",
+                "chosen_bid",
+                "selected_expert_phase",
+                "future_biddable_resources",
+                "total_biddable_resources",
+            }
+        )
+        _require_exact_fields(explanation, fields, "phase-aware heuristic explanation")
+        selected_phase = explanation["selected_expert_phase"]
+        if selected_phase not in ("early", "middle", "late"):
+            raise ValueError("phase-aware explanation selected phase is unknown")
+        phase_explanation = PhaseAwareHeuristicBidExplanation(
+            resource_value=_number(explanation["resource_value"], "resource_value"),
+            objective_completion_value=_number(
+                explanation["objective_completion_value"],
+                "objective_completion_value",
+            ),
+            objective_progress_value=_number(
+                explanation["objective_progress_value"],
+                "objective_progress_value",
+            ),
+            terminal_cash_value=_number(
+                explanation["terminal_cash_value"],
+                "terminal_cash_value",
+            ),
+            liquidity_value=_number(explanation["liquidity_value"], "liquidity_value"),
+            future_cash_value=_number(
+                explanation["future_cash_value"],
+                "future_cash_value",
+            ),
+            total_value=_number(explanation["total_value"], "total_value"),
+            reservation_bid=_integer(explanation["reservation_bid"], "reservation_bid"),
+            chosen_bid=_integer(explanation["chosen_bid"], "chosen_bid"),
+            selected_expert_phase=selected_phase,
+            future_biddable_resources=_integer(
+                explanation["future_biddable_resources"],
+                "future_biddable_resources",
+            ),
+            total_biddable_resources=_integer(
+                explanation["total_biddable_resources"],
+                "total_biddable_resources",
+            ),
+        )
+        _validate_explanation(phase_explanation)
+        return phase_explanation
     if kind == "heuristic_bid":
+        if schema_version != 1:
+            raise ValueError("ordinary heuristic explanation requires decision trace schema v1")
         fields = frozenset(
             {
                 "kind",
@@ -698,6 +850,8 @@ def _explanation_from_payload(payload: object) -> DecisionExplanation | None:
         _validate_explanation(heuristic_explanation)
         return heuristic_explanation
     if kind == "neural_policy":
+        if schema_version != 1:
+            raise ValueError("neural explanation requires decision trace schema v1")
         fields = frozenset(
             {
                 "kind",
