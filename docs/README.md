@@ -20,6 +20,9 @@ Package READMEs are the current operational truth:
   valuation, profiles, and released generations.
 - [Neural](../src/garboid_pocketrocks/neural/README.md): self-play training,
   checkpoints, resume, and inspection.
+- [Public-belief search foundation](../src/garboid_pocketrocks/search/README.md):
+  live-input reconstruction, deterministic belief sampling, and the SDK
+  prerequisite for canonical tree transitions.
 
 When a command or supported workflow changes, update its package runbook in
 the same change.
