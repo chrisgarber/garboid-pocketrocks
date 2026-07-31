@@ -46,7 +46,7 @@ def _behavior_snapshot(by_name: dict[str, BotStatistics]) -> dict[str, dict[str,
     }
 
 
-def test_seed_42_live_a_heuristic_tournament_matches_promoted_v3_behavior() -> None:
+def test_seed_42_live_a_heuristic_tournament_matches_hand_tuned_v3_behavior() -> None:
     config = _benchmark_config()
 
     result = MonteCarloRunner.run(config, workers=1)
@@ -62,26 +62,26 @@ def test_seed_42_live_a_heuristic_tournament_matches_promoted_v3_behavior() -> N
     assert _behavior_snapshot(by_name) == {
         "aggressive": {
             "bidding_requests": 1587,
-            "passes": 74,
-            "nonzero_bid_count": 1513,
-            "nonzero_bid_total": 8282,
-            "resource_cards_won": 591,
-            "objectives_claimed": 198,
+            "passes": 340,
+            "nonzero_bid_count": 1247,
+            "nonzero_bid_total": 7658,
+            "resource_cards_won": 656,
+            "objectives_claimed": 227,
         },
         "balanced": {
             "bidding_requests": 1587,
-            "passes": 247,
-            "nonzero_bid_count": 1340,
-            "nonzero_bid_total": 7351,
-            "resource_cards_won": 392,
-            "objectives_claimed": 52,
+            "passes": 61,
+            "nonzero_bid_count": 1526,
+            "nonzero_bid_total": 7482,
+            "resource_cards_won": 481,
+            "objectives_claimed": 83,
         },
         "passive": {
             "bidding_requests": 1587,
-            "passes": 71,
-            "nonzero_bid_count": 1516,
-            "nonzero_bid_total": 8103,
-            "resource_cards_won": 517,
-            "objectives_claimed": 109,
+            "passes": 253,
+            "nonzero_bid_count": 1334,
+            "nonzero_bid_total": 6446,
+            "resource_cards_won": 363,
+            "objectives_claimed": 37,
         },
     }
