@@ -25,11 +25,11 @@ def test_ppo_large_teen_is_public_alias_for_frozen_large_policy() -> None:
 def test_live_bot_uses_raw_sdk_history_to_return_a_legal_decision() -> None:
     request_id = "22222222-2222-2222-2222-222222222222"
     game = (
-        scenario(players=3, starting_cash=20)
+        scenario(players=3, starting_cash=30)
         .turn(ActionId.AUCTION1, resources=(Suit.BRICK, Suit.WOOD))
         .deciding(
             seat=0,
-            hand=(Suit.BRICK, Suit.WOOD),
+            hand=(Suit.BRICK, Suit.WOOD, Suit.ORE, Suit.SHEEP, Suit.WHEAT),
             kind="submitBid",
             request_id=request_id,
         )

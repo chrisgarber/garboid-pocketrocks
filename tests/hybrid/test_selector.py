@@ -4,15 +4,16 @@ from dataclasses import replace
 from typing import Any, cast
 
 import pytest
-from pocketrocks import DecisionContext
+from pocketrocks import ActionId, BotDecision, DecisionContext, Suit
+from pocketrocks.internal.bot_wire_v2 import DecisionRequest, decode_frame
+from pocketrocks.protocol import build_decision_context
+from pocketrocks.testing import scenario
 
 from garboid_pocketrocks.adapters.public_history import (
-    PublicAuctionResolved,
-    PublicEventKind,
     PublicGameSetup,
     PublicHistory,
-    PublicTurnOpened,
     public_history_from_sdk_events,
+    public_history_from_sdk_frame,
 )
 from garboid_pocketrocks.hybrid.experts import ExpertAvailability, load_promoted_experts
 from garboid_pocketrocks.hybrid.selector import (
@@ -24,29 +25,40 @@ from garboid_pocketrocks.knowledge import knowledge_for_context
 from garboid_pocketrocks.simulator.session import SdkGameSession
 
 
-def _context() -> DecisionContext:
-    return DecisionContext(
-        request_id="private-request-id",
-        deadline_at=123_456,
-        received_at=123_000,
-        decision_kind="submitBid",
-        player_count=3,
-        starting_cash=30,
-        value_chart=(0, 4, 8, 12, 16, 20),
-        objective_ids=(1, 2, 3, 10),
-        current_action_id=1,
-        current_resource_ids=(3, 0),
-        cash_by_seat=(22, 30, 18),
-        tiebreak_seat=1,
-        won_resource_counts_by_seat=((1, 0, 0, 0, 0), (0, 1, 0, 0, 0), (0, 0, 1, 0, 0)),
-        revealed_info_counts_by_seat=((0, 1, 0, 0, 0), (0, 0, 0, 0, 0), (1, 0, 0, 0, 0)),
-        owned_objective_ids_by_seat=((1,), (), ()),
-        bot_seat=0,
-        current_hand_suit_ids=(2, 5, 1, 3),
-        legal_max_amount=7,
-        revealable_count=4,
-        metadata={"engine_rng_state": "must not reach selector"},
+def _decoded_selector_frame(*, reveal_decision: bool = False) -> DecisionRequest:
+    narration = (
+        scenario(
+            players=3,
+            starting_cash=30,
+            initial_tiebreak_seat=1,
+            objective_ids=(1, 2, 3, 10),
+        )
+        .turn(ActionId.AUCTION1, resources=(Suit.BRICK, Suit.WOOD))
+        .auction((8, 0, 0))
     )
+    if reveal_decision:
+        narration.deciding(
+            seat=0,
+            hand=(Suit.ORE, Suit.SHEEP, Suit.WOOD, Suit.BRICK, Suit.WHEAT),
+            kind="selectInfoToReveal",
+        )
+    else:
+        narration.reveal(Suit.ORE).turn(
+            ActionId.LOAN10,
+            resources=(Suit.WOOD, Suit.WHEAT),
+        ).deciding(
+            seat=0,
+            hand=(Suit.SHEEP, Suit.WOOD, Suit.BRICK, Suit.WHEAT),
+        )
+    frame = decode_frame(narration.to_bytes(deadline_at=123_456))
+    if not isinstance(frame, DecisionRequest):
+        raise AssertionError("selector fixture must decode to a decision request")
+    return frame
+
+
+def _context() -> DecisionContext:
+    context = build_decision_context(_decoded_selector_frame(), received_at=123_000)
+    return replace(context, metadata={"engine_rng_state": "must not reach selector"})
 
 
 def _history(
@@ -54,20 +66,13 @@ def _history(
     starting_cash: int = 30,
     objective_ids: tuple[int, ...] = (1, 2, 3, 10),
 ) -> PublicHistory:
+    history = public_history_from_sdk_frame(_decoded_selector_frame())
+    setup = history[0]
+    if not isinstance(setup, PublicGameSetup):
+        raise AssertionError("selector fixture history must begin with game setup")
     return (
-        PublicGameSetup(
-            kind=PublicEventKind.GAME_SETUP,
-            player_count=3,
-            starting_cash=starting_cash,
-            value_chart=(0, 4, 8, 12, 16, 20),
-            initial_tiebreak_seat=1,
-            objective_ids=objective_ids,
-        ),
-        PublicTurnOpened(
-            kind=PublicEventKind.TURN_OPENED,
-            action_id=1,
-            resource_ids=(3, 0),
-        ),
+        replace(setup, starting_cash=starting_cash, objective_ids=objective_ids),
+        *history[1:],
     )
 
 
@@ -77,21 +82,11 @@ def _selector_input() -> LiveSelectorInput:
 
 
 def _reveal_context_and_history() -> tuple[DecisionContext, PublicHistory]:
-    context = replace(
-        _context(),
-        decision_kind="selectInfoToReveal",
-        bot_seat=0,
-        tiebreak_seat=0,
-        legal_max_amount=None,
+    frame = _decoded_selector_frame(reveal_decision=True)
+    return (
+        build_decision_context(frame, received_at=123_000),
+        public_history_from_sdk_frame(frame),
     )
-    history = (
-        *_history(),
-        PublicAuctionResolved(
-            kind=PublicEventKind.AUCTION_RESOLVED,
-            bids_by_seat=(7, 3, 0),
-        ),
-    )
-    return context, history
 
 
 def _available(*names: str) -> dict[str, ExpertAvailability]:
@@ -137,7 +132,7 @@ def test_live_selector_input_copies_only_live_compatible_fields() -> None:
     )
 
     assert same == first
-    assert first.own_hand_suit_ids == (2, 5, 1, 3)
+    assert first.own_hand_suit_ids == (4, 2, 1, 5)
     assert not hasattr(first.context, "metadata")
     assert not hasattr(first.context, "request_id")
     assert not hasattr(first.context, "current_hand_suit_ids")
@@ -259,7 +254,7 @@ def test_selector_input_enforces_sdk_phase_fields_and_latest_public_turn() -> No
         )
 
     bid_without_limit = replace(context, legal_max_amount=None)
-    with pytest.raises(ValueError, match="bid decision requires"):
+    with pytest.raises(ValueError, match="legal bid maximum"):
         LiveSelectorInput.from_live_state(
             bid_without_limit,
             knowledge_for_context(bid_without_limit),
@@ -301,7 +296,11 @@ def test_selector_input_enforces_sdk_phase_fields_and_latest_public_turn() -> No
             reveal_history,
         )
 
-    bid_after_resolution = replace(context, tiebreak_seat=0)
+    bid_after_resolution = replace(
+        reveal_context,
+        decision_kind="submitBid",
+        legal_max_amount=reveal_context.cash_by_seat[reveal_context.bot_seat],
+    )
     with pytest.raises(ValueError, match="bid decision requires one unresolved"):
         LiveSelectorInput.from_live_state(
             bid_after_resolution,
@@ -336,6 +335,98 @@ def test_real_sdk_opening_contexts_are_accepted_across_supported_games(
     assert selector_input.context.player_count == player_count
     assert selector_input.ruleset_name.startswith(f"live-{value_chart}")
     assert bool(selector_input.context.objective_ids) is objectives_enabled
+
+
+def test_opening_context_must_match_the_replayed_public_snapshot() -> None:
+    session = SdkGameSession.start(player_count=3, seed="selector-opening-mismatch")
+    _seat, context = session.pending.contexts[0]
+    history = public_history_from_sdk_events(session.events)
+    won = [list(row) for row in context.won_resource_counts_by_seat]
+    won[1][0] = 1
+    revealed = [list(row) for row in context.revealed_info_counts_by_seat]
+    revealed[1][0] = 1
+    owned = [list(row) for row in context.owned_objective_ids_by_seat]
+    owned[1].append(context.objective_ids[0])
+    mismatches = (
+        (
+            "cash",
+            replace(
+                context,
+                cash_by_seat=(context.cash_by_seat[0] - 1, *context.cash_by_seat[1:]),
+            ),
+        ),
+        ("won resources", replace(context, won_resource_counts_by_seat=tuple(map(tuple, won)))),
+        (
+            "revealed information",
+            replace(context, revealed_info_counts_by_seat=tuple(map(tuple, revealed))),
+        ),
+        (
+            "owned objectives",
+            replace(context, owned_objective_ids_by_seat=tuple(map(tuple, owned))),
+        ),
+        (
+            "legal bid maximum",
+            replace(context, legal_max_amount=cast(int, context.legal_max_amount) - 1),
+        ),
+    )
+
+    for field_name, malformed_context in mismatches:
+        with pytest.raises(ValueError, match=field_name):
+            LiveSelectorInput.from_live_state(
+                malformed_context,
+                knowledge_for_context(malformed_context),
+                history,
+            )
+
+
+def test_selector_rejects_correlated_known_resources_that_exceed_one_sdk_deck() -> None:
+    frame = decode_frame(
+        scenario(players=3, starting_cash=30)
+        .turn(ActionId.AUCTION1, resources=(Suit.BRICK, Suit.BRICK))
+        .deciding(seat=0, hand=(Suit.BRICK,) * 5)
+        .to_bytes(deadline_at=123_456)
+    )
+    if not isinstance(frame, DecisionRequest):
+        raise AssertionError("correlated resource fixture must be a decision request")
+    context = build_decision_context(frame, received_at=123_000)
+    history = public_history_from_sdk_frame(frame)
+
+    with pytest.raises(ValueError, match="combined known resources"):
+        LiveSelectorInput.from_live_state(context, knowledge_for_context(context), history)
+
+
+@pytest.mark.parametrize("player_count", (3, 4, 5))
+def test_every_live_context_in_complete_sdk_games_matches_public_replay(
+    player_count: int,
+) -> None:
+    session = SdkGameSession.start(
+        player_count=player_count,
+        seed=f"complete-selector-replay-{player_count}",
+    )
+    accepted_contexts = 0
+
+    while not session.terminated:
+        history = public_history_from_sdk_events(session.events)
+        for _seat, context in session.pending.contexts:
+            LiveSelectorInput.from_live_state(
+                context,
+                knowledge_for_context(context),
+                history,
+            )
+            accepted_contexts += 1
+        decisions = {
+            seat: (
+                BotDecision.submit_bid(1)
+                if session.pending.decision_kind == "submitBid"
+                and seat == 0
+                and cast(int, dict(session.pending.contexts)[seat].legal_max_amount) >= 1
+                else BotDecision.pass_turn()
+            )
+            for seat in session.pending.acting_seats
+        }
+        session.step(decisions)
+
+    assert accepted_contexts > player_count
 
 
 def test_fixed_input_reproduces_the_same_expert_choice() -> None:

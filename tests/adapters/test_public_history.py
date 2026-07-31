@@ -37,11 +37,14 @@ def _decoded_history_frame(
             initial_tiebreak_seat=initial_tiebreak_seat,
             objective_ids=(1, 2, 3, 4),
         )
-        .turn(ActionId.AUCTION1, resources=(Suit.BRICK, 0))
+        .turn(ActionId.AUCTION1, resources=(Suit.BRICK, Suit.WOOD))
         .auction(bids)
         .reveal(Suit.ORE)
-        .turn(ActionId.LOAN10)
-        .deciding(seat=2, hand=(Suit.WOOD,))
+        .turn(ActionId.LOAN10, resources=(Suit.WOOD, Suit.ORE))
+        .deciding(
+            seat=2,
+            hand=(Suit.BRICK, Suit.WOOD, Suit.ORE, Suit.SHEEP, Suit.WHEAT),
+        )
         .to_bytes(deadline_at=1_000)
     )
 
@@ -61,7 +64,7 @@ def test_sdk_frame_becomes_immutable_public_history() -> None:
         PublicTurnOpened(
             kind=PublicEventKind.TURN_OPENED,
             action_id=int(ActionId.AUCTION1),
-            resource_ids=(int(Suit.BRICK), 0),
+            resource_ids=(int(Suit.BRICK), int(Suit.WOOD)),
         ),
         PublicAuctionResolved(
             kind=PublicEventKind.AUCTION_RESOLVED,
@@ -75,7 +78,7 @@ def test_sdk_frame_becomes_immutable_public_history() -> None:
         PublicTurnOpened(
             kind=PublicEventKind.TURN_OPENED,
             action_id=int(ActionId.LOAN10),
-            resource_ids=(0, 0),
+            resource_ids=(int(Suit.WOOD), int(Suit.ORE)),
         ),
     )
     with pytest.raises(FrozenInstanceError):
@@ -208,3 +211,177 @@ def test_shared_validator_accepts_complete_sdk_games_after_players_exhaust_their
         isinstance(current, PublicAuctionResolved) and isinstance(following, PublicTurnOpened)
         for current, following in zip(history, history[1:], strict=False)
     )
+
+
+def test_shared_validator_reconstructs_cash_assets_and_objectives() -> None:
+    history: PublicHistory = (
+        PublicGameSetup(
+            kind=PublicEventKind.GAME_SETUP,
+            player_count=3,
+            starting_cash=30,
+            value_chart=(0, 4, 8, 12, 16, 20),
+            initial_tiebreak_seat=1,
+            objective_ids=(1, 2, 3, 4),
+        ),
+        PublicTurnOpened(PublicEventKind.TURN_OPENED, int(ActionId.LOAN20), (1, 2)),
+        PublicAuctionResolved(PublicEventKind.AUCTION_RESOLVED, (35, 0, 0)),
+        PublicInformationRevealed(PublicEventKind.INFORMATION_REVEALED, 0, 5),
+        PublicTurnOpened(PublicEventKind.TURN_OPENED, int(ActionId.INVEST5), (1, 2)),
+        PublicAuctionResolved(PublicEventKind.AUCTION_RESOLVED, (0, 7, 0)),
+        PublicInformationRevealed(PublicEventKind.INFORMATION_REVEALED, 1, 4),
+        PublicTurnOpened(PublicEventKind.TURN_OPENED, int(ActionId.AUCTION2), (1, 2)),
+        PublicAuctionResolved(PublicEventKind.AUCTION_RESOLVED, (0, 0, 3)),
+        PublicInformationRevealed(PublicEventKind.INFORMATION_REVEALED, 2, 3),
+        PublicTurnOpened(PublicEventKind.TURN_OPENED, int(ActionId.AUCTION1), (3, 4)),
+        PublicAuctionResolved(PublicEventKind.AUCTION_RESOLVED, (0, 0, 2)),
+    )
+
+    state = validate_public_history(history)
+
+    assert state.phase == "reveal_pending"
+    assert state.cash_by_seat == (15, 23, 25)
+    assert state.won_resource_counts_by_seat == (
+        (0, 0, 0, 0, 0),
+        (0, 0, 0, 0, 0),
+        (1, 1, 1, 0, 0),
+    )
+    assert state.revealed_info_counts_by_seat == (
+        (0, 0, 0, 0, 1),
+        (0, 0, 0, 1, 0),
+        (0, 0, 1, 0, 0),
+    )
+    assert state.owned_objective_ids_by_seat == ((), (), (3,))
+    assert state.loan_principal_by_seat == (20, 0, 0)
+    assert state.investment_value_by_seat == (0, 12, 0)
+    assert state.legal_max_bid_by_seat is None
+    assert state.resolved_turn_count == 4
+    assert state.seen_action_counts == (1, 1, 0, 1, 1, 0)
+
+
+def test_shared_validator_includes_loan_credit_in_open_turn_legal_maxima() -> None:
+    history = (
+        PublicGameSetup(
+            PublicEventKind.GAME_SETUP,
+            3,
+            30,
+            (0, 4, 8, 12, 16, 20),
+            0,
+            (),
+        ),
+        PublicTurnOpened(PublicEventKind.TURN_OPENED, int(ActionId.LOAN10), (1, 2)),
+    )
+
+    assert validate_public_history(history).legal_max_bid_by_seat == (40, 40, 40)
+
+
+def test_shared_validator_rejects_bids_above_replayed_cash_and_action_credit() -> None:
+    history = (
+        PublicGameSetup(
+            PublicEventKind.GAME_SETUP,
+            3,
+            30,
+            (0, 4, 8, 12, 16, 20),
+            0,
+            (),
+        ),
+        PublicTurnOpened(PublicEventKind.TURN_OPENED, int(ActionId.AUCTION1), (1, 2)),
+        PublicAuctionResolved(PublicEventKind.AUCTION_RESOLVED, (31, 0, 0)),
+    )
+
+    with pytest.raises(PublicHistoryCompatibilityError, match="legal maximum"):
+        validate_public_history(history)
+
+
+def test_shared_validator_rejects_resource_carry_and_terminal_turn_violations() -> None:
+    setup = PublicGameSetup(
+        PublicEventKind.GAME_SETUP,
+        3,
+        30,
+        (0, 4, 8, 12, 16, 20),
+        0,
+        (),
+    )
+    skipped_carry = (
+        setup,
+        PublicTurnOpened(PublicEventKind.TURN_OPENED, int(ActionId.AUCTION1), (1, 2)),
+        PublicAuctionResolved(PublicEventKind.AUCTION_RESOLVED, (1, 0, 0)),
+        PublicInformationRevealed(PublicEventKind.INFORMATION_REVEALED, 0, 3),
+        PublicTurnOpened(PublicEventKind.TURN_OPENED, int(ActionId.LOAN10), (4, 5)),
+    )
+    continued_terminal = (
+        setup,
+        PublicTurnOpened(PublicEventKind.TURN_OPENED, int(ActionId.AUCTION2), (1, 0)),
+        PublicAuctionResolved(PublicEventKind.AUCTION_RESOLVED, (1, 0, 0)),
+        PublicInformationRevealed(PublicEventKind.INFORMATION_REVEALED, 0, 3),
+        PublicTurnOpened(PublicEventKind.TURN_OPENED, int(ActionId.LOAN10), (4, 5)),
+    )
+
+    with pytest.raises(PublicHistoryCompatibilityError, match="carry"):
+        validate_public_history(skipped_carry)
+    with pytest.raises(PublicHistoryCompatibilityError, match="terminal one-card"):
+        validate_public_history(continued_terminal)
+
+
+def test_shared_validator_enforces_finite_action_and_resource_decks() -> None:
+    setup = PublicGameSetup(
+        PublicEventKind.GAME_SETUP,
+        3,
+        30,
+        (0, 4, 8, 12, 16, 20),
+        0,
+        (),
+    )
+    too_many_loan20_actions: list[object] = [setup]
+    for winner, reveal_suit in ((1, 2), (2, 3)):
+        too_many_loan20_actions.extend(
+            (
+                PublicTurnOpened(
+                    PublicEventKind.TURN_OPENED,
+                    int(ActionId.LOAN20),
+                    (4, 5),
+                ),
+                PublicAuctionResolved(
+                    PublicEventKind.AUCTION_RESOLVED,
+                    tuple(1 if seat == winner else 0 for seat in range(3)),
+                ),
+                PublicInformationRevealed(
+                    PublicEventKind.INFORMATION_REVEALED,
+                    winner,
+                    reveal_suit,
+                ),
+            )
+        )
+    too_many_loan20_actions.append(
+        PublicTurnOpened(PublicEventKind.TURN_OPENED, int(ActionId.LOAN20), (4, 5))
+    )
+
+    too_many_public_bricks: list[object] = [setup]
+    actions = (
+        ActionId.LOAN10,
+        ActionId.LOAN10,
+        ActionId.LOAN10,
+        ActionId.LOAN20,
+        ActionId.LOAN20,
+        ActionId.INVEST5,
+        ActionId.INVEST5,
+    )
+    tiebreak = 0
+    for action in actions:
+        winner = (tiebreak + 1) % 3
+        too_many_public_bricks.extend(
+            (
+                PublicTurnOpened(PublicEventKind.TURN_OPENED, int(action), (4, 5)),
+                PublicAuctionResolved(PublicEventKind.AUCTION_RESOLVED, (0, 0, 0)),
+                PublicInformationRevealed(
+                    PublicEventKind.INFORMATION_REVEALED,
+                    winner,
+                    int(Suit.BRICK),
+                ),
+            )
+        )
+        tiebreak = winner
+
+    with pytest.raises(PublicHistoryCompatibilityError, match="action appears"):
+        validate_public_history(cast(PublicHistory, tuple(too_many_loan20_actions)))
+    with pytest.raises(PublicHistoryCompatibilityError, match="finite SDK deck"):
+        validate_public_history(cast(PublicHistory, tuple(too_many_public_bricks)))

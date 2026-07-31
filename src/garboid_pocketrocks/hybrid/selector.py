@@ -177,6 +177,43 @@ def _bind_history_to_context(
         or setup.objective_ids != context.objective_ids
     ):
         raise ValueError("public history setup does not match the canonical live context")
+    replayed_fields = (
+        ("cash", context.cash_by_seat, history.cash_by_seat),
+        (
+            "won resources",
+            context.won_resource_counts_by_seat,
+            history.won_resource_counts_by_seat,
+        ),
+        (
+            "revealed information",
+            context.revealed_info_counts_by_seat,
+            history.revealed_info_counts_by_seat,
+        ),
+        (
+            "owned objectives",
+            context.owned_objective_ids_by_seat,
+            history.owned_objective_ids_by_seat,
+        ),
+    )
+    for name, live_value, replayed_value in replayed_fields:
+        if live_value != replayed_value:
+            raise ValueError(f"live context {name} contradict public history")
+    combined_known_resources_by_suit = tuple(
+        sum(row[suit_index] for row in history.won_resource_counts_by_seat)
+        + sum(row[suit_index] for row in history.revealed_info_counts_by_seat)
+        + context.current_hand_suit_ids.count(suit_index + 1)
+        + history.visible_resource_ids.count(suit_index + 1)
+        for suit_index in range(len(canonical.resource_counts))
+    )
+    if any(
+        known > available
+        for known, available in zip(
+            combined_known_resources_by_suit,
+            canonical.resource_counts,
+            strict=True,
+        )
+    ):
+        raise ValueError("live context combined known resources exceed the canonical deck")
     turn = history.latest_turn
     if turn is None:
         raise ValueError("public history has no current turn")
@@ -190,8 +227,11 @@ def _bind_history_to_context(
     if context.decision_kind == "submitBid":
         if history.phase != "turn_open":
             raise ValueError("bid decision requires one unresolved public turn")
-        if context.legal_max_amount is None:
-            raise ValueError("bid decision requires a legal bid maximum")
+        if history.legal_max_bid_by_seat is None:
+            raise AssertionError("turn-open public history always has legal bid maxima")
+        expected_legal_max = history.legal_max_bid_by_seat[context.bot_seat]
+        if context.legal_max_amount != expected_legal_max:
+            raise ValueError("live context legal bid maximum does not match public history")
     elif context.decision_kind == "selectInfoToReveal":
         if history.phase != "reveal_pending":
             raise ValueError("reveal decision requires one resolved auction awaiting reveal")
@@ -199,6 +239,8 @@ def _bind_history_to_context(
             raise ValueError("reveal decision cannot contain a legal bid maximum")
         if context.bot_seat != history.tiebreak_seat:
             raise ValueError("reveal decision must belong to the public auction winner")
+        if context.revealable_count <= 1:
+            raise ValueError("choice reveal decision requires at least two cards")
     else:
         raise ValueError("live context decision kind is unsupported")
 
