@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from typing import Literal
 
 from garboid_pocketrocks.bots import BotSpec
 from garboid_pocketrocks.promotion.corpus import PromotionCase, PromotionCorpus
@@ -22,14 +25,35 @@ class PairedGamePlan:
 
 
 @dataclass(frozen=True, slots=True)
+class OpponentExclusion:
+    """One configured opponent omitted because it is a compared identity."""
+
+    opponent: BotSpec
+    reason: Literal["candidate", "incumbent"]
+
+
+@dataclass(frozen=True, slots=True)
+class EffectiveOpponentPool:
+    """The configured, excluded, and remaining opponents for one comparison."""
+
+    configured: tuple[BotSpec, ...]
+    exclusions: tuple[OpponentExclusion, ...]
+    remaining: tuple[BotSpec, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class PromotionPlan:
     """The complete, immutable set of matched games for one comparison."""
 
     candidate: BotSpec
     incumbent: BotSpec
+    source_corpus_name: str
+    source_corpus_digest: str
+    opponent_pool: EffectiveOpponentPool
     opponents: tuple[BotSpec, ...]
     pairs: tuple[PairedGamePlan, ...]
     monte_carlo_config: MonteCarloConfig
+    digest: str
 
     @property
     def jobs(self) -> tuple[GameJob, ...]:
@@ -44,9 +68,17 @@ class PromotionPlanningError(ValueError):
     """Explain why a fair paired promotion plan cannot be built."""
 
     code: str
+    opponent_pool: EffectiveOpponentPool | None
 
-    def __init__(self, code: str, message: str) -> None:
+    def __init__(
+        self,
+        code: str,
+        message: str,
+        *,
+        opponent_pool: EffectiveOpponentPool | None = None,
+    ) -> None:
         self.code = code
+        self.opponent_pool = opponent_pool
         super().__init__(message)
 
 
@@ -70,17 +102,34 @@ def plan_paired_games(
             "Candidate and incumbent must have different names and different bot IDs.",
         )
 
-    opponent_specs_by_name = _resolve_recipe_opponents(held_out, registry=registry)
-    _require_no_compared_bot_opponent_collisions(
+    configured_opponents = _resolve_recipe_opponents(held_out, registry=registry)
+    for source_case in held_out.cases:
+        _build_twin_lineups(
+            source_case,
+            candidate=candidate,
+            incumbent=incumbent,
+            opponent_specs_by_name=configured_opponents,
+        )
+    opponent_pool = _effective_opponent_pool(
         candidate=candidate,
         incumbent=incumbent,
-        opponents=tuple(opponent_specs_by_name.values()),
+        configured=tuple(configured_opponents.values()),
+        required=_required_ordinary_opponents(held_out),
+    )
+    opponent_specs_by_name = {spec.name: spec for spec in opponent_pool.remaining}
+    effective_cases = tuple(
+        _effective_case(
+            case,
+            held_out=held_out,
+            opponent_pool=opponent_pool,
+        )
+        for case in held_out.cases
     )
 
     pairs: list[PairedGamePlan] = []
     opponents_in_first_seen_order: list[BotSpec] = []
     seen_opponent_ids: set[str] = set()
-    for pair_index, case in enumerate(held_out.cases):
+    for pair_index, case in enumerate(effective_cases):
         candidate_lineup, incumbent_lineup = _build_twin_lineups(
             case,
             candidate=candidate,
@@ -124,13 +173,24 @@ def plan_paired_games(
         objectives_enabled=(True,),
         fault_mode=FaultMode.RECORD_AND_PASS,
     )
-    return PromotionPlan(
+    plan = PromotionPlan(
         candidate=candidate,
         incumbent=incumbent,
+        source_corpus_name=held_out.recipe.name,
+        source_corpus_digest=held_out.digest,
+        opponent_pool=opponent_pool,
         opponents=opponents,
         pairs=tuple(pairs),
         monte_carlo_config=monte_carlo_config,
+        digest="",
     )
+    return replace(plan, digest=_promotion_plan_digest(plan))
+
+
+def _required_ordinary_opponents(held_out: PromotionCorpus) -> int:
+    """Return the largest number of ordinary opponents required by one case."""
+
+    return max(held_out.recipe.player_counts) - 1
 
 
 def _resolve_recipe_opponents(
@@ -159,27 +219,106 @@ def _resolve_recipe_opponents(
     return resolved
 
 
-def _require_no_compared_bot_opponent_collisions(
+def _effective_opponent_pool(
     *,
     candidate: BotSpec,
     incumbent: BotSpec,
-    opponents: tuple[BotSpec, ...],
-) -> None:
-    for opponent in opponents:
-        if _identities_overlap(candidate, opponent):
+    configured: tuple[BotSpec, ...],
+    required: int,
+) -> EffectiveOpponentPool:
+    exclusions: list[OpponentExclusion] = []
+    remaining: list[BotSpec] = []
+    for opponent in configured:
+        candidate_name_matches = candidate.name == opponent.name
+        candidate_id_matches = candidate.bot_id == opponent.bot_id
+        if candidate_name_matches and candidate_id_matches:
+            exclusions.append(OpponentExclusion(opponent, "candidate"))
+            continue
+        if candidate_name_matches or candidate_id_matches:
             raise PromotionPlanningError(
                 "candidate_opponent_identity_collision",
-                "The candidate must have a different name and bot ID from every opponent.",
+                "A configured opponent partially matches the candidate identity; "
+                "name and bot ID must either both match or both differ.",
             )
-        if _identities_overlap(incumbent, opponent):
+
+        incumbent_name_matches = incumbent.name == opponent.name
+        incumbent_id_matches = incumbent.bot_id == opponent.bot_id
+        if incumbent_name_matches and incumbent_id_matches:
+            exclusions.append(OpponentExclusion(opponent, "incumbent"))
+            continue
+        if incumbent_name_matches or incumbent_id_matches:
             raise PromotionPlanningError(
                 "incumbent_opponent_identity_collision",
-                "The incumbent must have a different name and bot ID from every opponent.",
+                "A configured opponent partially matches the incumbent identity; "
+                "name and bot ID must either both match or both differ.",
             )
+        remaining.append(opponent)
+
+    pool = EffectiveOpponentPool(
+        configured=configured,
+        exclusions=tuple(exclusions),
+        remaining=tuple(remaining),
+    )
+    if len(pool.remaining) < required:
+        raise PromotionPlanningError(
+            "insufficient_eligible_opponents",
+            f"Promotion requires {required} distinct ordinary opponents after "
+            f"excluding compared identities, but only {len(pool.remaining)} remain.",
+            opponent_pool=pool,
+        )
+    return pool
 
 
 def _identities_overlap(first: BotSpec, second: BotSpec) -> bool:
     return first.name == second.name or first.bot_id == second.bot_id
+
+
+def _effective_case(
+    case: PromotionCase,
+    *,
+    held_out: PromotionCorpus,
+    opponent_pool: EffectiveOpponentPool,
+) -> PromotionCase:
+    repetition = _case_repetition(case)
+    try:
+        chart_index = held_out.recipe.charts.index(case.chart)
+    except ValueError as error:
+        raise PromotionPlanningError(
+            "opponent_identity_mismatch",
+            f"Promotion case {case.case_id!r} uses chart {case.chart!r} outside its corpus recipe.",
+            opponent_pool=opponent_pool,
+        ) from error
+
+    rotation = (repetition + chart_index + case.player_count + case.focal_seat) % len(
+        opponent_pool.remaining
+    )
+    rotated = opponent_pool.remaining[rotation:] + opponent_pool.remaining[:rotation]
+    selected = iter(rotated[: case.player_count - 1])
+    return replace(
+        case,
+        opponent_names_by_seat=tuple(
+            None if seat == case.focal_seat else next(selected).name
+            for seat in range(case.player_count)
+        ),
+    )
+
+
+def _case_repetition(case: PromotionCase) -> int:
+    marker = ":repeat-"
+    _, separator, raw_repetition = case.case_id.rpartition(marker)
+    try:
+        repetition = int(raw_repetition)
+    except ValueError as error:
+        raise PromotionPlanningError(
+            "opponent_identity_mismatch",
+            f"Promotion case {case.case_id!r} does not end with a valid repetition index.",
+        ) from error
+    if not separator or repetition < 0:
+        raise PromotionPlanningError(
+            "opponent_identity_mismatch",
+            f"Promotion case {case.case_id!r} does not end with a valid repetition index.",
+        )
+    return repetition
 
 
 def _build_twin_lineups(
@@ -251,3 +390,73 @@ def _game_job(
         lineup=lineup,
         fault_mode=FaultMode.RECORD_AND_PASS,
     )
+
+
+def effective_opponent_pool_payload(pool: EffectiveOpponentPool) -> dict[str, object]:
+    """Render the exact configured, excluded, and remaining opponent identities."""
+
+    return {
+        "configured": [_bot_identity_payload(spec) for spec in pool.configured],
+        "exclusions": [
+            {
+                "opponent": _bot_identity_payload(exclusion.opponent),
+                "reason": exclusion.reason,
+            }
+            for exclusion in pool.exclusions
+        ],
+        "remaining": [_bot_identity_payload(spec) for spec in pool.remaining],
+    }
+
+
+def promotion_plan_payload(plan: PromotionPlan) -> dict[str, object]:
+    """Render the canonical effective plan and its digest."""
+
+    return {
+        **_promotion_plan_digest_payload(plan),
+        "digest": plan.digest,
+    }
+
+
+def _promotion_plan_digest(plan: PromotionPlan) -> str:
+    payload = _promotion_plan_digest_payload(plan)
+    encoded = (
+        json.dumps(payload, allow_nan=False, separators=(",", ":"), sort_keys=True) + "\n"
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _promotion_plan_digest_payload(plan: PromotionPlan) -> dict[str, object]:
+    return {
+        "schema_version": 1,
+        "source_corpus": {
+            "name": plan.source_corpus_name,
+            "digest": plan.source_corpus_digest,
+        },
+        "candidate": _bot_identity_payload(plan.candidate),
+        "incumbent": _bot_identity_payload(plan.incumbent),
+        "opponent_pool": effective_opponent_pool_payload(plan.opponent_pool),
+        "pairs": [
+            {
+                "pair_index": pair.pair_index,
+                "case": {
+                    "case_id": pair.case.case_id,
+                    "chart": pair.case.chart,
+                    "player_count": pair.case.player_count,
+                    "focal_seat": pair.case.focal_seat,
+                    "engine_seed": pair.case.engine_seed,
+                    "opponent_names_by_seat": list(pair.case.opponent_names_by_seat),
+                },
+                "candidate_lineup": [
+                    _bot_identity_payload(spec) for spec in pair.candidate_game.lineup
+                ],
+                "incumbent_lineup": [
+                    _bot_identity_payload(spec) for spec in pair.incumbent_game.lineup
+                ],
+            }
+            for pair in plan.pairs
+        ],
+    }
+
+
+def _bot_identity_payload(spec: BotSpec) -> dict[str, str]:
+    return {"name": spec.name, "bot_id": spec.bot_id}

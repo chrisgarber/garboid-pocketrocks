@@ -99,6 +99,10 @@ uv run --extra neural garboid-promote \
   --output-dir promotion-results/neural-comparison
 ```
 
+The committed opponent pool contains all v1/v2 heuristics and the frozen
+350k PPO policy. Compared identities are removed automatically from ordinary
+opponent seats before matched games are planned.
+
 See the [promotion runbook](src/garboid_pocketrocks/promotion/README.md) for
 the matched-game contract, evidence, and failure reasons.
 

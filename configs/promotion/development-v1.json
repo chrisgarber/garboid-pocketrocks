@@ -17,9 +17,12 @@
     5
   ],
   "opponent_names": [
-    "random",
     "aggressive-v1",
     "balanced-v1",
-    "passive-v1"
+    "passive-v1",
+    "aggressive-v2",
+    "balanced-v2",
+    "passive-v2",
+    "vector_ppo_large_v1_g350k"
   ]
 }
