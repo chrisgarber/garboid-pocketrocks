@@ -14,6 +14,7 @@ from garboid_pocketrocks.heuristics.errors import HeuristicInputError
 from garboid_pocketrocks.heuristics.profiles import (
     HEURISTIC_V1,
     HEURISTIC_V2,
+    HEURISTIC_V3,
     HeuristicProfile,
 )
 from garboid_pocketrocks.heuristics.valuation import BidEvaluation, HeuristicValuator
@@ -130,15 +131,33 @@ class PassiveHeuristicV2Brain(HeuristicBotBrain):
         super().__init__(HEURISTIC_V2.passive)
 
 
-class AggressiveHeuristicBrain(AggressiveHeuristicV2Brain):
+class AggressiveHeuristicV3Brain(HeuristicBotBrain):
+    def __init__(self, seed: int | None = None) -> None:
+        del seed
+        super().__init__(HEURISTIC_V3.aggressive)
+
+
+class BalancedHeuristicV3Brain(HeuristicBotBrain):
+    def __init__(self, seed: int | None = None) -> None:
+        del seed
+        super().__init__(HEURISTIC_V3.balanced)
+
+
+class PassiveHeuristicV3Brain(HeuristicBotBrain):
+    def __init__(self, seed: int | None = None) -> None:
+        del seed
+        super().__init__(HEURISTIC_V3.passive)
+
+
+class AggressiveHeuristicBrain(AggressiveHeuristicV3Brain):
     """Latest aggressive heuristic brain."""
 
 
-class BalancedHeuristicBrain(BalancedHeuristicV2Brain):
+class BalancedHeuristicBrain(BalancedHeuristicV3Brain):
     """Latest balanced heuristic brain."""
 
 
-class PassiveHeuristicBrain(PassiveHeuristicV2Brain):
+class PassiveHeuristicBrain(PassiveHeuristicV3Brain):
     """Latest passive heuristic brain."""
 
 
@@ -206,4 +225,17 @@ BALANCED_HEURISTIC_V2_BOT_SPEC = BotSpec.for_simulation(
 PASSIVE_HEURISTIC_V2_BOT_SPEC = BotSpec.for_simulation(
     "passive-v2",
     PassiveHeuristicV2Brain,
+)
+
+AGGRESSIVE_HEURISTIC_V3_BOT_SPEC = BotSpec.for_simulation(
+    "aggressive-v3",
+    AggressiveHeuristicV3Brain,
+)
+BALANCED_HEURISTIC_V3_BOT_SPEC = BotSpec.for_simulation(
+    "balanced-v3",
+    BalancedHeuristicV3Brain,
+)
+PASSIVE_HEURISTIC_V3_BOT_SPEC = BotSpec.for_simulation(
+    "passive-v3",
+    PassiveHeuristicV3Brain,
 )

@@ -30,6 +30,7 @@ def test_parser_defaults_to_full_tournament() -> None:
     assert args.batch_size == 64
     assert args.seed is None
     assert args.decision_reports is False
+    assert args.output_dir == Path("artifacts/tournaments")
 
 
 def test_root_seed_resolution_preserves_ordinary_defaults_and_protects_diagnostics(
@@ -110,6 +111,9 @@ def test_bot_filters_use_curated_defaults_when_include_is_omitted() -> None:
         "vector_ppo_large_v1_g350k",
         "passive-v2",
         "passive-v1",
+        "aggressive-v3",
+        "balanced-v3",
+        "passive-v3",
     )
 
 

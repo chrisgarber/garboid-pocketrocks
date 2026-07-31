@@ -13,6 +13,7 @@ from garboid_pocketrocks.promotion.corpus import (
     PromotionCorpusError,
     corpus_snapshot_payload,
     load_promotion_corpus,
+    recompute_promotion_corpus_digest,
     validate_corpus_separation,
 )
 from garboid_pocketrocks.simulator.seeding import derive_seed
@@ -452,3 +453,17 @@ def test_committed_corpora_have_exact_coverage_and_disjoint_seeds() -> None:
     assert development.digest == "3baf37660bb33ac2571ba62a09873a74cccbe6d7491f063e5d4a3e641fd24f4c"
     assert held_out.digest == "8b5a42d944f5c79486fc0a78333c35acee72322bdd062b1f80a6a247cf7a5164"
     validate_corpus_separation(development, held_out)
+
+
+def test_recompute_digest_detects_changed_normalized_corpus(
+    tmp_path: Path,
+) -> None:
+    corpus = _load_fixture(tmp_path)
+
+    assert recompute_promotion_corpus_digest(corpus) == corpus.digest
+    assert (
+        recompute_promotion_corpus_digest(
+            replace(corpus, cases=corpus.cases[:-1]),
+        )
+        != corpus.digest
+    )

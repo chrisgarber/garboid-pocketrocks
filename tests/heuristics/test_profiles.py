@@ -9,6 +9,7 @@ from garboid_pocketrocks.heuristics.profiles import (
     BALANCED_PROFILE,
     HEURISTIC_V1,
     HEURISTIC_V2,
+    HEURISTIC_V3,
     LATEST_HEURISTICS,
     PASSIVE_PROFILE,
     HeuristicProfile,
@@ -63,12 +64,31 @@ def test_versioned_profiles_have_exact_constants() -> None:
     assert HEURISTIC_V2.balanced == HeuristicProfile("balanced", 0.40, 0.75, 0.20, 0.25)
     assert HEURISTIC_V2.passive == HeuristicProfile("passive", 0.15, 0.60, 0.15, 0.30)
 
+    assert HEURISTIC_V3.version == "v3"
+    assert HEURISTIC_V3.aggressive == HeuristicProfile("aggressive", 1.50, 0.50, 1.00, 0.05)
+    assert HEURISTIC_V3.balanced == HeuristicProfile("balanced", 1.40, 1.05, 0.70, 0.30)
+    assert HEURISTIC_V3.passive == HeuristicProfile("passive", 0.25, 2.00, 0.10, 0.50)
+
+
+def test_v3_personality_coefficients_encode_distinct_risk_preferences() -> None:
+    aggressive = HEURISTIC_V3.aggressive
+    balanced = HEURISTIC_V3.balanced
+    passive = HEURISTIC_V3.passive
+
+    assert aggressive.objective_progress_weight > balanced.objective_progress_weight
+    assert balanced.objective_progress_weight > passive.objective_progress_weight
+    assert aggressive.future_cash_weight < balanced.future_cash_weight
+    assert balanced.future_cash_weight < passive.future_cash_weight
+    assert aggressive.bid_shading < balanced.bid_shading
+    assert balanced.bid_shading < passive.bid_shading
+    assert aggressive.liquidity_strength > passive.liquidity_strength
+
 
 def test_unversioned_profiles_alias_latest_generation() -> None:
-    assert LATEST_HEURISTICS is HEURISTIC_V2
-    assert AGGRESSIVE_PROFILE is HEURISTIC_V2.aggressive
-    assert BALANCED_PROFILE is HEURISTIC_V2.balanced
-    assert PASSIVE_PROFILE is HEURISTIC_V2.passive
+    assert LATEST_HEURISTICS is HEURISTIC_V3
+    assert AGGRESSIVE_PROFILE is HEURISTIC_V3.aggressive
+    assert BALANCED_PROFILE is HEURISTIC_V3.balanced
+    assert PASSIVE_PROFILE is HEURISTIC_V3.passive
 
 
 @pytest.mark.parametrize("version", ("", "1", "version-1", "v0", "v-1", "V1"))
@@ -92,21 +112,30 @@ def test_profile_set_rejects_mismatched_personality_names() -> None:
         )
 
 
-def test_named_profiles_have_expected_ordering() -> None:
-    assert (
-        AGGRESSIVE_PROFILE.liquidity_strength
-        > BALANCED_PROFILE.liquidity_strength
-        > PASSIVE_PROFILE.liquidity_strength
-    )
-    assert (
-        AGGRESSIVE_PROFILE.bid_shading < BALANCED_PROFILE.bid_shading < PASSIVE_PROFILE.bid_shading
-    )
+def test_each_released_generation_has_three_distinct_canonical_profiles() -> None:
+    for profile_set in (HEURISTIC_V1, HEURISTIC_V2, HEURISTIC_V3):
+        profiles = (
+            profile_set.aggressive,
+            profile_set.balanced,
+            profile_set.passive,
+        )
+        assert tuple(profile.name for profile in profiles) == (
+            "aggressive",
+            "balanced",
+            "passive",
+        )
+        assert len(set(profiles)) == 3
 
 
 def test_profiles_are_frozen_and_coefficients_are_finite() -> None:
     assert all(
         math.isfinite(coefficient)
-        for profile in (AGGRESSIVE_PROFILE, BALANCED_PROFILE, PASSIVE_PROFILE)
+        for profile_set in (HEURISTIC_V1, HEURISTIC_V2, HEURISTIC_V3)
+        for profile in (
+            profile_set.aggressive,
+            profile_set.balanced,
+            profile_set.passive,
+        )
         for coefficient in (
             profile.liquidity_strength,
             profile.future_cash_weight,

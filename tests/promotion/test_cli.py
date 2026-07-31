@@ -1,18 +1,20 @@
 from __future__ import annotations
 
 import subprocess
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import pytest
 
-from garboid_pocketrocks.bots import BOT_SPECS_BY_NAME
+from garboid_pocketrocks.bots import BOT_SPECS_BY_NAME, BotSpec, RandomBot
+from garboid_pocketrocks.heuristics.frozen import FROZEN_CANDIDATES_BY_NAME
 from garboid_pocketrocks.promotion import cli
 from garboid_pocketrocks.promotion.analysis import (
     PromotionAnalysis,
     PromotionFailure,
     RatingDifferenceInterval,
 )
+from garboid_pocketrocks.promotion.corpus import PromotionCorpus, load_promotion_corpus
 from garboid_pocketrocks.promotion.reporting import (
     PromotionArtifacts,
     build_promotion_report,
@@ -20,6 +22,42 @@ from garboid_pocketrocks.promotion.reporting import (
 from garboid_pocketrocks.promotion.runner import PromotionRun, PromotionRunConfig
 
 from .test_runner import _run_inputs
+
+_DEVELOPMENT_CORPUS_DIGEST = "3baf37660bb33ac2571ba62a09873a74cccbe6d7491f063e5d4a3e641fd24f4c"
+
+
+@dataclass(frozen=True, slots=True)
+class _FrozenCandidateFixture:
+    bot_spec: BotSpec
+    predecessor_name: str
+    development_corpus_name: str
+    development_corpus_digest: str
+    search_name: str
+    repository_commit: str
+    freeze_digest: str
+    profile_digest: str
+    manifest_digest: str
+    search_report_digest: str
+    candidate_evaluations_digest: str
+
+
+def _frozen_candidate() -> _FrozenCandidateFixture:
+    return _FrozenCandidateFixture(
+        bot_spec=BotSpec.for_simulation(
+            "balanced-v3-candidate-test",
+            RandomBot.build_brain,
+        ),
+        predecessor_name="balanced-v2",
+        development_corpus_name="development-v1",
+        development_corpus_digest=_DEVELOPMENT_CORPUS_DIGEST,
+        search_name="balanced-v3-search-v1",
+        repository_commit="1" * 40,
+        freeze_digest="a" * 64,
+        profile_digest="b" * 64,
+        manifest_digest="c" * 64,
+        search_report_digest="d" * 64,
+        candidate_evaluations_digest="e" * 64,
+    )
 
 
 def _required_args(tmp_path: Path) -> list[str]:
@@ -117,6 +155,7 @@ def test_parser_defaults() -> None:
     assert args.bootstrap_samples == 1_000
     assert args.bootstrap_seed == 0
     assert args.batch_size == 64
+    assert args.output_dir == Path("artifacts/promotions")
 
 
 def test_promoted_candidate_prints_interval_report_and_exits_zero(
@@ -158,6 +197,140 @@ def test_nonpromotion_prints_every_reason_report_and_exits_one(
     assert "- The uncertainty range includes no advantage." in output
     assert "- A bot made an invalid decision." in output
     assert f"Report: {tmp_path / 'promotion-report.json'}" in output
+
+
+def test_frozen_candidate_is_passed_to_the_runner_with_complete_provenance(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    frozen = _frozen_candidate()
+    completed_run = _completed_run(tmp_path, promoted=True)
+    calls: list[tuple[PromotionRunConfig, object]] = []
+
+    def record_run(
+        config: PromotionRunConfig,
+        *,
+        registry: object,
+        **kwargs: object,
+    ) -> PromotionRun:
+        assert "frozen_candidates" not in kwargs
+        del kwargs
+        calls.append((config, registry))
+        return completed_run
+
+    monkeypatch.setattr(
+        cli,
+        "load_frozen_candidate_catalog",
+        lambda: {frozen.bot_spec.name: frozen},
+    )
+    monkeypatch.setattr(
+        "garboid_pocketrocks.promotion.candidates.load_frozen_candidate_catalog",
+        lambda: {frozen.bot_spec.name: frozen},
+    )
+    monkeypatch.setattr(
+        "garboid_pocketrocks.promotion.cli.PromotionRunner.run",
+        record_run,
+    )
+    args = _required_args(tmp_path)
+    args[args.index("--candidate") + 1] = frozen.bot_spec.name
+    args[args.index("--incumbent") + 1] = frozen.predecessor_name
+
+    assert cli.main(args) == 0
+
+    assert len(calls) == 1
+    config, registry = calls[0]
+    assert config.candidate is frozen.bot_spec
+    assert config.incumbent is BOT_SPECS_BY_NAME[frozen.predecessor_name]
+    assert config.candidate_provenance is not None
+    assert config.candidate_provenance.candidate_name == frozen.bot_spec.name
+    assert config.candidate_provenance.candidate_bot_id == frozen.bot_spec.bot_id
+    assert config.candidate_provenance.development_corpus_name == frozen.development_corpus_name
+    assert config.candidate_provenance.freeze_digest == frozen.freeze_digest
+    assert config.candidate_provenance.profile_digest == frozen.profile_digest
+    assert config.candidate_provenance.manifest_digest == frozen.manifest_digest
+    assert config.candidate_provenance.search_report_digest == frozen.search_report_digest
+    assert (
+        config.candidate_provenance.candidate_evaluations_digest
+        == frozen.candidate_evaluations_digest
+    )
+    assert registry is BOT_SPECS_BY_NAME
+
+
+@pytest.mark.parametrize(
+    ("changed_binding", "message"),
+    (
+        ("predecessor", "predecessor"),
+        ("development", "development corpus"),
+    ),
+)
+def test_frozen_binding_mismatch_exits_two_before_loading_held_out(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    changed_binding: str,
+    message: str,
+) -> None:
+    frozen = _frozen_candidate()
+    if changed_binding == "development":
+        frozen = replace(frozen, development_corpus_digest="f" * 64)
+    development = load_promotion_corpus(
+        Path("configs/promotion/development-v1.json"),
+        registry=BOT_SPECS_BY_NAME,
+    )
+    loaded_paths: list[Path] = []
+
+    def load_development_only(path: Path, *, registry: object) -> PromotionCorpus:
+        del registry
+        loaded_paths.append(path)
+        if path == Path("configs/promotion/held-out-v1.json"):
+            raise AssertionError("held-out corpus loaded with mismatched frozen provenance")
+        return development
+
+    def forbidden(*args: object, **kwargs: object) -> None:
+        del args, kwargs
+        raise AssertionError("held-out gate ran with mismatched frozen provenance")
+
+    monkeypatch.setattr(
+        cli,
+        "load_frozen_candidate_catalog",
+        lambda: {frozen.bot_spec.name: frozen},
+    )
+    monkeypatch.setattr(
+        "garboid_pocketrocks.promotion.candidates.load_frozen_candidate_catalog",
+        lambda: {frozen.bot_spec.name: frozen},
+    )
+    monkeypatch.setattr(cli, "load_promotion_corpus", load_development_only)
+    monkeypatch.setattr(
+        "garboid_pocketrocks.promotion.cli.PromotionRunner.run",
+        forbidden,
+    )
+    args = _required_args(tmp_path)
+    args[args.index("--candidate") + 1] = frozen.bot_spec.name
+    args[args.index("--incumbent") + 1] = (
+        "aggressive-v2" if changed_binding == "predecessor" else frozen.predecessor_name
+    )
+
+    assert cli.main(args) == 2
+    assert message in capsys.readouterr().err
+    assert loaded_paths == [Path("configs/promotion/development-v1.json")]
+
+
+def test_incumbent_cannot_be_resolved_from_the_frozen_candidate_catalog(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    frozen = _frozen_candidate()
+    monkeypatch.setattr(
+        cli,
+        "load_frozen_candidate_catalog",
+        lambda: {frozen.bot_spec.name: frozen},
+    )
+    args = _required_args(tmp_path)
+    args[args.index("--incumbent") + 1] = frozen.bot_spec.name
+
+    assert cli.main(args) == 2
+    assert "unknown bot name" in capsys.readouterr().err
 
 
 @pytest.mark.parametrize(
@@ -239,6 +412,26 @@ def test_operational_failure_prints_direct_error_and_exits_two(
     captured = capsys.readouterr()
     assert exit_code == 2
     assert "disk is unavailable" in captured.err
+    assert str(tmp_path / "promotion-report.json") in captured.err
+
+
+def test_frozen_catalog_loader_failure_exits_two_without_a_traceback(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    def fail_catalog_load() -> object:
+        raise ValueError("frozen catalog is unavailable")
+
+    monkeypatch.setattr(cli, "load_frozen_candidate_catalog", fail_catalog_load)
+    args = _required_args(tmp_path)
+    args[args.index("--candidate") + 1] = "balanced-v3-candidate-test"
+
+    assert cli.main(args) == 2
+
+    captured = capsys.readouterr()
+    assert "frozen catalog is unavailable" in captured.err
+    assert "Traceback" not in captured.err
     assert str(tmp_path / "promotion-report.json") in captured.err
 
 
@@ -324,6 +517,7 @@ def test_help_explains_the_promotion_gate_in_plain_english() -> None:
         "bootstrap",
         "95% interval",
         "candidate",
+        "frozen",
         "incumbent",
         "development corpus",
         "output directory",
@@ -331,8 +525,9 @@ def test_help_explains_the_promotion_gate_in_plain_english() -> None:
         assert phrase in help_text
 
 
-def test_cli_uses_the_registered_bot_catalog() -> None:
+def test_cli_uses_the_released_and_frozen_bot_catalogs() -> None:
     assert cli._BOT_REGISTRY is BOT_SPECS_BY_NAME
+    assert cli.load_frozen_candidate_catalog() is FROZEN_CANDIDATES_BY_NAME
 
 
 def test_run_config_type_is_available_to_cli_callers() -> None:

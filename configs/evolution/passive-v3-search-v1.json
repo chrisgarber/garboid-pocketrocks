@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "name": "passive-v3-search-v1",
+  "personality": "passive",
+  "predecessor_name": "passive-v2",
+  "development_corpus": {
+    "name": "development-passive-v3-broad-v1",
+    "digest": "64124822038895aa4048469244c99177c877271368cc246d2250b737a14bf658"
+  },
+  "search_seed": 11003,
+  "algorithm": {
+    "name": "mu-plus-lambda-v1",
+    "generation_count": 8,
+    "population_size": 12,
+    "elite_count": 4,
+    "mutation_radius_steps": 4
+  },
+  "initial_coefficients": {
+    "liquidity_strength": "0.15",
+    "future_cash_weight": "0.60",
+    "objective_progress_weight": "0.15",
+    "bid_shading": "0.30"
+  },
+  "coefficient_grids": {
+    "liquidity_strength": {
+      "minimum": "0.00",
+      "maximum": "1.50",
+      "step": "0.05"
+    },
+    "future_cash_weight": {
+      "minimum": "0.00",
+      "maximum": "2.00",
+      "step": "0.05"
+    },
+    "objective_progress_weight": {
+      "minimum": "0.00",
+      "maximum": "1.00",
+      "step": "0.05"
+    },
+    "bid_shading": {
+      "minimum": "0.00",
+      "maximum": "1.00",
+      "step": "0.05"
+    }
+  }
+}

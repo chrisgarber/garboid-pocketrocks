@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "name": "development-passive-v3-broad-v1",
+  "purpose": "development",
+  "root_seed": 12003,
+  "repetitions_per_seat_cell": 4,
+  "charts": ["A", "B", "C", "D", "E"],
+  "player_counts": [3, 4, 5],
+  "opponent_names": [
+    "random",
+    "fixed-bid",
+    "sdk-greedy-value-v1",
+    "aggressive-v1",
+    "balanced-v1",
+    "passive-v1",
+    "aggressive-v2",
+    "balanced-v2"
+  ]
+}

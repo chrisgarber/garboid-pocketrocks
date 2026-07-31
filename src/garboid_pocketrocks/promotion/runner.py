@@ -14,6 +14,12 @@ from garboid_pocketrocks.promotion.analysis import (
     PromotionFailure,
     analyze_promotion,
 )
+from garboid_pocketrocks.promotion.candidates import (
+    FrozenCandidateProvenance,
+    ResolvedPromotionCandidate,
+    validate_frozen_promotion_opponents,
+    validate_promotion_candidate,
+)
 from garboid_pocketrocks.promotion.corpus import (
     PromotionCorpus,
     PromotionCorpusError,
@@ -51,6 +57,7 @@ class PromotionRunConfig:
     bootstrap_samples: int = 1_000
     bootstrap_seed: int = 0
     batch_size: int = 64
+    candidate_provenance: FrozenCandidateProvenance | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,6 +86,23 @@ class PromotionRunner:
     ) -> PromotionRun:
         """Run one comparison, writing a fail-closed report for domain failures."""
 
+        validate_promotion_candidate(
+            ResolvedPromotionCandidate(
+                bot_spec=config.candidate,
+                frozen_provenance=config.candidate_provenance,
+            ),
+            incumbent=config.incumbent,
+            development=config.development,
+            registry=registry,
+        )
+        validate_frozen_promotion_opponents(
+            config.candidate_provenance,
+            (
+                registry.get(opponent_name)
+                for opponent_name in config.held_out.recipe.opponent_names
+            ),
+            required_names=config.held_out.recipe.opponent_names,
+        )
         validate_artifact_output_dir(output_dir, overwrite=overwrite)
         resolved_repository_commit = (
             repository_commit if repository_commit is not None else _repository_commit()
@@ -165,6 +189,7 @@ class PromotionRunner:
             workers=workers,
             batch_size=config.batch_size,
             analysis=analysis,
+            candidate_provenance=config.candidate_provenance,
         )
         artifacts = write_promotion_artifacts(
             output_dir,
@@ -173,6 +198,7 @@ class PromotionRunner:
             development=config.development,
             held_out=config.held_out,
             overwrite=overwrite,
+            registry=registry,
         )
         return PromotionRun(
             config=config,

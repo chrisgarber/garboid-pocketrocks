@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 
-from garboid_pocketrocks.bots import BotSpec, RandomBot
+from garboid_pocketrocks.bots import BotBrain, BotSpec, RandomBot
+from garboid_pocketrocks.promotion.candidates import FrozenCandidateProvenance
 from garboid_pocketrocks.promotion.corpus import (
     PromotionCase,
     PromotionCorpus,
@@ -15,6 +16,98 @@ from garboid_pocketrocks.simulator.monte_carlo import (
     MonteCarloResult,
 )
 from garboid_pocketrocks.simulator.session import SessionScore
+
+
+@dataclass(frozen=True, slots=True)
+class FrozenCandidateFixture:
+    bot_spec: BotSpec
+    predecessor_name: str
+    development_corpus_name: str
+    development_corpus_digest: str
+    search_name: str
+    repository_commit: str
+    freeze_digest: str
+    profile_digest: str
+    manifest_digest: str
+    search_report_digest: str
+    candidate_evaluations_digest: str
+
+
+class EvilFactory:
+    """Build different behavior while claiming equality with every factory."""
+
+    def __call__(self, seed: int | None) -> BotBrain:
+        return RandomBot.build_brain(seed)
+
+    def __eq__(self, other: object) -> bool:
+        del other
+        return True
+
+
+class EvilString(str):
+    """Carry different text while claiming equality with every string."""
+
+    __hash__ = str.__hash__
+
+    def __eq__(self, other: object) -> bool:
+        del other
+        return True
+
+    def __ne__(self, other: object) -> bool:
+        del other
+        return False
+
+
+class EvilProvenance(FrozenCandidateProvenance):
+    """Carry forged fields while claiming equality with every provenance."""
+
+    def __eq__(self, other: object) -> bool:
+        del other
+        return True
+
+    def __ne__(self, other: object) -> bool:
+        del other
+        return False
+
+
+def evil_provenance(
+    trusted: FrozenCandidateProvenance,
+) -> EvilProvenance:
+    return EvilProvenance(
+        candidate_name=trusted.candidate_name,
+        candidate_bot_id=trusted.candidate_bot_id,
+        predecessor_name=trusted.predecessor_name,
+        development_corpus_name=trusted.development_corpus_name,
+        development_corpus_digest=trusted.development_corpus_digest,
+        search_name="forged-search-name",
+        repository_commit=trusted.repository_commit,
+        freeze_digest=trusted.freeze_digest,
+        profile_digest=trusted.profile_digest,
+        manifest_digest=trusted.manifest_digest,
+        search_report_digest=trusted.search_report_digest,
+        candidate_evaluations_digest=trusted.candidate_evaluations_digest,
+    )
+
+
+def frozen_candidate_fixture(
+    *,
+    bot_spec: BotSpec,
+    predecessor_name: str,
+    development: PromotionCorpus,
+) -> FrozenCandidateFixture:
+    return FrozenCandidateFixture(
+        bot_spec=bot_spec,
+        predecessor_name=predecessor_name,
+        development_corpus_name=development.recipe.name,
+        development_corpus_digest=development.digest,
+        search_name="fixture-v3-search-v1",
+        repository_commit="1" * 40,
+        freeze_digest="a" * 64,
+        profile_digest="b" * 64,
+        manifest_digest="c" * 64,
+        search_report_digest="d" * 64,
+        candidate_evaluations_digest="e" * 64,
+    )
 
 
 def promotion_plan(*, pair_count: int = 3) -> PromotionPlan:

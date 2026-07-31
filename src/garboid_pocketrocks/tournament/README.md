@@ -8,7 +8,7 @@ human- and machine-readable artifacts.
 
 ```bash
 uv run --extra neural garboid-tournament \
-  --output-dir tournament-results
+  --output-dir artifacts/tournaments/default
 ```
 
 Current defaults are 15,000 games, player counts three through five, value
@@ -31,7 +31,7 @@ Decision diagnostics are opt-in:
 ```bash
 uv run --extra neural garboid-tournament \
   --decision-reports \
-  --output-dir tournament-results
+  --output-dir artifacts/tournaments/diagnostics
 ```
 
 The flag records each already-selected public decision while retaining batch

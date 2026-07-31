@@ -14,27 +14,33 @@ from garboid_pocketrocks.bots import (
     AggressiveHeuristicBrain,
     AggressiveHeuristicV1Brain,
     AggressiveHeuristicV2Brain,
+    AggressiveHeuristicV3Brain,
     BalancedHeuristicBot,
     BalancedHeuristicBrain,
     BalancedHeuristicV1Brain,
     BalancedHeuristicV2Brain,
+    BalancedHeuristicV3Brain,
     BotSpec,
     PassiveHeuristicBot,
     PassiveHeuristicBrain,
     PassiveHeuristicV1Brain,
     PassiveHeuristicV2Brain,
+    PassiveHeuristicV3Brain,
     PocketRocksFastBot,
 )
 from garboid_pocketrocks.bots.heuristic import (
     AGGRESSIVE_HEURISTIC_BOT_SPEC,
     AGGRESSIVE_HEURISTIC_V1_BOT_SPEC,
     AGGRESSIVE_HEURISTIC_V2_BOT_SPEC,
+    AGGRESSIVE_HEURISTIC_V3_BOT_SPEC,
     BALANCED_HEURISTIC_BOT_SPEC,
     BALANCED_HEURISTIC_V1_BOT_SPEC,
     BALANCED_HEURISTIC_V2_BOT_SPEC,
+    BALANCED_HEURISTIC_V3_BOT_SPEC,
     PASSIVE_HEURISTIC_BOT_SPEC,
     PASSIVE_HEURISTIC_V1_BOT_SPEC,
     PASSIVE_HEURISTIC_V2_BOT_SPEC,
+    PASSIVE_HEURISTIC_V3_BOT_SPEC,
     HeuristicBotBrain,
 )
 from garboid_pocketrocks.diagnostics.trace import HeuristicBidExplanation
@@ -43,6 +49,7 @@ from garboid_pocketrocks.heuristics.profiles import (
     BALANCED_PROFILE,
     HEURISTIC_V1,
     HEURISTIC_V2,
+    HEURISTIC_V3,
 )
 from garboid_pocketrocks.heuristics.valuation import BidEvaluation, HeuristicValuator
 from garboid_pocketrocks.knowledge import (
@@ -128,6 +135,9 @@ def test_versioned_heuristic_specs_use_names_as_private_simulation_ids() -> None
         AGGRESSIVE_HEURISTIC_V2_BOT_SPEC,
         BALANCED_HEURISTIC_V2_BOT_SPEC,
         PASSIVE_HEURISTIC_V2_BOT_SPEC,
+        AGGRESSIVE_HEURISTIC_V3_BOT_SPEC,
+        BALANCED_HEURISTIC_V3_BOT_SPEC,
+        PASSIVE_HEURISTIC_V3_BOT_SPEC,
     )
 
     assert tuple(spec.name for spec in specs) == (
@@ -137,6 +147,9 @@ def test_versioned_heuristic_specs_use_names_as_private_simulation_ids() -> None
         "aggressive-v2",
         "balanced-v2",
         "passive-v2",
+        "aggressive-v3",
+        "balanced-v3",
+        "passive-v3",
     )
     assert all(spec.bot_id == spec.name for spec in specs)
 
@@ -166,6 +179,17 @@ def test_versioned_heuristic_specs_use_names_as_private_simulation_ids() -> None
             HEURISTIC_V2.balanced,
         ),
         (PASSIVE_HEURISTIC_V2_BOT_SPEC, PassiveHeuristicV2Brain, HEURISTIC_V2.passive),
+        (
+            AGGRESSIVE_HEURISTIC_V3_BOT_SPEC,
+            AggressiveHeuristicV3Brain,
+            HEURISTIC_V3.aggressive,
+        ),
+        (
+            BALANCED_HEURISTIC_V3_BOT_SPEC,
+            BalancedHeuristicV3Brain,
+            HEURISTIC_V3.balanced,
+        ),
+        (PASSIVE_HEURISTIC_V3_BOT_SPEC, PassiveHeuristicV3Brain, HEURISTIC_V3.passive),
     ),
 )
 def test_versioned_spec_factories_use_pinned_profiles(
@@ -180,21 +204,21 @@ def test_versioned_spec_factories_use_pinned_profiles(
 
 
 @pytest.mark.parametrize(
-    ("latest_brain", "v2_brain"),
+    ("latest_brain", "v3_brain"),
     (
-        (AggressiveHeuristicBrain, AggressiveHeuristicV2Brain),
-        (BalancedHeuristicBrain, BalancedHeuristicV2Brain),
-        (PassiveHeuristicBrain, PassiveHeuristicV2Brain),
+        (AggressiveHeuristicBrain, AggressiveHeuristicV3Brain),
+        (BalancedHeuristicBrain, BalancedHeuristicV3Brain),
+        (PassiveHeuristicBrain, PassiveHeuristicV3Brain),
     ),
 )
-def test_unversioned_brains_match_v2_decisions(
+def test_unversioned_brains_match_v3_decisions(
     latest_brain: Callable[[], HeuristicBotBrain],
-    v2_brain: Callable[[], HeuristicBotBrain],
+    v3_brain: Callable[[], HeuristicBotBrain],
 ) -> None:
     context = make_context(action_id=ActionId.AUCTION2, legal_max=17)
     knowledge = make_knowledge()
 
-    assert latest_brain().choose_decision(context, knowledge) == v2_brain().choose_decision(
+    assert latest_brain().choose_decision(context, knowledge) == v3_brain().choose_decision(
         context,
         knowledge,
     )
@@ -498,6 +522,9 @@ def test_exported_heuristic_specs_are_picklable_and_build_fresh_brains() -> None
         AGGRESSIVE_HEURISTIC_V2_BOT_SPEC,
         BALANCED_HEURISTIC_V2_BOT_SPEC,
         PASSIVE_HEURISTIC_V2_BOT_SPEC,
+        AGGRESSIVE_HEURISTIC_V3_BOT_SPEC,
+        BALANCED_HEURISTIC_V3_BOT_SPEC,
+        PASSIVE_HEURISTIC_V3_BOT_SPEC,
     )
 
     for spec in specs:

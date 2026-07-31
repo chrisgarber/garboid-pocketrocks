@@ -13,6 +13,9 @@ Package READMEs are the current operational truth:
   ratings, artifacts, and reproduction.
 - [Promotion](../src/garboid_pocketrocks/promotion/README.md): matched
   held-out games, promotion decisions, and evidence.
+- [Heuristic evolution](../src/garboid_pocketrocks/evolution/README.md):
+  development-only coefficient search, transactional evidence, and frozen
+  candidate handoff.
 - [Heuristics](../src/garboid_pocketrocks/heuristics/README.md): public belief,
   valuation, profiles, and released generations.
 - [Neural](../src/garboid_pocketrocks/neural/README.md): self-play training,
@@ -43,12 +46,15 @@ architecture transcripts.
   excluded from version control. Dated reports under
   [`docs/benchmarks`](benchmarks/) retain the summarized results and
   reproduction commands.
-- [`docs/benchmarks/promotions`](benchmarks/promotions/) contains immutable
-  promotion reports and paired game summaries referenced by dated promotion
-  notes.
+- Promotion and evolution conclusions live in concise dated benchmark notes.
+  Their complete deterministic receipts stay in the gitignored `artifacts/`
+  tree; versioned inputs and released frozen candidates or checkpoints remain
+  in source control.
 
-Reports and artifacts are historical evidence. Do not silently rewrite them
-when current behavior changes; add a newly dated result instead.
+Benchmark notes and released artifacts are historical evidence. Do not
+silently rewrite them when current behavior changes; add a newly dated result
+instead. Raw per-game logs, bootstrap samples, repeated corpus snapshots, and
+failed-run receipts are reproducible working data rather than documentation.
 
 ## Review artifacts
 

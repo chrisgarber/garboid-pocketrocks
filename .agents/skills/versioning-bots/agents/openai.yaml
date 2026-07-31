@@ -1,4 +1,4 @@
 interface:
   display_name: "Versioning Bots"
-  short_description: "Preserve bot generations as behavior evolves"
-  default_prompt: "Use $versioning-bots when changing a bot strategy or strength."
+  short_description: "Version bots and retain only durable artifacts"
+  default_prompt: "Use $versioning-bots to version a bot change and keep its training artifacts lean."

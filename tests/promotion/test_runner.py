@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import json
 import math
 import subprocess
@@ -9,10 +10,17 @@ from pathlib import Path
 import pytest
 from pocketrocks import BotDecision, DecisionContext
 
-from garboid_pocketrocks.bots import BotSpec, BrainFactory, RandomBot
+from garboid_pocketrocks.bots import BOT_SPECS_BY_NAME, BotSpec, BrainFactory, RandomBot
+from garboid_pocketrocks.heuristics.frozen import FROZEN_CANDIDATES_BY_NAME
 from garboid_pocketrocks.knowledge import RulesetKnowledge
 from garboid_pocketrocks.promotion.analysis import PromotionAnalysis
-from garboid_pocketrocks.promotion.corpus import PromotionCorpus, PromotionCorpusRecipe
+from garboid_pocketrocks.promotion.candidates import resolve_promotion_candidate
+from garboid_pocketrocks.promotion.corpus import (
+    PromotionCorpus,
+    PromotionCorpusRecipe,
+    load_promotion_corpus,
+    recompute_promotion_corpus_digest,
+)
 from garboid_pocketrocks.promotion.runner import (
     PromotionRun,
     PromotionRunConfig,
@@ -20,9 +28,16 @@ from garboid_pocketrocks.promotion.runner import (
     _repository_commit,
 )
 from garboid_pocketrocks.simulator.errors import SimulationError
-from garboid_pocketrocks.simulator.monte_carlo import MonteCarloResult
+from garboid_pocketrocks.simulator.monte_carlo import MonteCarloResult, MonteCarloRunner
 
-from .helpers import promotion_plan
+from .helpers import (
+    EvilFactory,
+    EvilString,
+    FrozenCandidateFixture,
+    evil_provenance,
+    frozen_candidate_fixture,
+    promotion_plan,
+)
 
 
 class IllegalBidBrain:
@@ -132,6 +147,46 @@ def _run_inputs(
     )
 
 
+def _frozen_run_inputs() -> tuple[
+    PromotionRunConfig,
+    dict[str, BotSpec],
+    dict[str, FrozenCandidateFixture],
+]:
+    config, registry = _run_inputs(
+        incumbent=BOT_SPECS_BY_NAME["balanced-v2"],
+        pair_count=1,
+    )
+    development = replace(
+        config.development,
+        digest=recompute_promotion_corpus_digest(config.development),
+    )
+    candidate = BotSpec.for_simulation(
+        "balanced-v3-candidate-test",
+        RandomBot.build_brain,
+    )
+    frozen = frozen_candidate_fixture(
+        bot_spec=candidate,
+        predecessor_name=config.incumbent.name,
+        development=development,
+    )
+    catalog = {candidate.name: frozen}
+    resolved = resolve_promotion_candidate(
+        candidate.name,
+        registry=registry,
+        frozen_candidates=catalog,
+    )
+    return (
+        replace(
+            config,
+            candidate=candidate,
+            development=development,
+            candidate_provenance=resolved.frozen_provenance,
+        ),
+        registry,
+        catalog,
+    )
+
+
 def _run(
     tmp_path: Path,
     *,
@@ -236,6 +291,352 @@ def test_candidate_and_incumbent_identity_collision_writes_a_report(tmp_path: Pa
         "candidate_incumbent_identity_collision"
     ]
     assert run.artifacts.report_json.is_file()
+
+
+def test_runner_does_not_accept_an_alternate_frozen_candidate_catalog() -> None:
+    fake_catalog = {"forged-candidate": object()}
+
+    with pytest.raises(TypeError, match="unexpected keyword"):
+        inspect.signature(PromotionRunner.run).bind_partial(
+            frozen_candidates=fake_catalog,
+        )
+
+
+def test_runner_rejects_a_forged_frozen_identity_in_the_caller_registry(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    frozen = next(iter(FROZEN_CANDIDATES_BY_NAME.values()))
+    forged = BotSpec.for_simulation(frozen.bot_spec.name, RandomBot.build_brain)
+    config, registry = _run_inputs(pair_count=1)
+    registry = {**registry, forged.name: forged}
+
+    def forbidden(*args: object, **kwargs: object) -> None:
+        del args, kwargs
+        raise AssertionError("simulation started with a forged frozen identity")
+
+    monkeypatch.setattr(MonteCarloRunner, "run_jobs", forbidden)
+
+    with pytest.raises(ValueError, match="provenance"):
+        PromotionRunner.run(
+            replace(config, candidate=forged),
+            registry=registry,
+            workers=1,
+            output_dir=tmp_path,
+            repository_commit="test-commit",
+        )
+
+    assert not tuple(tmp_path.iterdir())
+
+
+def test_runner_rejects_a_forged_predecessor_for_a_real_frozen_candidate(
+    tmp_path: Path,
+) -> None:
+    frozen = next(iter(FROZEN_CANDIDATES_BY_NAME.values()))
+    resolved = resolve_promotion_candidate(
+        frozen.bot_spec.name,
+        registry=BOT_SPECS_BY_NAME,
+        frozen_candidates=FROZEN_CANDIDATES_BY_NAME,
+    )
+    forged_predecessor = BotSpec.for_simulation(
+        frozen.predecessor_name,
+        RandomBot.build_brain,
+    )
+    config, registry = _run_inputs(
+        candidate=frozen.bot_spec,
+        incumbent=forged_predecessor,
+        pair_count=1,
+    )
+
+    with pytest.raises(ValueError, match="exact canonical predecessor"):
+        PromotionRunner.run(
+            replace(config, candidate_provenance=resolved.frozen_provenance),
+            registry={**registry, forged_predecessor.name: forged_predecessor},
+            workers=1,
+            output_dir=tmp_path,
+            repository_commit="test-commit",
+        )
+
+    assert not tuple(tmp_path.iterdir())
+
+
+def test_runner_rejects_a_different_equal_frozen_bot_spec(
+    tmp_path: Path,
+) -> None:
+    frozen = next(iter(FROZEN_CANDIDATES_BY_NAME.values()))
+    resolved = resolve_promotion_candidate(
+        frozen.bot_spec.name,
+        registry=BOT_SPECS_BY_NAME,
+        frozen_candidates=FROZEN_CANDIDATES_BY_NAME,
+    )
+    forged = replace(frozen.bot_spec, brain_factory=EvilFactory())
+    development = load_promotion_corpus(
+        Path(f"configs/promotion/development-{frozen.personality}-v3-broad-v1.json"),
+        registry=BOT_SPECS_BY_NAME,
+    )
+    _, held_out = _corpora(pair_count=1)
+    held_out = replace(
+        held_out,
+        recipe=replace(
+            held_out.recipe,
+            opponent_names=("random", "aggressive-v1"),
+        ),
+    )
+    assert forged == frozen.bot_spec
+
+    with pytest.raises(ValueError, match="trusted frozen candidate record"):
+        PromotionRunner.run(
+            PromotionRunConfig(
+                candidate=forged,
+                incumbent=BOT_SPECS_BY_NAME[frozen.predecessor_name],
+                development=development,
+                held_out=held_out,
+                candidate_provenance=resolved.frozen_provenance,
+            ),
+            registry=BOT_SPECS_BY_NAME,
+            workers=1,
+            output_dir=tmp_path,
+            repository_commit="test-commit",
+        )
+
+    assert not tuple(tmp_path.iterdir())
+
+
+@pytest.mark.parametrize(
+    ("field_name", "forged_value"),
+    (
+        ("search_name", "forged-search-name"),
+        ("profile_digest", "f" * 64),
+    ),
+)
+def test_runner_rejects_lying_provenance_string_subclasses(
+    tmp_path: Path,
+    field_name: str,
+    forged_value: str,
+) -> None:
+    frozen = next(iter(FROZEN_CANDIDATES_BY_NAME.values()))
+    resolved = resolve_promotion_candidate(
+        frozen.bot_spec.name,
+        registry=BOT_SPECS_BY_NAME,
+        frozen_candidates=FROZEN_CANDIDATES_BY_NAME,
+    )
+    assert resolved.frozen_provenance is not None
+    lying_value = EvilString(forged_value)
+    forged_provenance = replace(
+        resolved.frozen_provenance,
+        **{field_name: lying_value},
+    )
+    development = load_promotion_corpus(
+        Path("configs/promotion/development-v1.json"),
+        registry=BOT_SPECS_BY_NAME,
+    )
+    _, held_out = _corpora(pair_count=1)
+    held_out = replace(
+        held_out,
+        recipe=replace(
+            held_out.recipe,
+            opponent_names=("random", "aggressive-v1"),
+        ),
+    )
+
+    with pytest.raises(ValueError, match="built-in strings"):
+        PromotionRunner.run(
+            PromotionRunConfig(
+                candidate=frozen.bot_spec,
+                incumbent=BOT_SPECS_BY_NAME[frozen.predecessor_name],
+                development=development,
+                held_out=held_out,
+                candidate_provenance=forged_provenance,
+            ),
+            registry=BOT_SPECS_BY_NAME,
+            workers=1,
+            output_dir=tmp_path,
+            repository_commit="test-commit",
+        )
+
+    assert not tuple(tmp_path.iterdir())
+
+
+def test_runner_rejects_a_lying_provenance_subclass(
+    tmp_path: Path,
+) -> None:
+    frozen = next(iter(FROZEN_CANDIDATES_BY_NAME.values()))
+    resolved = resolve_promotion_candidate(
+        frozen.bot_spec.name,
+        registry=BOT_SPECS_BY_NAME,
+        frozen_candidates=FROZEN_CANDIDATES_BY_NAME,
+    )
+    assert resolved.frozen_provenance is not None
+    forged_provenance = evil_provenance(resolved.frozen_provenance)
+    development = load_promotion_corpus(
+        Path("configs/promotion/development-v1.json"),
+        registry=BOT_SPECS_BY_NAME,
+    )
+    _, held_out = _corpora(pair_count=1)
+    held_out = replace(
+        held_out,
+        recipe=replace(
+            held_out.recipe,
+            opponent_names=("random", "aggressive-v1"),
+        ),
+    )
+
+    with pytest.raises(ValueError, match="exact provenance type"):
+        PromotionRunner.run(
+            PromotionRunConfig(
+                candidate=frozen.bot_spec,
+                incumbent=BOT_SPECS_BY_NAME[frozen.predecessor_name],
+                development=development,
+                held_out=held_out,
+                candidate_provenance=forged_provenance,
+            ),
+            registry=BOT_SPECS_BY_NAME,
+            workers=1,
+            output_dir=tmp_path,
+            repository_commit="test-commit",
+        )
+
+    assert not tuple(tmp_path.iterdir())
+
+
+def test_frozen_runner_rejects_a_forged_canonical_name_opponent(
+    tmp_path: Path,
+) -> None:
+    frozen = next(iter(FROZEN_CANDIDATES_BY_NAME.values()))
+    resolved = resolve_promotion_candidate(
+        frozen.bot_spec.name,
+        registry=BOT_SPECS_BY_NAME,
+        frozen_candidates=FROZEN_CANDIDATES_BY_NAME,
+    )
+    development = load_promotion_corpus(
+        Path(f"configs/promotion/development-{frozen.personality}-v3-broad-v1.json"),
+        registry=BOT_SPECS_BY_NAME,
+    )
+    _, held_out = _corpora(pair_count=1)
+    held_out = replace(
+        held_out,
+        recipe=replace(
+            held_out.recipe,
+            opponent_names=("random", "aggressive-v1"),
+        ),
+    )
+    forged_opponent = BotSpec.for_simulation("random", RandomBot.build_brain)
+    registry = {
+        **BOT_SPECS_BY_NAME,
+        forged_opponent.name: forged_opponent,
+    }
+    config = PromotionRunConfig(
+        candidate=frozen.bot_spec,
+        incumbent=BOT_SPECS_BY_NAME[frozen.predecessor_name],
+        development=development,
+        held_out=held_out,
+        candidate_provenance=resolved.frozen_provenance,
+    )
+
+    with pytest.raises(ValueError, match="exact canonical released opponent"):
+        PromotionRunner.run(
+            config,
+            registry=registry,
+            workers=1,
+            output_dir=tmp_path,
+            repository_commit="test-commit",
+        )
+
+    assert not tuple(tmp_path.iterdir())
+
+
+@pytest.mark.parametrize("tampering", ("candidate", "provenance"))
+def test_runner_rejects_identity_swap_and_fabricated_frozen_provenance(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tampering: str,
+) -> None:
+    config, registry, catalog = _frozen_run_inputs()
+    monkeypatch.setattr(
+        "garboid_pocketrocks.promotion.candidates.load_frozen_candidate_catalog",
+        lambda: catalog,
+    )
+    assert config.candidate_provenance is not None
+    provenance = config.candidate_provenance
+    if tampering == "candidate":
+        config = replace(
+            config,
+            candidate=BotSpec.for_simulation(
+                config.candidate.name,
+                illegal_bid_brain,
+            ),
+        )
+    else:
+        config = replace(
+            config,
+            candidate_provenance=replace(
+                provenance,
+                profile_digest="f" * 64,
+            ),
+        )
+
+    def forbidden(*args: object, **kwargs: object) -> None:
+        del args, kwargs
+        raise AssertionError("simulation started with untrusted frozen provenance")
+
+    monkeypatch.setattr(MonteCarloRunner, "run_jobs", forbidden)
+
+    with pytest.raises(ValueError, match="trusted frozen candidate"):
+        PromotionRunner.run(
+            config,
+            registry=registry,
+            workers=1,
+            output_dir=tmp_path,
+            repository_commit="test-commit",
+        )
+
+    assert not tuple(tmp_path.iterdir())
+
+
+@pytest.mark.parametrize(
+    "corpus_tampering",
+    ("name", "stored_digest", "content"),
+)
+def test_runner_recomputes_and_rebinds_the_development_corpus_before_simulation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    corpus_tampering: str,
+) -> None:
+    config, registry, catalog = _frozen_run_inputs()
+    monkeypatch.setattr(
+        "garboid_pocketrocks.promotion.candidates.load_frozen_candidate_catalog",
+        lambda: catalog,
+    )
+    if corpus_tampering == "name":
+        development = replace(
+            config.development,
+            recipe=replace(config.development.recipe, name="other-development"),
+        )
+        development = replace(
+            development,
+            digest=recompute_promotion_corpus_digest(development),
+        )
+    elif corpus_tampering == "stored_digest":
+        development = replace(config.development, digest="f" * 64)
+    else:
+        development = replace(config.development, cases=())
+
+    def forbidden(*args: object, **kwargs: object) -> None:
+        del args, kwargs
+        raise AssertionError("simulation started with stale development evidence")
+
+    monkeypatch.setattr(MonteCarloRunner, "run_jobs", forbidden)
+
+    with pytest.raises(ValueError, match="development corpus"):
+        PromotionRunner.run(
+            replace(config, development=development),
+            registry=registry,
+            workers=1,
+            output_dir=tmp_path,
+            repository_commit="test-commit",
+        )
+
+    assert not tuple(tmp_path.iterdir())
 
 
 def test_insufficient_filtered_opponents_preserve_pool_evidence(tmp_path: Path) -> None:

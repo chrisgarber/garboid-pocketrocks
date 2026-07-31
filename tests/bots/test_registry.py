@@ -27,6 +27,9 @@ def test_registered_bot_specs_have_unique_names_and_ids() -> None:
         "aggressive-v2",
         "balanced-v2",
         "passive-v2",
+        "aggressive-v3",
+        "balanced-v3",
+        "passive-v3",
         "sdk-greedy-value-v1",
         "vector_ppo_small_v1_g1500",
         "vector_ppo_large_v1_g350k",
@@ -34,9 +37,10 @@ def test_registered_bot_specs_have_unique_names_and_ids() -> None:
     assert len({spec.name for spec in specs}) == len(specs)
     assert len({spec.bot_id for spec in specs}) == len(specs)
     assert BOT_SPECS_BY_NAME == {spec.name: spec for spec in specs}
+    assert all("-candidate-" not in spec.name for spec in specs)
 
 
-def test_default_tournament_specs_are_v2_scorecard_top_ten() -> None:
+def test_default_tournament_specs_include_curated_field_and_v3_personalities() -> None:
     specs = registry_module.DEFAULT_TOURNAMENT_BOT_SPECS
 
     assert tuple(spec.name for spec in specs) == (
@@ -50,6 +54,9 @@ def test_default_tournament_specs_are_v2_scorecard_top_ten() -> None:
         "vector_ppo_large_v1_g350k",
         "passive-v2",
         "passive-v1",
+        "aggressive-v3",
+        "balanced-v3",
+        "passive-v3",
     )
 
 

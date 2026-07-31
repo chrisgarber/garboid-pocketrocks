@@ -32,18 +32,21 @@ def _statistics_by_name(result: MonteCarloResult) -> dict[str, BotStatistics]:
     return {statistics.bot_name: statistics for statistics in result.bot_statistics}
 
 
-def _behavior_summary(by_name: dict[str, BotStatistics]) -> str:
-    return ", ".join(
-        (
-            f"{name}: pass_rate={statistics.behavior.pass_rate():.6f}, "
-            f"mean_nonzero_bid={statistics.behavior.mean_nonzero_bid():.6f}, "
-            f"resource_cards_won={statistics.behavior.resource_cards_won}"
-        )
-        for name, statistics in sorted(by_name.items())
-    )
+def _behavior_snapshot(by_name: dict[str, BotStatistics]) -> dict[str, dict[str, int]]:
+    return {
+        name: {
+            "bidding_requests": statistics.behavior.bidding_requests,
+            "passes": statistics.behavior.passes,
+            "nonzero_bid_count": len(statistics.behavior.nonzero_bids),
+            "nonzero_bid_total": sum(statistics.behavior.nonzero_bids),
+            "resource_cards_won": statistics.behavior.resource_cards_won,
+            "objectives_claimed": statistics.behavior.objectives_claimed,
+        }
+        for name, statistics in by_name.items()
+    }
 
 
-def test_seed_42_live_a_heuristic_tournament_profiles_are_distinct() -> None:
+def test_seed_42_live_a_heuristic_tournament_matches_hand_tuned_v3_behavior() -> None:
     config = _benchmark_config()
 
     result = MonteCarloRunner.run(config, workers=1)
@@ -56,14 +59,29 @@ def test_seed_42_live_a_heuristic_tournament_profiles_are_distinct() -> None:
 
     by_name = _statistics_by_name(result)
     assert set(by_name) == {"aggressive", "balanced", "passive"}
-    summary = _behavior_summary(by_name)
-    assert (
-        by_name["aggressive"].behavior.mean_nonzero_bid()
-        > by_name["balanced"].behavior.mean_nonzero_bid()
-        > by_name["passive"].behavior.mean_nonzero_bid()
-    ), summary
-    assert (
-        by_name["aggressive"].behavior.resource_cards_won
-        > by_name["balanced"].behavior.resource_cards_won
-        > by_name["passive"].behavior.resource_cards_won
-    ), summary
+    assert _behavior_snapshot(by_name) == {
+        "aggressive": {
+            "bidding_requests": 1587,
+            "passes": 340,
+            "nonzero_bid_count": 1247,
+            "nonzero_bid_total": 7658,
+            "resource_cards_won": 656,
+            "objectives_claimed": 227,
+        },
+        "balanced": {
+            "bidding_requests": 1587,
+            "passes": 61,
+            "nonzero_bid_count": 1526,
+            "nonzero_bid_total": 7482,
+            "resource_cards_won": 481,
+            "objectives_claimed": 83,
+        },
+        "passive": {
+            "bidding_requests": 1587,
+            "passes": 253,
+            "nonzero_bid_count": 1334,
+            "nonzero_bid_total": 6446,
+            "resource_cards_won": 363,
+            "objectives_claimed": 37,
+        },
+    }

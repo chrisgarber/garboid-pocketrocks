@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "name": "balanced-v3-search-v1",
+  "personality": "balanced",
+  "predecessor_name": "balanced-v2",
+  "development_corpus": {
+    "name": "development-balanced-v3-broad-v1",
+    "digest": "d556cc940c92ebf3633fde83485d4ba776b6e582f34cf8d445a5c190824b3228"
+  },
+  "search_seed": 11002,
+  "algorithm": {
+    "name": "mu-plus-lambda-v1",
+    "generation_count": 8,
+    "population_size": 12,
+    "elite_count": 4,
+    "mutation_radius_steps": 4
+  },
+  "initial_coefficients": {
+    "liquidity_strength": "0.40",
+    "future_cash_weight": "0.75",
+    "objective_progress_weight": "0.20",
+    "bid_shading": "0.25"
+  },
+  "coefficient_grids": {
+    "liquidity_strength": {
+      "minimum": "0.00",
+      "maximum": "1.50",
+      "step": "0.05"
+    },
+    "future_cash_weight": {
+      "minimum": "0.00",
+      "maximum": "2.00",
+      "step": "0.05"
+    },
+    "objective_progress_weight": {
+      "minimum": "0.00",
+      "maximum": "1.00",
+      "step": "0.05"
+    },
+    "bid_shading": {
+      "minimum": "0.00",
+      "maximum": "1.00",
+      "step": "0.05"
+    }
+  }
+}

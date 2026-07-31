@@ -84,7 +84,7 @@ Rank the curated field with the deterministic tournament:
 
 ```bash
 uv run --extra neural garboid-tournament \
-  --output-dir tournament-results
+  --output-dir artifacts/tournaments/default
 ```
 
 See the [tournament runbook](src/garboid_pocketrocks/tournament/README.md) for
@@ -96,7 +96,7 @@ Run the held-out final exam before promoting a candidate:
 uv run --extra neural garboid-promote \
   --candidate vector_ppo_large_v1_g350k \
   --incumbent vector_ppo_small_v1_g1500 \
-  --output-dir promotion-results/neural-comparison
+  --output-dir artifacts/promotions/neural-comparison
 ```
 
 The committed opponent pool contains all v1/v2 heuristics and the frozen
@@ -105,6 +105,24 @@ opponent seats before matched games are planned.
 
 See the [promotion runbook](src/garboid_pocketrocks/promotion/README.md) for
 the matched-game contract, evidence, and failure reasons.
+
+Search fixed heuristic coefficient grids on development games:
+
+```bash
+uv run garboid-evolve-heuristic \
+  --manifest configs/evolution/balanced-v3-search-v1.json \
+  --development-corpus configs/promotion/development-balanced-v3-broad-v1.json \
+  --output-dir artifacts/evolution/balanced-v3-search-v1
+```
+
+See the [heuristic evolution runbook](src/garboid_pocketrocks/evolution/README.md)
+for the development-only boundary, deterministic evidence, and frozen-candidate
+handoff to held-out promotion.
+
+Full simulation, training, evolution, and promotion receipts belong under the
+gitignored `artifacts/` tree. Commit versioned inputs, released checkpoints or
+frozen candidates, and concise benchmark conclusions instead of raw per-game
+logs and repeated corpus snapshots.
 
 Install the optional neural dependencies and run the production-backed smoke:
 
@@ -133,5 +151,6 @@ runbooks live beside the
 [simulator](src/garboid_pocketrocks/simulator/README.md),
 [tournament](src/garboid_pocketrocks/tournament/README.md),
 [promotion](src/garboid_pocketrocks/promotion/README.md),
+[heuristic evolution](src/garboid_pocketrocks/evolution/README.md),
 [heuristics](src/garboid_pocketrocks/heuristics/README.md), and
 [neural](src/garboid_pocketrocks/neural/README.md) packages.

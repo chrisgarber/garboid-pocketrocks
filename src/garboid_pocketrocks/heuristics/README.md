@@ -25,7 +25,7 @@ The valuator builds an additive win value for every legal integer bid:
 - full value for objectives completed by the lot and shaped option value for
   public progress;
 - concave liquidity value for cash retained for later auctions;
-- v2 future-auction cash value over the public remaining-resource horizon;
+- future-auction cash value over the public remaining-resource horizon;
 - fixed loan and investment cash flows.
 
 The reservation bid is the greatest bid with nonnegative win value. Each
@@ -47,8 +47,11 @@ lowest hand index.
 | v2 | aggressive | 0.75 | 1.50 | 0.25 | 0.05 |
 | v2 | balanced | 0.40 | 0.75 | 0.20 | 0.25 |
 | v2 | passive | 0.15 | 0.60 | 0.15 | 0.30 |
+| v3 | aggressive | 1.00 | 1.95 | 0.15 | 0.40 |
+| v3 | balanced | 0.25 | 1.55 | 0.30 | 0.35 |
+| v3 | passive | 1.50 | 1.80 | 0.95 | 0.45 |
 
-`aggressive`, `balanced`, and `passive` are live remote-capable aliases to v2.
+`aggressive`, `balanced`, and `passive` are live remote-capable aliases to v3.
 Their public IDs are committed constants:
 
 | Alias | Bot ID |
@@ -57,7 +60,7 @@ Their public IDs are committed constants:
 | balanced | `bot_265c84aa-f28e-4a35-b4de-a4f4ee406415` |
 | passive | `bot_9d33c9de-4d90-4608-9a58-d2c77d93e0bd` |
 
-Explicit `*-v1` and `*-v2` names are local simulation identities. Released
+Explicit `*-v1`, `*-v2`, and `*-v3` names are local simulation identities. Released
 profiles and identities follow the
 [immutability decision](../../../docs/architecture/immutable-bot-identities.md).
 
@@ -65,7 +68,7 @@ profiles and identities follow the
 
 ```bash
 uv run garboid-simulate \
-  --bots aggressive-v1,balanced-v2,passive-v2 \
+  --bots aggressive-v1,balanced-v2,passive-v3 \
   --games 1000 \
   --players 3 \
   --ruleset live-E \
@@ -74,7 +77,10 @@ uv run garboid-simulate \
 
 The [v1 benchmark](../../../docs/benchmarks/2026-07-28-heuristic-v1.md) and
 [v2 future-cash benchmark](../../../docs/benchmarks/2026-07-29-future-cash-heuristic.md)
-record frozen results. The
+record frozen results. The v3 coefficients are the frozen winners that passed
+their held-out promotion gates, as recorded in the concise
+[v3 promotion benchmark](../../../docs/benchmarks/2026-07-30-heuristic-v3-candidate-promotions.md).
+The
 [visualization runbook](../../../docs/analysis/heuristic-bot-visualizations.md)
 defines the 100,000-game analysis and its metrics.
 

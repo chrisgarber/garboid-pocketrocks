@@ -6,7 +6,7 @@ import hashlib
 import json
 import re
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Literal, NoReturn, cast
 
@@ -100,9 +100,8 @@ def load_promotion_corpus(
     cases = _expand_cases(recipe)
     _require_unique_engine_seeds(cases, corpus_name=recipe.name)
 
-    expanded_payload = _expanded_payload(recipe, cases)
-    digest = hashlib.sha256(_canonical_json_bytes(expanded_payload)).hexdigest()
-    return PromotionCorpus(recipe=recipe, cases=cases, digest=digest)
+    corpus = PromotionCorpus(recipe=recipe, cases=cases, digest="")
+    return replace(corpus, digest=recompute_promotion_corpus_digest(corpus))
 
 
 def validate_corpus_separation(
@@ -143,6 +142,13 @@ def corpus_snapshot_payload(corpus: PromotionCorpus) -> dict[str, object]:
 
     payload = _expanded_payload(corpus.recipe, corpus.cases)
     return {**payload, "digest": corpus.digest}
+
+
+def recompute_promotion_corpus_digest(corpus: PromotionCorpus) -> str:
+    """Hash the corpus's current normalized recipe and cases."""
+
+    payload = _expanded_payload(corpus.recipe, corpus.cases)
+    return hashlib.sha256(_canonical_json_bytes(payload)).hexdigest()
 
 
 def _load_json_object(path: Path) -> dict[str, object]:
