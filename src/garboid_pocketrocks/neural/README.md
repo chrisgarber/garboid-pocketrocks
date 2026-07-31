@@ -12,7 +12,18 @@ and tournaments:
 - `vector_ppo_large_v1_g350k`, a rounded release alias whose manifest records
   the exact 349,860-game age.
 
-They are local simulation identities, not registered remote live bots.
+The checkpoints themselves are immutable local simulation identities, not
+remote live bots. The separate public live wrapper `ppo-large-teen` currently
+delegates to `vector_ppo_large_v1_g350k` and connects through
+`bot_dd7807c1-93bc-4f70-80c8-a2f2d7d26429`. Run it alongside the other public
+bots with:
+
+```bash
+uv run --extra neural garboid-bots
+```
+
+The frozen checkpoint name remains immutable for reproducibility. The public
+alias is the moving latest pointer for compatible large teen releases.
 
 ## Install and smoke
 
@@ -177,8 +188,8 @@ error, bias, explained variance, correlation, and calibration globally and by
 chart, player count, and game phase. Undefined statistics serialize as `null`,
 never NaN.
 
-Current extension seams include leagues, new model profiles, and a future
-remote neural wrapper. Activating one requires real runtime behavior, tests,
+Current extension seams include leagues, new model profiles, and additional
+remote neural wrappers. Activating one requires real runtime behavior, tests,
 documentation, and the
 [identity policy](../../../docs/architecture/immutable-bot-identities.md);
 configuration fields alone do not make a feature supported.

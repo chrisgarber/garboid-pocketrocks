@@ -15,6 +15,12 @@ from garboid_pocketrocks.promotion.corpus import (
     PromotionCorpus,
     corpus_snapshot_payload,
 )
+from garboid_pocketrocks.promotion.planning import (
+    EffectiveOpponentPool,
+    PromotionPlan,
+    effective_opponent_pool_payload,
+    promotion_plan_payload,
+)
 from garboid_pocketrocks.simulator.monte_carlo import GameSummary
 from garboid_pocketrocks.simulator.runner import FaultMode
 from garboid_pocketrocks.simulator.session import SessionScore
@@ -38,6 +44,8 @@ class PromotionReport:
     candidate: BotSpec
     incumbent: BotSpec
     opponents: tuple[BotSpec, ...]
+    opponent_pool: EffectiveOpponentPool | None
+    plan: PromotionPlan | None
     development: PromotionCorpus
     held_out: PromotionCorpus
     bootstrap_samples: int
@@ -77,6 +85,8 @@ def build_promotion_report(
     candidate: BotSpec,
     incumbent: BotSpec,
     opponents: tuple[BotSpec, ...],
+    opponent_pool: EffectiveOpponentPool | None,
+    plan: PromotionPlan | None,
     development: PromotionCorpus,
     held_out: PromotionCorpus,
     bootstrap_samples: int,
@@ -93,6 +103,8 @@ def build_promotion_report(
         candidate=candidate,
         incumbent=incumbent,
         opponents=opponents,
+        opponent_pool=opponent_pool,
+        plan=plan,
         development=development,
         held_out=held_out,
         bootstrap_samples=bootstrap_samples,
@@ -180,6 +192,12 @@ def promotion_report_payload(report: PromotionReport) -> dict[str, object]:
         "candidate": _bot_identity_payload(report.candidate),
         "incumbent": _bot_identity_payload(report.incumbent),
         "opponents": [_bot_identity_payload(opponent) for opponent in report.opponents],
+        "opponent_pool": (
+            None
+            if report.opponent_pool is None
+            else effective_opponent_pool_payload(report.opponent_pool)
+        ),
+        "effective_plan": (None if report.plan is None else promotion_plan_payload(report.plan)),
         "execution": {
             "bot_ids": [
                 report.candidate.bot_id,

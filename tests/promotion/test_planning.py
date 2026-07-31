@@ -1,14 +1,18 @@
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
-from garboid_pocketrocks.bots import BotSpec, RandomBot
+from garboid_pocketrocks.bots import BOT_SPECS_BY_NAME, BotSpec, RandomBot
+from garboid_pocketrocks.promotion import planning as promotion_planning
 from garboid_pocketrocks.promotion.corpus import (
     PromotionCase,
     PromotionCorpus,
     PromotionCorpusRecipe,
+    load_promotion_corpus,
 )
 from garboid_pocketrocks.promotion.planning import (
     PromotionPlanningError,
@@ -112,6 +116,160 @@ def test_plans_candidate_and_incumbent_as_exact_twin_games() -> None:
         assert candidate_opponent.bot_id == incumbent_opponent.bot_id
 
 
+def test_excludes_exact_candidate_and_incumbent_identities_from_eligible_pool() -> None:
+    candidate = _bot_spec("candidate")
+    incumbent = _bot_spec("incumbent")
+    opponents = tuple(_bot_spec(f"opponent-{letter}") for letter in "abcd")
+    configured = (candidate, incumbent, *opponents)
+    corpus = _held_out_corpus(
+        opponent_names_by_seat=(None, "candidate", "incumbent"),
+        opponent_names=tuple(spec.name for spec in configured),
+    )
+
+    plan = plan_paired_games(
+        corpus,
+        candidate=candidate,
+        incumbent=incumbent,
+        registry={spec.name: spec for spec in configured},
+    )
+
+    assert plan.opponent_pool.configured == configured
+    assert tuple(
+        (exclusion.opponent, exclusion.reason) for exclusion in plan.opponent_pool.exclusions
+    ) == ((candidate, "candidate"), (incumbent, "incumbent"))
+    assert plan.opponent_pool.remaining == opponents
+    assert plan.opponents == (opponents[3], opponents[0])
+    assert plan.pairs[0].case.opponent_names_by_seat == (
+        None,
+        opponents[3].name,
+        opponents[0].name,
+    )
+    assert len(plan.digest) == 64
+    int(plan.digest, 16)
+    assert plan.digest == "ac8034bc307397eeac50f4e727736cf901a68f32bd9e6c4707da9f89857ab84a"
+
+
+def test_fails_closed_when_compared_identity_filter_leaves_too_few_opponents() -> None:
+    candidate = _bot_spec("candidate")
+    incumbent = _bot_spec("incumbent")
+    opponents = tuple(_bot_spec(f"opponent-{letter}") for letter in "abc")
+    configured = (candidate, incumbent, *opponents)
+    corpus = _held_out_corpus(
+        opponent_names_by_seat=(
+            None,
+            "candidate",
+            "incumbent",
+            "opponent-a",
+            "opponent-b",
+        ),
+        opponent_names=tuple(spec.name for spec in configured),
+    )
+
+    with pytest.raises(PromotionPlanningError) as captured:
+        plan_paired_games(
+            corpus,
+            candidate=candidate,
+            incumbent=incumbent,
+            registry={spec.name: spec for spec in configured},
+        )
+
+    assert captured.value.code == "insufficient_eligible_opponents"
+    assert captured.value.opponent_pool is not None
+    assert captured.value.opponent_pool.remaining == opponents
+
+
+def test_plan_digest_covers_every_executable_job_field() -> None:
+    candidate, incumbent, opponent_a, opponent_b = _identities()
+    plan = plan_paired_games(
+        _held_out_corpus(),
+        candidate=candidate,
+        incumbent=incumbent,
+        registry={
+            opponent_a.name: opponent_a,
+            opponent_b.name: opponent_b,
+        },
+    )
+    first_pair = plan.pairs[0]
+    changed_jobs = (
+        replace(first_pair.candidate_game, game_index=99),
+        replace(first_pair.candidate_game, root_seed=77),
+        replace(first_pair.candidate_game, seed=88),
+        replace(first_pair.candidate_game, objectives_enabled=False),
+    )
+
+    for changed_job in changed_jobs:
+        changed_pair = replace(first_pair, candidate_game=changed_job)
+        changed_plan = replace(plan, pairs=(changed_pair,))
+        assert promotion_planning._promotion_plan_digest(changed_plan) != plan.digest
+
+
+def test_plan_digest_covers_monte_carlo_execution_configuration() -> None:
+    candidate, incumbent, opponent_a, opponent_b = _identities()
+    plan = plan_paired_games(
+        _held_out_corpus(),
+        candidate=candidate,
+        incumbent=incumbent,
+        registry={
+            opponent_a.name: opponent_a,
+            opponent_b.name: opponent_b,
+        },
+    )
+    changed_plan = replace(
+        plan,
+        monte_carlo_config=replace(
+            plan.monte_carlo_config,
+            capture_replays=True,
+        ),
+    )
+
+    assert promotion_planning._promotion_plan_digest(changed_plan) != plan.digest
+
+
+def test_committed_plan_pins_filtered_lineups_exposures_and_digest() -> None:
+    corpus = load_promotion_corpus(
+        Path("configs/promotion/held-out-v1.json"),
+        registry=BOT_SPECS_BY_NAME,
+    )
+
+    plan = plan_paired_games(
+        corpus,
+        candidate=BOT_SPECS_BY_NAME["vector_ppo_large_v1_g350k"],
+        incumbent=BOT_SPECS_BY_NAME["vector_ppo_small_v1_g1500"],
+        registry=BOT_SPECS_BY_NAME,
+    )
+
+    assert tuple(
+        (exclusion.opponent.name, exclusion.reason) for exclusion in plan.opponent_pool.exclusions
+    ) == (("vector_ppo_large_v1_g350k", "candidate"),)
+    assert plan.pairs[0].case.opponent_names_by_seat == (
+        None,
+        "aggressive-v2",
+        "balanced-v2",
+    )
+    assert plan.pairs[-1].case.opponent_names_by_seat == (
+        "passive-v1",
+        "aggressive-v2",
+        "balanced-v2",
+        "passive-v2",
+        None,
+    )
+    exposures = Counter(
+        opponent_name
+        for pair in plan.pairs
+        for opponent_name in pair.case.opponent_names_by_seat
+        if opponent_name is not None
+    )
+    assert exposures == {
+        "aggressive-v1": 253,
+        "balanced-v1": 254,
+        "passive-v1": 254,
+        "aggressive-v2": 254,
+        "balanced-v2": 253,
+        "passive-v2": 252,
+    }
+    assert plan.digest == "b131e59b7c3a59ff90d54f7b63fb80e09c0956d221508b2806c4e3ebd0bdcba1"
+
+
 def test_flattens_pairs_in_contiguous_candidate_then_incumbent_order() -> None:
     candidate, incumbent, opponent_a, opponent_b = _identities()
     corpus = _held_out_corpus()
@@ -123,7 +281,11 @@ def test_flattens_pairs_in_contiguous_candidate_then_incumbent_order() -> None:
         engine_seed=67890,
         opponent_names_by_seat=("opponent-a", None, "opponent-b"),
     )
-    corpus = replace(corpus, cases=(*corpus.cases, second_case))
+    corpus = replace(
+        corpus,
+        recipe=replace(corpus.recipe, charts=("A", "B")),
+        cases=(*corpus.cases, second_case),
+    )
 
     plan = plan_paired_games(
         corpus,

@@ -26,9 +26,13 @@ uv run --extra neural garboid-promote \
 
 Candidate and incumbent are registered bot names. The committed corpus files
 cover charts A through E, three through five players, every focal seat, and
-fixed opponent mixtures. Development and held-out seeds must not overlap.
-Use `--overwrite` only when intentionally replacing the three known files in
-an existing output directory.
+an ordered eligible pool containing every v1 and v2 heuristic plus the frozen
+350k PPO policy. If the candidate or incumbent is in that pool, its exact
+name-and-ID identity is removed from ordinary opponent seats before the cases
+are expanded. The remaining opponents rotate deterministically, and both
+twins still receive the same non-focal lineup. Development and held-out seeds
+must not overlap. Use `--overwrite` only when intentionally replacing the
+three known files in an existing output directory.
 
 The process exits with:
 
@@ -48,7 +52,9 @@ Every attempted run that reaches reporting writes three files:
   source commit; all bot names and IDs; execution settings; corpus names,
   digests, and seeds; requested and completed coverage; rating difference;
   uncertainty interval; bootstrap progress; faults; failure reasons; artifact
-  names; and the final `promoted` value.
+  names; and the final `promoted` value. It also records the configured,
+  excluded, and remaining opponent identities plus a canonical digest and
+  complete payload for the effective matchup plan.
 - `paired-games.jsonl` contains one canonical summary for each executed game.
   For pair `n`, game index `2n` is the candidate game and `2n+1` is its
   incumbent twin. Failed evidence may have gaps where a game did not finish.
@@ -76,7 +82,8 @@ Stable report reason codes are:
 - Paired-plan identity: `held_out_corpus_required`,
   `candidate_incumbent_identity_collision`,
   `candidate_opponent_identity_collision`,
-  `incumbent_opponent_identity_collision`, and
+  `incumbent_opponent_identity_collision`,
+  `insufficient_eligible_opponents`, and
   `opponent_identity_mismatch`.
 - Missing or changed game evidence: `unexpected_game`,
   `missing_paired_game`, `seed_mismatch`, `ruleset_mismatch`,
@@ -100,6 +107,16 @@ a direct message.
 Development results may guide tuning. Use the held-out corpus only for the
 final promotion decision; inspecting repeated held-out outcomes and tuning
 against them turns the final exam into development data.
+
+Held-out means that the cases and seeds were not used for tuning. The frozen
+opponent policies may intentionally be the same in development and held-out
+corpora so both measure the same difficulty distribution with independent
+games.
+
+One corpus can produce different effective opponent pools when a configured
+opponent is the candidate or incumbent. Use the effective-plan digest, not
+the source corpus digest alone, when deciding whether two reports describe
+the same matchup experiment.
 
 Never edit a committed corpus version in place. To change coverage, opponent
 mixtures, repetitions, or seeds, add a new file such as
