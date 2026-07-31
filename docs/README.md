@@ -11,8 +11,6 @@ Package READMEs are the current operational truth:
   matches, replay, batching, and faults.
 - [Tournament](../src/garboid_pocketrocks/tournament/README.md): schedules,
   ratings, artifacts, and reproduction.
-- [Promotion](../src/garboid_pocketrocks/promotion/README.md): matched
-  held-out games, promotion decisions, and evidence.
 - [Heuristics](../src/garboid_pocketrocks/heuristics/README.md): public belief,
   valuation, profiles, and released generations.
 - [Neural](../src/garboid_pocketrocks/neural/README.md): self-play training,

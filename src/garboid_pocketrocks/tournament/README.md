@@ -51,10 +51,6 @@ A global rating averages across the configured charts, player counts,
 opponents, and seats. Use condition statistics and calibration diagnostics to
 interpret interactions hidden by one number.
 
-An exploratory tournament does not promote a bot. Before changing a released
-identity, run the matched held-out final exam described in the
-[promotion runbook](../promotion/README.md).
-
 ## Artifacts
 
 Each successful run writes:
