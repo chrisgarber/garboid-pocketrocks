@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from typing import Any, cast
 
+import pytest
 from pocketrocks import DecisionContext
 
 from garboid_pocketrocks.adapters.public_history import (
@@ -117,6 +119,33 @@ def test_live_selector_input_copies_only_live_compatible_fields() -> None:
     assert replace(first, own_hand_suit_ids=(1, 5)) != first
 
 
+def test_live_selector_input_rejects_ruleset_name_or_objective_tampering() -> None:
+    context = _context()
+    canonical = knowledge_for_context(context)
+
+    with pytest.raises(ValueError, match="canonical live ruleset"):
+        LiveSelectorInput.from_live_state(
+            context,
+            replace(canonical, name="live-B"),
+            _history(),
+        )
+
+    with pytest.raises(ValueError, match="canonical live ruleset"):
+        LiveSelectorInput.from_live_state(
+            context,
+            replace(canonical, active_objective_count=1),
+            _history(),
+        )
+
+    unknown_objective = replace(context, objective_ids=(1, 999))
+    with pytest.raises(ValueError, match="invalid objective"):
+        LiveSelectorInput.from_live_state(
+            unknown_objective,
+            knowledge_for_context(unknown_objective),
+            _history(),
+        )
+
+
 def test_fixed_input_reproduces_the_same_expert_choice() -> None:
     experts = load_promoted_experts()
     availability = _available(*(expert.name for expert in experts))
@@ -205,3 +234,17 @@ def test_unknown_availability_identity_is_rejected() -> None:
         assert "unknown expert" in str(error)
     else:
         raise AssertionError("unknown availability identity was accepted")
+
+
+def test_selection_rejects_an_in_memory_forged_expert_roster() -> None:
+    catalog = load_promoted_experts()
+    forged = replace(catalog[0], name="aggressive")
+    forged_roster = (forged, *tuple(catalog)[1:])
+
+    with pytest.raises(TypeError, match="verified catalog"):
+        choose_promoted_expert(
+            _FixedSelector("aggressive-v3"),
+            _selector_input(),
+            cast(Any, forged_roster),
+            _available("aggressive-v3"),
+        )

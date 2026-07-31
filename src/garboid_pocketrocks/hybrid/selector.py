@@ -13,8 +13,12 @@ from garboid_pocketrocks.diagnostics.trace import (
     PublicDecisionContext,
     public_context_from_sdk,
 )
-from garboid_pocketrocks.hybrid.experts import ExpertAvailability, PromotedExpert
-from garboid_pocketrocks.knowledge import RulesetKnowledge
+from garboid_pocketrocks.hybrid.experts import (
+    ExpertAvailability,
+    VerifiedPromotedExpertCatalog,
+    _require_verified_catalog,
+)
+from garboid_pocketrocks.knowledge import RulesetKnowledge, knowledge_for_context
 
 type FallbackReason = Literal[
     "none",
@@ -43,14 +47,17 @@ class LiveSelectorInput:
     ) -> LiveSelectorInput:
         """Copy allowlisted context, the bot's own hand, and public history."""
 
-        if ruleset.player_count != context.player_count:
-            raise ValueError("ruleset and live context player counts must match")
-        if ruleset.value_chart != context.value_chart:
-            raise ValueError("ruleset and live context value charts must match")
+        derived = knowledge_for_context(context)
+        if len(set(context.objective_ids)) != len(context.objective_ids) or any(
+            objective_id not in derived.objective_pool for objective_id in context.objective_ids
+        ):
+            raise ValueError("live context contains invalid objective identities")
+        if ruleset != derived:
+            raise ValueError("provided ruleset knowledge does not match the canonical live ruleset")
         return cls(
             context=public_context_from_sdk(context),
             own_hand_suit_ids=tuple(context.current_hand_suit_ids),
-            ruleset_name=ruleset.name,
+            ruleset_name=derived.name,
             public_history=tuple(public_history),
         )
 
@@ -84,14 +91,13 @@ class ExpertSelection:
 def choose_promoted_expert(
     selector: DeterministicExpertSelector,
     selector_input: LiveSelectorInput,
-    experts: tuple[PromotedExpert, ...],
+    catalog: VerifiedPromotedExpertCatalog,
     availability_by_name: Mapping[str, ExpertAvailability],
 ) -> ExpertSelection:
     """Resolve one eligible, available identity with catalog-order fallback."""
 
+    experts = _require_verified_catalog(catalog)
     names = tuple(expert.name for expert in experts)
-    if not names or len(set(names)) != len(names):
-        raise ValueError("promoted experts must be nonempty and uniquely named")
     unknown_availability = set(availability_by_name).difference(names)
     if unknown_availability:
         raise ValueError(

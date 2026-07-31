@@ -7,10 +7,12 @@ outcomes. Instead, each entry binds the retained promotion source, exact
 corpus and gate, positive confidence interval, complete coverage, clean run,
 and executable profile or checkpoint.
 
-Loading the catalog proves **eligibility**. It does not import optional neural
-dependencies or construct a bot. `check_expert_availability` is the separate
-runtime probe. This distinction prevents a missing local dependency from
-rewriting promotion history.
+Loading returns an opaque verified catalog that proves **eligibility**.
+Selection and name lookup accept only that catalog, so a free-floating or
+locally edited expert record cannot enter the roster. Loading does not import
+optional neural dependencies or construct a bot. `check_expert_availability`
+is the separate runtime probe. This distinction prevents a missing local
+dependency from rewriting promotion history.
 
 The selector module only chooses an expert identity and records a deterministic
 fallback reason. Nothing in this package is registered as a bot, changes an

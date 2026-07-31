@@ -6,11 +6,11 @@ import hashlib
 import json
 import math
 import re
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
-from typing import Literal, cast
+from typing import Literal, cast, final
 
 from garboid_pocketrocks.bots.base import BotSpec
 from garboid_pocketrocks.bots.heuristic import (
@@ -92,6 +92,7 @@ _PROMOTION_KEYS = {
 }
 _DIGEST_PATTERN = re.compile(r"[0-9a-f]{64}\Z")
 _COMMIT_PATTERN = re.compile(r"[0-9a-f]{40}\Z")
+_VERIFIED_CATALOG_TOKEN = object()
 
 
 class PromotedExpertCatalogError(ValueError):
@@ -126,6 +127,49 @@ class PromotedExpert:
     confidence_interval_upper: float
 
 
+@final
+class VerifiedPromotedExpertCatalog:
+    """Opaque proof that the exact pinned catalog passed every verifier."""
+
+    __slots__ = ("__catalog_digest", "__experts", "__token")
+    __catalog_digest: str
+    __experts: tuple[PromotedExpert, ...]
+    __token: object
+
+    def __init__(
+        self,
+        experts: tuple[PromotedExpert, ...],
+        *,
+        catalog_digest: str,
+        token: object,
+    ) -> None:
+        if token is not _VERIFIED_CATALOG_TOKEN or catalog_digest != _CATALOG_SHA256:
+            raise TypeError(
+                "verified promoted expert catalogs can only be loaded from package data"
+            )
+        object.__setattr__(self, "_VerifiedPromotedExpertCatalog__experts", experts)
+        object.__setattr__(self, "_VerifiedPromotedExpertCatalog__catalog_digest", catalog_digest)
+        object.__setattr__(self, "_VerifiedPromotedExpertCatalog__token", token)
+
+    def __setattr__(self, name: str, value: object) -> None:
+        del name, value
+        raise AttributeError("verified promoted expert catalogs are immutable")
+
+    def __iter__(self) -> Iterator[PromotedExpert]:
+        return iter(self.__experts)
+
+    def __len__(self) -> int:
+        return len(self.__experts)
+
+    def __getitem__(self, index: int) -> PromotedExpert:
+        return self.__experts[index]
+
+    def _verified_experts(self) -> tuple[PromotedExpert, ...]:
+        if self.__token is not _VERIFIED_CATALOG_TOKEN or self.__catalog_digest != _CATALOG_SHA256:
+            raise TypeError("promoted expert catalog is not a valid pinned catalog")
+        return self.__experts
+
+
 @dataclass(frozen=True, slots=True)
 class ExpertAvailability:
     """A runtime probe result that does not rewrite promotion eligibility."""
@@ -141,7 +185,7 @@ class ExpertAvailability:
     detail: str | None = None
 
 
-def load_promoted_experts() -> tuple[PromotedExpert, ...]:
+def load_promoted_experts() -> VerifiedPromotedExpertCatalog:
     """Load the one pinned catalog and reject any missing or edited evidence."""
 
     try:
@@ -157,9 +201,14 @@ def load_promoted_experts() -> tuple[PromotedExpert, ...]:
             "The promoted expert receipt catalog was edited without updating its trust anchor.",
         )
     payload = _decode_json_object(catalog_bytes, subject="promoted expert catalog")
+    catalog_digest = hashlib.sha256(catalog_bytes).hexdigest()
     experts = _validate_catalog_payload(payload, bot_specs=BOT_SPECS_BY_NAME)
     _verify_retained_sources(experts, payload)
-    return experts
+    return VerifiedPromotedExpertCatalog(
+        experts,
+        catalog_digest=catalog_digest,
+        token=_VERIFIED_CATALOG_TOKEN,
+    )
 
 
 def check_expert_availability(expert: PromotedExpert) -> ExpertAvailability:
@@ -504,7 +553,7 @@ def _verify_retained_sources(
 ) -> None:
     """Verify source receipts in a checkout while keeping installed wheels usable."""
 
-    repository_root = Path(__file__).resolve().parents[3]
+    repository_root = _repository_root()
     if not (repository_root / "pyproject.toml").is_file():
         return
     raw_entries = cast(list[object], payload["experts"])
@@ -524,6 +573,10 @@ def _verify_retained_sources(
                 "promotion_source_digest_mismatch",
                 f"The retained promotion source for {expert.name!r} was edited.",
             )
+
+
+def _repository_root() -> Path:
+    return Path(__file__).resolve().parents[3]
 
 
 def _require_named_corpus(
@@ -606,14 +659,18 @@ def _require_finite_number(value: object, *, field: str) -> float:
 
 
 def promoted_experts_by_name(
-    experts: tuple[PromotedExpert, ...] | None = None,
+    catalog: VerifiedPromotedExpertCatalog | None = None,
 ) -> Mapping[str, PromotedExpert]:
-    """Return an immutable name lookup for one already-verified roster."""
+    """Return an immutable lookup derived only from the exact pinned catalog."""
 
-    roster = load_promoted_experts() if experts is None else experts
-    if len({expert.name for expert in roster}) != len(roster):
-        raise PromotedExpertCatalogError(
-            "duplicate_expert",
-            "The promoted expert roster contains a duplicate name.",
-        )
+    verified = load_promoted_experts() if catalog is None else catalog
+    roster = _require_verified_catalog(verified)
     return MappingProxyType({expert.name: expert for expert in roster})
+
+
+def _require_verified_catalog(
+    catalog: VerifiedPromotedExpertCatalog,
+) -> tuple[PromotedExpert, ...]:
+    if type(catalog) is not VerifiedPromotedExpertCatalog:
+        raise TypeError("expert selection requires the exact pinned verified catalog")
+    return catalog._verified_experts()

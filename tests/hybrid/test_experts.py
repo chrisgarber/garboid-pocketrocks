@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
 from dataclasses import replace
 from pathlib import Path
 from typing import Any, cast
@@ -11,11 +12,16 @@ import pytest
 from garboid_pocketrocks.bots.base import BotSpec
 from garboid_pocketrocks.bots.heuristic import AggressiveHeuristicV2Brain
 from garboid_pocketrocks.bots.registry import BOT_SPECS, BOT_SPECS_BY_NAME
+from garboid_pocketrocks.heuristics.profiles import HEURISTIC_V2
 from garboid_pocketrocks.hybrid import experts as expert_module
 from garboid_pocketrocks.hybrid.experts import (
     PromotedExpertCatalogError,
     check_expert_availability,
     load_promoted_experts,
+    promoted_experts_by_name,
+)
+from garboid_pocketrocks.neural.tournament_bot import (
+    LARGE_CHECKPOINT_PATH as PACKAGED_LARGE_CHECKPOINT_PATH,
 )
 
 _CATALOG_PATH = (
@@ -196,6 +202,23 @@ def test_released_v3_alias_must_run_the_promoted_frozen_profile() -> None:
     assert raised.value.code == "released_botspec_mismatch"
 
 
+def test_released_profile_mismatch_is_rejected_directly(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payload = _payload()
+    expected = dict(expert_module._EXPECTED_HEURISTIC_EXECUTABLES)
+    expected["aggressive-v3"] = (
+        BOT_SPECS_BY_NAME["aggressive-v3"],
+        HEURISTIC_V2.aggressive,
+    )
+    monkeypatch.setattr(expert_module, "_EXPECTED_HEURISTIC_EXECUTABLES", expected)
+
+    with pytest.raises(PromotedExpertCatalogError) as raised:
+        _validate(payload)
+
+    assert raised.value.code == "released_profile_mismatch"
+
+
 def test_edited_checkpoint_digest_is_rejected() -> None:
     payload = _payload()
     executable = cast(dict[str, object], _entry(payload, 3)["executable"])
@@ -205,6 +228,87 @@ def test_edited_checkpoint_digest_is_rejected() -> None:
         _validate(payload)
 
     assert raised.value.code == "promoted_checkpoint_digest_mismatch"
+
+
+def test_missing_retained_promotion_source_is_rejected_directly(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    catalog = load_promoted_experts()
+    repository_root = tmp_path / "checkout"
+    repository_root.mkdir()
+    (repository_root / "pyproject.toml").write_text("[project]\n", encoding="utf-8")
+    monkeypatch.setattr(expert_module, "_repository_root", lambda: repository_root)
+
+    with pytest.raises(PromotedExpertCatalogError) as raised:
+        expert_module._verify_retained_sources(tuple(catalog), _payload())
+
+    assert raised.value.code == "missing_promotion_source"
+
+
+def test_edited_retained_promotion_source_is_rejected_directly(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    catalog = load_promoted_experts()
+    repository_root = tmp_path / "checkout"
+    source = (
+        repository_root / "docs" / "benchmarks" / "2026-07-30-heuristic-v3-candidate-promotions.md"
+    )
+    source.parent.mkdir(parents=True)
+    source.write_text("edited promotion claim\n", encoding="utf-8")
+    (repository_root / "pyproject.toml").write_text("[project]\n", encoding="utf-8")
+    monkeypatch.setattr(expert_module, "_repository_root", lambda: repository_root)
+
+    with pytest.raises(PromotedExpertCatalogError) as raised:
+        expert_module._verify_retained_sources(tuple(catalog), _payload())
+
+    assert raised.value.code == "promotion_source_digest_mismatch"
+
+
+def test_edited_neural_model_bytes_are_rejected_directly(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    neural_expert = load_promoted_experts()[-1]
+    checkpoint = tmp_path / "checkpoint"
+    checkpoint.mkdir()
+    shutil.copy2(PACKAGED_LARGE_CHECKPOINT_PATH / "manifest.json", checkpoint)
+    shutil.copy2(PACKAGED_LARGE_CHECKPOINT_PATH / "model.pt", checkpoint)
+    model_path = checkpoint / "model.pt"
+    model_path.write_bytes(model_path.read_bytes() + b"edited")
+    monkeypatch.setattr(expert_module, "LARGE_CHECKPOINT_PATH", checkpoint)
+
+    with pytest.raises(PromotedExpertCatalogError) as raised:
+        expert_module._verify_neural_expert(neural_expert)
+
+    assert raised.value.code == "promoted_checkpoint_digest_mismatch"
+
+
+def test_edited_neural_manifest_is_rejected_directly(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    neural_expert = load_promoted_experts()[-1]
+    checkpoint = tmp_path / "checkpoint"
+    checkpoint.mkdir()
+    shutil.copy2(PACKAGED_LARGE_CHECKPOINT_PATH / "manifest.json", checkpoint)
+    shutil.copy2(PACKAGED_LARGE_CHECKPOINT_PATH / "model.pt", checkpoint)
+    manifest_path = checkpoint / "manifest.json"
+    manifest = cast(dict[str, object], json.loads(manifest_path.read_text(encoding="utf-8")))
+    manifest["parameter_digest"] = "f" * 64
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    monkeypatch.setattr(expert_module, "LARGE_CHECKPOINT_PATH", checkpoint)
+
+    with pytest.raises(PromotedExpertCatalogError) as raised:
+        expert_module._verify_neural_expert(neural_expert)
+
+    assert raised.value.code == "promoted_checkpoint_digest_mismatch"
+
+
+def test_by_name_lookup_rejects_an_in_memory_forged_roster() -> None:
+    catalog = load_promoted_experts()
+    forged = replace(catalog[0], bot_spec=BOT_SPECS_BY_NAME["aggressive-v2"])
+    forged_roster = (forged, *tuple(catalog)[1:])
+
+    with pytest.raises(TypeError, match="verified catalog"):
+        promoted_experts_by_name(cast(Any, forged_roster))
 
 
 def test_runtime_availability_is_separate_from_eligibility() -> None:
