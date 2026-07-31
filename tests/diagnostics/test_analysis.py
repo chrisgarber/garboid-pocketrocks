@@ -386,6 +386,65 @@ def test_game_phase_uses_documented_one_based_turn_boundaries(
     assert report.slices[0].game_phase == expected
 
 
+def test_cash_horizon_uses_action_aware_public_resource_accounting() -> None:
+    game = _game(decision_counts=(1, 1, 1))
+    won_before_auction = (
+        (1, 1, 1, 0, 0),
+        (0, 0, 0, 0, 0),
+        (0, 0, 0, 0, 0),
+    )
+    won_after_auction_one = (
+        (2, 1, 1, 0, 0),
+        (0, 0, 0, 0, 0),
+        (0, 0, 0, 0, 0),
+    )
+    auction_one = _trace(
+        game,
+        seat=0,
+        turn_index=12,
+        action_id=ACTION_WIRE_IDS["Auction1"],
+        current_resource_ids=(3, 4),
+        won_resource_counts_by_seat=won_before_auction,
+    )
+    auction_two = _trace(
+        game,
+        seat=1,
+        turn_index=12,
+        action_id=ACTION_WIRE_IDS["Auction2"],
+        current_resource_ids=(3, 4),
+        won_resource_counts_by_seat=won_before_auction,
+    )
+    reveal_after_auction_one = _trace(
+        game,
+        seat=2,
+        turn_index=12,
+        decision_kind="selectInfoToReveal",
+        action_id=ACTION_WIRE_IDS["Auction1"],
+        current_resource_ids=(3, 4),
+        won_resource_counts_by_seat=won_after_auction_one,
+    )
+
+    report = _build(
+        (auction_one, auction_two, reveal_after_auction_one),
+        (game,),
+    )
+    slices_by_bot = {item.bot_id: item for item in report.slices}
+
+    assert (
+        slices_by_bot["alpha"].future_biddable_resources,
+        slices_by_bot["alpha"].total_biddable_resources,
+    ) == (11, 15)
+    assert (
+        slices_by_bot["beta"].future_biddable_resources,
+        slices_by_bot["beta"].total_biddable_resources,
+    ) == (10, 15)
+    assert (
+        slices_by_bot["gamma"].future_biddable_resources,
+        slices_by_bot["gamma"].total_biddable_resources,
+    ) == (11, 15)
+    assert {item.game_phase for item in report.slices} == {"late"}
+
+
 def test_chart_players_seat_and_opponent_composition_are_canonical_dimensions() -> None:
     game = _game(
         chart="E",

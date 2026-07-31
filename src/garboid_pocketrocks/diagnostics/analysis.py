@@ -12,6 +12,7 @@ from typing import Literal
 from pocketrocks.sim.constants import ACTION_WIRE_IDS
 
 from garboid_pocketrocks.diagnostics.trace import DecisionTrace
+from garboid_pocketrocks.heuristics.phases import public_resource_horizon
 from garboid_pocketrocks.knowledge import (
     canonical_knowledge,
     ruleset_name,
@@ -371,19 +372,16 @@ def _cash_horizon(trace: DecisionTrace) -> tuple[int, int]:
         value_chart=trace.chart,
         objectives_enabled=bool(context.objective_ids),
     )
-    total_biddable = sum(knowledge.resource_counts) - (
-        context.player_count * knowledge.private_cards_per_player
+    try:
+        horizon = public_resource_horizon(context, knowledge)
+    except ValueError as error:
+        raise DecisionAnalysisError(
+            f"decision trace public resource horizon is invalid: {error}"
+        ) from error
+    return (
+        horizon.future_biddable_resources,
+        horizon.total_biddable_resources,
     )
-    already_won = sum(sum(row) for row in context.won_resource_counts_by_seat)
-    currently_offered = (
-        sum(resource_id > 0 for resource_id in context.current_resource_ids)
-        if context.decision_kind == "submitBid"
-        else 0
-    )
-    future_biddable = total_biddable - already_won - currently_offered
-    if future_biddable < 0:
-        raise DecisionAnalysisError("decision trace public resource counts exceed the ruleset")
-    return future_biddable, total_biddable
 
 
 def _objective_state(trace: DecisionTrace) -> tuple[int, int, int]:

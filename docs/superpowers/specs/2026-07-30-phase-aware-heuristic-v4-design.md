@@ -76,11 +76,13 @@ phase answers how much game remains after that decision opportunity.
 The selector requires `T > 0` and `0 <= R <= T`. One extracted helper computes
 these counts without reading the acting bot's hand or history. It is
 action-aware: Auction 1 removes only its first offered resource from the
-future horizon, while Auction 2 removes both. Belief accounting and decision
-diagnostics migrate to this helper so they cannot disagree at a phase
-boundary. This intentionally corrects the old diagnostic-only calculation,
-which subtracted both visible resource slots for every auction. Deterministic
-public states therefore always select the same expert.
+future horizon, while Auction 2 removes every nonzero offered resource
+(normally two, but possibly one when the resource deck is nearly empty).
+Belief accounting and decision diagnostics migrate to this helper so they
+cannot disagree at a phase boundary. This intentionally corrects the old
+diagnostic-only calculation, which subtracted both visible resource slots for
+every auction. Deterministic public states therefore always select the same
+expert.
 
 The existing diagnostic `game_phase` remains exactly as it is: early for
 turns 1–5, middle for turns 6–12, and late for turn 13 onward. It is useful for

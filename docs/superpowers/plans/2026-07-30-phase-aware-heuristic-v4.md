@@ -79,9 +79,9 @@ pytest, mypy, and Ruff.
   `(4, 14) -> late`. Build equivalent public contexts for 3, 4, and 5 players
   and assert private-hand changes cannot alter the returned horizon or phase.
   At the same won-resource count, assert Auction 1 excludes only its first
-  offered card while Auction 2 excludes both, and that the following reveal
-  context retains the same horizon after the award moves into public won
-  counts.
+  offered card while Auction 2 excludes every nonzero offered card, including
+  the valid one-card deck-tail case. Assert the following reveal context
+  retains the same horizon after the award moves into public won counts.
   Keep the existing tests that pin `DecisionSlice.game_phase` to turns 1–5,
   6–12, and 13 onward. Add tests proving the diagnostic cash-horizon fields
   come from the shared public accounting without changing that legacy label.
@@ -111,10 +111,11 @@ pytest, mypy, and Ruff.
   future = total - already_won - currently_offered
   ```
 
-  Decode the public current action and count one offered resource for Auction
-  1, two for Auction 2, and zero for non-resource or reveal decisions. Validate
-  matching player counts, public row widths, `T > 0`, and `0 <= R <= T`.
-  Implement the two inclusive integer comparisons exactly.
+  Decode the public current action and count the first offered resource for
+  Auction 1, every nonzero offered resource for Auction 2, and zero for
+  non-resource or reveal decisions. Validate matching player counts, public
+  row widths, `T > 0`, and `0 <= R <= T`. Implement the two inclusive integer
+  comparisons exactly.
   Replace diagnostics' private `_cash_horizon` calculation with the shared
   public accounting. Preserve its turn-index `_game_phase` function exactly;
   the v4 expert phase is a separate dimension added in Task 6.
