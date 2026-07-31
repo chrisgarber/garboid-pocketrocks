@@ -25,7 +25,11 @@ from garboid_pocketrocks.neural.encoding import (
 )
 from garboid_pocketrocks.neural.heuristic_teachers import (
     BALANCED_V3_PROFILE_DIGEST as BALANCED_V3_PROFILE_DIGEST,
+)
+from garboid_pocketrocks.neural.heuristic_teachers import (
     BALANCED_V3_TEACHER_IDENTITY as BALANCED_V3_TEACHER_IDENTITY,
+)
+from garboid_pocketrocks.neural.heuristic_teachers import (
     build_released_v3_brain,
     released_v3_profile_digest,
 )
