@@ -1,0 +1,32 @@
+{
+  "behavior_cloning": {
+    "epochs": 3,
+    "games_per_cell": 119,
+    "learning_rate": 0.0003,
+    "max_gradient_norm": 0.5,
+    "minibatch_size": 512,
+    "root_seed": 42,
+    "rounds": 4,
+    "teacher_identity": "balanced-v3",
+    "teacher_profile_digest": "e3971899626ca3f651b2992d0cc429dc3ffd57fcdbb7cfac8249e6f0f9d9b03e"
+  },
+  "deterministic_algorithms": true,
+  "device": "auto",
+  "games_per_cell": 119,
+  "learner_threads": 4,
+  "max_updates": 192,
+  "max_wall_seconds": null,
+  "model_profile": "large",
+  "opponent_training": "mirror-self-play",
+  "parallel": {
+    "active_games_per_worker": 128,
+    "max_inference_batch": 1024,
+    "max_queue_delay_ms": 1.0,
+    "workers": "auto"
+  },
+  "ppo": {
+    "epochs": 3
+  },
+  "root_seed": 42,
+  "target_decisions_per_update": null
+}

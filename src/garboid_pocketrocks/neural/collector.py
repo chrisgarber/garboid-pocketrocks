@@ -8,9 +8,15 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 import torch
+from pocketrocks import BotDecision
+from pocketrocks.exceptions import InvalidBotDecision
 
 from garboid_pocketrocks.neural.config import NeuralEncoderConfig
 from garboid_pocketrocks.neural.encoding import batch_observations
+from garboid_pocketrocks.neural.heuristic_teachers import (
+    RELEASED_HEURISTIC_V3_IDENTITIES,
+    build_released_v3_brain,
+)
 from garboid_pocketrocks.neural.model import NeuralPolicy
 from garboid_pocketrocks.neural.planning import SelfPlayEpisodePlan
 from garboid_pocketrocks.neural.policy import evaluate_row_seeded_policy
@@ -176,6 +182,23 @@ def _infer_policy_requests(
                     request.decision_index,
                 ),
             )
+            if identity in RELEASED_HEURISTIC_V3_IDENTITIES:
+                brain = build_released_v3_brain(identity)
+                for request in ordered:
+                    if request.trainable:
+                        raise CollectorError(
+                            "released heuristic policies cannot produce trainable trajectories"
+                        )
+                    decision = brain.choose_decision(request.context, request.ruleset)
+                    responses.append(
+                        _validated_response(
+                            request,
+                            action=_encode_heuristic_decision(request, decision),
+                            old_log_probability=0.0,
+                            old_value=0.0,
+                        )
+                    )
+                continue
             for offset in range(0, len(ordered), max_inference_batch):
                 chunk = ordered[offset : offset + max_inference_batch]
                 started = time.perf_counter()
@@ -194,10 +217,8 @@ def _infer_policy_requests(
                 inference_batch_sizes.append(len(chunk))
                 for row, request in enumerate(chunk):
                     responses.append(
-                        PolicyResponse(
-                            episode_index=request.episode_index,
-                            seat=request.seat,
-                            decision_index=request.decision_index,
+                        _validated_response(
+                            request,
                             action=int(selection.actions[row].item()),
                             old_log_probability=float(selection.log_probability[row].item()),
                             old_value=float(selection.value[row].item()),
@@ -206,6 +227,86 @@ def _infer_policy_requests(
     finally:
         _restore_policy_modes(prior_modes)
     return tuple(responses), elapsed
+
+
+def _encode_heuristic_decision(
+    request: PendingPolicyRequest,
+    decision: BotDecision,
+) -> int:
+    """Encode an explicit heuristic decision using the request's legal actions."""
+
+    try:
+        request.context.validate(decision)
+    except InvalidBotDecision as error:
+        raise CollectorError(
+            f"released heuristic {request.policy_identity!r} returned an invalid decision"
+        ) from error
+    if decision.action_kind == "pass":
+        return 0
+    if decision.action_kind == "submitBid":
+        if decision.value is None:
+            raise CollectorError("released heuristic bid omitted its amount")
+        return decision.value
+    if decision.action_kind == "selectInfoToReveal":
+        if decision.value is None:
+            raise CollectorError("released heuristic reveal omitted its index")
+        reveal_actions = tuple(
+            action
+            for action, legal in enumerate(request.observation.action_mask)
+            if action > 0 and bool(legal)
+        )
+        try:
+            return reveal_actions[decision.value]
+        except IndexError as error:
+            raise CollectorError("released heuristic reveal is outside the action mask") from error
+    raise CollectorError(f"unsupported heuristic action {decision.action_kind!r}")
+
+
+def _validated_response(
+    request: PendingPolicyRequest,
+    *,
+    action: int,
+    old_log_probability: float,
+    old_value: float,
+) -> PolicyResponse:
+    """Build a response only after its stored public request accepts the action."""
+
+    if not 0 <= action < len(request.observation.action_mask) or not bool(
+        request.observation.action_mask[action]
+    ):
+        raise CollectorError(f"policy {request.policy_identity!r} selected an illegal action")
+    decision = _decision_for_action(request, action)
+    try:
+        request.context.validate(decision)
+    except InvalidBotDecision as error:
+        raise CollectorError(
+            f"policy {request.policy_identity!r} failed SDK decision validation"
+        ) from error
+    return PolicyResponse(
+        episode_index=request.episode_index,
+        seat=request.seat,
+        decision_index=request.decision_index,
+        action=action,
+        old_log_probability=old_log_probability,
+        old_value=old_value,
+    )
+
+
+def _decision_for_action(request: PendingPolicyRequest, action: int) -> BotDecision:
+    if action == 0:
+        return BotDecision.pass_turn()
+    if request.context.decision_kind == "submitBid":
+        return BotDecision.submit_bid(action)
+    reveal_actions = tuple(
+        legal_action
+        for legal_action, legal in enumerate(request.observation.action_mask)
+        if legal_action > 0 and bool(legal)
+    )
+    try:
+        reveal_index = reveal_actions.index(action)
+    except ValueError as error:
+        raise CollectorError("reveal action is outside the stored action mask") from error
+    return BotDecision.select_info_to_reveal(reveal_index)
 
 
 def _validate_collection(
@@ -233,10 +334,20 @@ def _validate_collection(
     required_identities = {
         assignment.identity for plan in plans for assignment in plan.seat_policies
     }
-    missing = required_identities - policies.keys()
+    heuristic_identities = set(RELEASED_HEURISTIC_V3_IDENTITIES)
+    for plan in plans:
+        if any(
+            assignment.trainable and assignment.identity in heuristic_identities
+            for assignment in plan.seat_policies
+        ):
+            raise CollectorError(
+                "released heuristic policies cannot produce trainable trajectories"
+            )
+    required_neural_identities = required_identities - heuristic_identities
+    missing = required_neural_identities - policies.keys()
     if missing:
         raise CollectorError(f"missing policies for identities: {sorted(missing)!r}")
-    for identity in required_identities:
+    for identity in required_neural_identities:
         model = policies[identity]
         if model.encoder_config != encoder_config:
             raise CollectorError(f"policy {identity!r} has an incompatible encoder")

@@ -15,6 +15,10 @@ from garboid_pocketrocks.neural.config import (  # noqa: E402
     training_encoder_config,
     training_model_config,
 )
+from garboid_pocketrocks.neural.heuristic_auxiliary import (  # noqa: E402
+    HeuristicAuxiliaryValueConfig,
+    heuristic_auxiliary_label,
+)
 from garboid_pocketrocks.neural.metrics import gameplay_metrics  # noqa: E402
 from garboid_pocketrocks.neural.model import NeuralPolicy  # noqa: E402
 from garboid_pocketrocks.neural.planning import (  # noqa: E402
@@ -369,6 +373,9 @@ def test_packed_rollout_and_multi_epoch_ppo_support_all_seats() -> None:
     assert len(packed.trajectory_ranges) == 3
     assert packed.observation(0).action_mask[packed.actions[0]]
     assert not packed.actions.flags.writeable
+    assert not packed.heuristic_auxiliary_targets.flags.writeable
+    assert not packed.heuristic_auxiliary_included.flags.writeable
+    assert not packed.heuristic_auxiliary_included.any()
     assert set(packed.phase_buckets.tolist()) == {0, 1, 2}
     assert gameplay[0].metrics.games == 3
     assert gameplay[0].metrics.decisions == len(packed)
@@ -385,3 +392,94 @@ def test_packed_rollout_and_multi_epoch_ppo_support_all_seats() -> None:
         "player_count",
         "phase",
     }
+    assert metrics.heuristic_auxiliary.included_count == 0
+    assert metrics.heuristic_auxiliary.total_count == len(packed) * 2
+    assert metrics.heuristic_auxiliary_weighted_loss == 0.0
+
+
+def test_enabled_auxiliary_labels_come_from_stored_contexts_without_changing_gae() -> None:
+    from garboid_pocketrocks.knowledge import knowledge_for_context
+    from garboid_pocketrocks.neural.ppo import _training_targets
+
+    configure_torch_runtime(409, deterministic_algorithms=True)
+    model = _model(409)
+    _, rollout = _one_game_rollout(model, 409)
+    config = HeuristicAuxiliaryValueConfig.balanced_v3()
+
+    default_targets = _training_targets(
+        rollout,
+        PPOConfig(),
+        HeuristicAuxiliaryValueConfig(),
+    )
+    enabled_targets = _training_targets(rollout, PPOConfig(), config)
+    expected = tuple(
+        heuristic_auxiliary_label(
+            transition.context,
+            knowledge_for_context(transition.context),
+            config,
+        )
+        for transition in rollout.transitions
+    )
+
+    np.testing.assert_array_equal(
+        enabled_targets.packed.heuristic_auxiliary_included,
+        np.asarray([label.included for label in expected], dtype=np.bool_),
+    )
+    np.testing.assert_allclose(
+        enabled_targets.packed.heuristic_auxiliary_targets,
+        np.asarray([label.target for label in expected], dtype=np.float32),
+    )
+    assert enabled_targets.packed.heuristic_auxiliary_included.any()
+    assert not enabled_targets.packed.heuristic_auxiliary_included.all()
+    np.testing.assert_array_equal(
+        enabled_targets.packed.rewards,
+        default_targets.packed.rewards,
+    )
+    np.testing.assert_array_equal(
+        enabled_targets.packed.action_masks,
+        default_targets.packed.action_masks,
+    )
+    torch.testing.assert_close(enabled_targets.advantages, default_targets.advantages)
+    torch.testing.assert_close(enabled_targets.returns, default_targets.returns)
+
+
+def test_default_disabled_auxiliary_preserves_the_existing_update_exactly() -> None:
+    configure_torch_runtime(419, deterministic_algorithms=True)
+    rollout_model = _model(419)
+    initial_state = {
+        name: tensor.detach().clone() for name, tensor in rollout_model.state_dict().items()
+    }
+    _, rollout = _one_game_rollout(rollout_model, 419)
+    first_model = _model(1)
+    first_model.load_state_dict(initial_state)
+    second_model = _model(2)
+    second_model.load_state_dict(initial_state)
+
+    first = PPOTrainer(first_model, PPOConfig()).update(rollout, update_seed=23)
+    second = PPOTrainer(
+        second_model,
+        PPOConfig(),
+        HeuristicAuxiliaryValueConfig(),
+    ).update(rollout, update_seed=23)
+
+    assert first == second
+    for name, tensor in first_model.state_dict().items():
+        assert torch.equal(tensor, second_model.state_dict()[name])
+
+
+def test_enabled_auxiliary_adds_weighted_loss_without_changing_model_schema() -> None:
+    configure_torch_runtime(421, deterministic_algorithms=True)
+    model = _model(421)
+    parameter_names = tuple(model.state_dict())
+    _, rollout = _one_game_rollout(model, 421)
+    config = HeuristicAuxiliaryValueConfig.balanced_v3(loss_coefficient=0.1)
+
+    metrics = PPOTrainer(model, PPOConfig(), config).update(rollout, update_seed=29)
+
+    assert tuple(model.state_dict()) == parameter_names
+    assert metrics.heuristic_auxiliary.included_count > 0
+    assert metrics.heuristic_auxiliary.included_count < metrics.heuristic_auxiliary.total_count
+    assert metrics.heuristic_auxiliary.smooth_l1_loss > 0.0
+    assert metrics.heuristic_auxiliary_weighted_loss == pytest.approx(
+        metrics.heuristic_auxiliary.smooth_l1_loss * config.loss_coefficient
+    )

@@ -8,12 +8,21 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Literal, cast
 
+from garboid_pocketrocks.neural.behavior_cloning import BehaviorCloningConfig
 from garboid_pocketrocks.neural.config import ModelProfile
+from garboid_pocketrocks.neural.heuristic_auxiliary import (
+    HeuristicAuxiliaryValueConfig,
+)
 from garboid_pocketrocks.neural.ppo import PPOConfig
 from garboid_pocketrocks.training.rewards import RewardConfig
 
 DeviceName = Literal["auto", "cpu", "cuda", "mps"]
 WorkerSetting = int | Literal["auto"]
+OpponentTrainingMode = Literal[
+    "mirror-self-play",
+    "focal-seat-control-v1",
+    "heuristic-opponent-curriculum-v1",
+]
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,6 +65,11 @@ class TrainingRunConfig:
     evaluate_at_end: bool = False
     league_fraction: float = 0.0
     keep_periodic_checkpoints: int = 4
+    behavior_cloning: BehaviorCloningConfig | None = None
+    heuristic_auxiliary: HeuristicAuxiliaryValueConfig = field(
+        default_factory=HeuristicAuxiliaryValueConfig
+    )
+    opponent_training: OpponentTrainingMode = "mirror-self-play"
     parallel: ParallelConfig = field(default_factory=ParallelConfig)
     ppo: PPOConfig = field(default_factory=PPOConfig)
     reward: RewardConfig = field(default_factory=RewardConfig)
@@ -112,6 +126,28 @@ class TrainingRunConfig:
             "keep_periodic_checkpoints",
             self.keep_periodic_checkpoints,
         )
+        if self.behavior_cloning is not None:
+            if not isinstance(self.behavior_cloning, BehaviorCloningConfig):
+                raise ValueError("behavior_cloning must be a BehaviorCloningConfig or null")
+            if self.behavior_cloning.root_seed != self.root_seed:
+                raise ValueError("behavior cloning and training root seeds must match")
+        if not isinstance(self.heuristic_auxiliary, HeuristicAuxiliaryValueConfig):
+            raise ValueError("heuristic_auxiliary must be a HeuristicAuxiliaryValueConfig")
+        if self.opponent_training not in (
+            "mirror-self-play",
+            "focal-seat-control-v1",
+            "heuristic-opponent-curriculum-v1",
+        ):
+            raise ValueError("opponent_training is not a supported immutable schedule")
+        enabled_heuristic_strategies = sum(
+            (
+                self.behavior_cloning is not None,
+                self.heuristic_auxiliary.target != "disabled",
+                self.opponent_training == "heuristic-opponent-curriculum-v1",
+            )
+        )
+        if enabled_heuristic_strategies > 1:
+            raise ValueError("heuristic training strategies must be tested as separate ablations")
         if not isinstance(self.parallel, ParallelConfig):
             raise ValueError("parallel must be a ParallelConfig")
         if not isinstance(self.ppo, PPOConfig):
@@ -147,6 +183,9 @@ class TrainingRunConfig:
                 "evaluate_at_end",
                 "league_fraction",
                 "keep_periodic_checkpoints",
+                "behavior_cloning",
+                "heuristic_auxiliary",
+                "opponent_training",
                 "parallel",
                 "ppo",
                 "reward",
@@ -232,6 +271,15 @@ class TrainingRunConfig:
                     defaults.keep_periodic_checkpoints,
                 ),
                 "keep_periodic_checkpoints",
+            ),
+            behavior_cloning=_read_behavior_cloning(
+                payload.get("behavior_cloning", defaults.behavior_cloning)
+            ),
+            heuristic_auxiliary=_read_heuristic_auxiliary(
+                payload.get("heuristic_auxiliary", defaults.heuristic_auxiliary)
+            ),
+            opponent_training=_opponent_training_value(
+                payload.get("opponent_training", defaults.opponent_training)
             ),
             parallel=_read_parallel(payload.get("parallel", defaults.parallel)),
             ppo=_read_ppo(payload.get("ppo", defaults.ppo)),
@@ -334,6 +382,18 @@ def _read_parallel(value: object) -> ParallelConfig:
             "max_queue_delay_ms",
         ),
     )
+
+
+def _read_behavior_cloning(value: object) -> BehaviorCloningConfig | None:
+    if value is None or isinstance(value, BehaviorCloningConfig):
+        return value
+    return BehaviorCloningConfig.from_json_dict(value)
+
+
+def _read_heuristic_auxiliary(value: object) -> HeuristicAuxiliaryValueConfig:
+    if isinstance(value, HeuristicAuxiliaryValueConfig):
+        return value
+    return HeuristicAuxiliaryValueConfig.from_json_dict(value)
 
 
 def _read_ppo(value: object) -> PPOConfig:
@@ -457,6 +517,16 @@ def _device_value(value: object) -> DeviceName:
 def _model_profile_value(value: object) -> ModelProfile:
     if value not in ("small", "medium", "large"):
         raise ValueError("model_profile must be small, medium, or large")
+    return value
+
+
+def _opponent_training_value(value: object) -> OpponentTrainingMode:
+    if value not in (
+        "mirror-self-play",
+        "focal-seat-control-v1",
+        "heuristic-opponent-curriculum-v1",
+    ):
+        raise ValueError("opponent_training is not a supported immutable schedule")
     return value
 
 

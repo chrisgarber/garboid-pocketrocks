@@ -13,6 +13,7 @@ from garboid_pocketrocks.adapters.public_history import (
     public_history_from_sdk_events,
 )
 from garboid_pocketrocks.knowledge import (
+    RulesetKnowledge,
     canonical_knowledge,
     value_chart_from_ruleset_name,
 )
@@ -57,6 +58,8 @@ class PendingPolicyRequest:
     trainable: bool
     sampling_seed: int
     observation: NeuralObservation
+    context: DecisionContext
+    ruleset: RulesetKnowledge
 
 
 @dataclass(frozen=True, slots=True)
@@ -277,6 +280,8 @@ class SelfPlayGame:
                         decision_index,
                     ),
                     observation=_immutable_observation(observation),
+                    context=context,
+                    ruleset=self.knowledge,
                 )
             )
         self._pending_contexts = contexts

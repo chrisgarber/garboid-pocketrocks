@@ -13,6 +13,9 @@ from garboid_pocketrocks.neural.config import (  # noqa: E402
 from garboid_pocketrocks.neural.encoding import (  # noqa: E402
     NeuralObservationEncoder,
 )
+from garboid_pocketrocks.neural.heuristic_curriculum import (  # noqa: E402
+    plan_heuristic_curriculum_episodes,
+)
 from garboid_pocketrocks.neural.model import NeuralPolicy  # noqa: E402
 from garboid_pocketrocks.neural.planning import plan_mirror_episodes  # noqa: E402
 from garboid_pocketrocks.neural.rollout import RolloutBatch  # noqa: E402
@@ -149,6 +152,59 @@ def test_vector_collector_matches_scalar_sdk_self_play() -> None:
     assert metrics.decisions == len(vector.transitions)
     assert metrics.ipc_seconds == 0.0
     assert metrics.inference_batch_p95 >= metrics.inference_batch_p50
+
+
+def test_curriculum_vector_collection_matches_scalar_with_only_focal_trajectories() -> None:
+    torch.manual_seed(94)
+    config = training_encoder_config()
+    model = NeuralPolicy(config, training_model_config("small"))
+    plans = plan_heuristic_curriculum_episodes(
+        root_seed=94,
+        update_index=0,
+        games_per_cell=1,
+        learner_policy_identity="current",
+    ).plans
+    reward = RewardConfig()
+
+    scalar, scalar_metrics = collect_self_play(
+        {"current": model},
+        plans,
+        encoder_config=config,
+        reward_config=reward,
+        device=torch.device("cpu"),
+        active_games=15,
+        max_inference_batch=64,
+    )
+    vector, vector_metrics = collect_self_play_vectorized(
+        {"current": model},
+        plans,
+        encoder_config=config,
+        reward_config=reward,
+        device=torch.device("cpu"),
+        engine_batch_size=15,
+        max_inference_batch=64,
+    )
+
+    _assert_rollouts_equal(vector, scalar)
+    assert scalar_metrics.decisions == vector_metrics.decisions
+    assert vector_metrics.decisions > len(vector.transitions)
+    assert all(
+        sum(trajectory.trainable for trajectory in episode.trajectories) == 1
+        for episode in vector.episodes
+    )
+    assert vector.transitions == tuple(
+        transition
+        for episode in vector.episodes
+        for trajectory in episode.trajectories
+        if trajectory.trainable
+        for transition in trajectory.transitions
+    )
+    assert all(
+        transition.observation.action_mask[transition.action]
+        for episode in vector.episodes
+        for trajectory in episode.trajectories
+        for transition in trajectory.transitions
+    )
 
 
 def test_vector_collector_skips_redundant_external_input_validation(

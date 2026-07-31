@@ -6,7 +6,10 @@ from typing import cast
 import pytest
 
 from garboid_pocketrocks.neural.config import ModelProfile
-from garboid_pocketrocks.neural.identity import trained_neural_bot_id
+from garboid_pocketrocks.neural.identity import (
+    experimental_neural_bot_id,
+    trained_neural_bot_id,
+)
 
 
 @pytest.mark.parametrize(
@@ -78,3 +81,36 @@ def test_trained_neural_bot_id_rejects_invalid_generations(
 ) -> None:
     with pytest.raises(ValueError, match="generation must be a positive integer"):
         trained_neural_bot_id("small", 0, cast(int, generation))
+
+
+def test_experimental_identity_records_every_selection_input() -> None:
+    assert experimental_neural_bot_id(
+        "large",
+        strategy="behavior-cloning-balanced-v3",
+        root_seed=42,
+        completed_games=349_860,
+        config_digest="a" * 64,
+    ) == ("vector_ppo_large_v2_g349860_behavior-cloning-balanced-v3_s42_caaaaaaaaaaaa")
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    (
+        ("strategy", "Behavior Cloning"),
+        ("root_seed", -1),
+        ("config_digest", "not-a-digest"),
+    ),
+)
+def test_experimental_identity_rejects_ambiguous_values(
+    field: str,
+    value: object,
+) -> None:
+    arguments: dict[str, object] = {
+        "strategy": "behavior-cloning",
+        "root_seed": 42,
+        "completed_games": 10,
+        "config_digest": "a" * 64,
+    }
+    arguments[field] = value
+    with pytest.raises(ValueError):
+        experimental_neural_bot_id("large", **arguments)  # type: ignore[arg-type]

@@ -444,6 +444,8 @@ def _prepare_bid_requests(
                         knowledge[row],
                         tuple(histories[row]),
                     ),
+                    context=context,
+                    ruleset=knowledge[row],
                 )
             )
             contexts[(row, seat)] = context
@@ -530,6 +532,8 @@ def _prepare_reveal_requests(
                     knowledge[row],
                     tuple(histories[row]),
                 ),
+                context=context,
+                ruleset=knowledge[row],
             )
         )
         contexts[(row, seat)] = context
@@ -660,6 +664,9 @@ def _request(
     seat: int,
     decision_index: int,
     observation: NeuralObservation,
+    *,
+    context: DecisionContext,
+    ruleset: RulesetKnowledge,
 ) -> PendingPolicyRequest:
     assignment = plan.seat_policies[seat]
     return PendingPolicyRequest(
@@ -670,6 +677,8 @@ def _request(
         trainable=assignment.trainable,
         sampling_seed=decision_seed(plan, seat, decision_index),
         observation=_immutable_observation(observation),
+        context=context,
+        ruleset=ruleset,
     )
 
 

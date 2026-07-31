@@ -14,6 +14,7 @@ from typing import cast
 import torch
 from torch import Tensor
 
+from garboid_pocketrocks.neural.behavior_cloning import BehaviorCloningConfig
 from garboid_pocketrocks.neural.checkpoint import (
     InferenceManifest,
     _file_sha256,
@@ -29,10 +30,14 @@ from garboid_pocketrocks.neural.config import (
     NeuralEncoderConfig,
     NeuralModelConfig,
 )
+from garboid_pocketrocks.neural.heuristic_auxiliary import (
+    HeuristicAuxiliaryValueConfig,
+)
 from garboid_pocketrocks.neural.model import NeuralPolicy
 from garboid_pocketrocks.neural.ppo import PPOConfig
 from garboid_pocketrocks.neural.run_config import (
     DeviceName,
+    OpponentTrainingMode,
     ParallelConfig,
     TrainingRunConfig,
     WorkerSetting,
@@ -395,6 +400,9 @@ def _run_config(value: object) -> TrainingRunConfig:
         "learner_threads",
         "deterministic_algorithms",
         "model_profile",
+        "behavior_cloning",
+        "heuristic_auxiliary",
+        "opponent_training",
     }
     if not expected - legacy_optional <= set(payload) <= expected:
         raise TrainingCheckpointError("run_config fields do not match schema")
@@ -441,6 +449,17 @@ def _run_config(value: object) -> TrainingRunConfig:
             payload["keep_periodic_checkpoints"],
             "keep_periodic_checkpoints",
         ),
+        behavior_cloning=(
+            None
+            if payload.get("behavior_cloning") is None
+            else BehaviorCloningConfig.from_json_dict(payload["behavior_cloning"])
+        ),
+        heuristic_auxiliary=(
+            HeuristicAuxiliaryValueConfig()
+            if "heuristic_auxiliary" not in payload
+            else HeuristicAuxiliaryValueConfig.from_json_dict(payload["heuristic_auxiliary"])
+        ),
+        opponent_training=_opponent_training(payload.get("opponent_training", "mirror-self-play")),
         parallel=ParallelConfig(
             workers=_workers(parallel["workers"]),
             active_games_per_worker=_integer(
@@ -502,6 +521,16 @@ def _run_config(value: object) -> TrainingRunConfig:
             ),
         ),
     )
+
+
+def _opponent_training(value: object) -> OpponentTrainingMode:
+    if value not in (
+        "mirror-self-play",
+        "focal-seat-control-v1",
+        "heuristic-opponent-curriculum-v1",
+    ):
+        raise TrainingCheckpointError("opponent_training is not a supported schedule")
+    return value
 
 
 def _write_json(path: Path, value: object) -> None:

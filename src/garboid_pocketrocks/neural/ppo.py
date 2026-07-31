@@ -14,6 +14,12 @@ from torch import Tensor
 
 from garboid_pocketrocks.knowledge import ruleset_name
 from garboid_pocketrocks.neural.advantages import compute_gae
+from garboid_pocketrocks.neural.heuristic_auxiliary import (
+    HeuristicAuxiliaryLoss,
+    HeuristicAuxiliaryMetrics,
+    HeuristicAuxiliaryValueConfig,
+    masked_heuristic_smooth_l1_loss,
+)
 from garboid_pocketrocks.neural.metrics import (
     ValueMetrics,
     ValueMetricSlice,
@@ -110,6 +116,8 @@ class PPOUpdateMetrics:
     clip_fraction: float
     value: ValueMetrics
     value_slices: tuple[ValueMetricSlice, ...]
+    heuristic_auxiliary_weighted_loss: float
+    heuristic_auxiliary: HeuristicAuxiliaryMetrics
 
 
 @dataclass(frozen=True, slots=True)
@@ -133,6 +141,13 @@ class _PPOUpdateAccumulator:
     entropies: list[float] = field(default_factory=list)
     pre_clip_norms: list[float] = field(default_factory=list)
     post_clip_norms: list[float] = field(default_factory=list)
+    auxiliary_unweighted_loss_sum: float = 0.0
+    auxiliary_weighted_loss_sum: float = 0.0
+    auxiliary_included_count: int = 0
+    auxiliary_total_count: int = 0
+    auxiliary_prediction_sum: float = 0.0
+    auxiliary_target_sum: float = 0.0
+    auxiliary_absolute_error_sum: float = 0.0
 
 
 def ppo_loss(
@@ -203,6 +218,7 @@ class PPOTrainer:
         self,
         model: NeuralPolicy,
         config: PPOConfig = PPOConfig(),  # noqa: B008
+        heuristic_auxiliary_config: HeuristicAuxiliaryValueConfig | None = None,
     ) -> None:
         try:
             device = next(model.parameters()).device
@@ -211,6 +227,9 @@ class PPOTrainer:
         self.model = model
         self.device = device
         self.config = config
+        self.heuristic_auxiliary_config = (
+            heuristic_auxiliary_config or HeuristicAuxiliaryValueConfig()
+        )
         self.optimizer = torch.optim.Adam(
             model.parameters(),
             lr=config.learning_rate,
@@ -227,7 +246,11 @@ class PPOTrainer:
 
         _validate_update_seed(update_seed)
         _ensure_model_finite(self.model)
-        targets = _training_targets(rollout, self.config)
+        targets = _training_targets(
+            rollout,
+            self.config,
+            self.heuristic_auxiliary_config,
+        )
         packed = targets.packed
         transition_count = len(packed)
 
@@ -280,9 +303,28 @@ class PPOTrainer:
                 selection.entropy,
                 config=self.config,
             )
+            auxiliary = masked_heuristic_smooth_l1_loss(
+                output.value,
+                torch.as_tensor(
+                    packed.heuristic_auxiliary_targets[indices],
+                    dtype=output.value.dtype,
+                    device=self.device,
+                ),
+                torch.as_tensor(
+                    packed.heuristic_auxiliary_included[indices],
+                    dtype=torch.bool,
+                    device=self.device,
+                ),
+                self.heuristic_auxiliary_config,
+            )
+            optimization_loss = (
+                loss.total
+                if self.heuristic_auxiliary_config.target == "disabled"
+                else loss.total + auxiliary.weighted
+            )
 
             self.optimizer.zero_grad(set_to_none=True)
-            loss.total.backward()  # type: ignore[no-untyped-call]
+            optimization_loss.backward()  # type: ignore[no-untyped-call]
             _ensure_gradients_finite(self.model)
             pre_clip = torch.nn.utils.clip_grad_norm_(
                 self.model.parameters(),
@@ -299,6 +341,8 @@ class PPOTrainer:
             _record_minibatch_metrics(
                 accumulator,
                 loss=loss,
+                optimization_loss=optimization_loss,
+                auxiliary=auxiliary,
                 new_value=output.value,
                 entropy=selection.entropy,
                 old_log_probability=old_log_probability,
@@ -342,6 +386,8 @@ def _record_minibatch_metrics(
     accumulator: _PPOUpdateAccumulator,
     *,
     loss: PPOLoss,
+    optimization_loss: Tensor,
+    auxiliary: HeuristicAuxiliaryLoss,
     new_value: Tensor,
     entropy: Tensor,
     old_log_probability: Tensor,
@@ -351,7 +397,7 @@ def _record_minibatch_metrics(
     clip_ratio: float,
 ) -> None:
     size = loss.ratio.numel()
-    accumulator.total_loss_sum += float(loss.total.detach().item()) * size
+    accumulator.total_loss_sum += float(optimization_loss.detach().item()) * size
     accumulator.policy_loss_sum += float(loss.policy.detach().item()) * size
     accumulator.value_loss_sum += float(loss.value.detach().item()) * size
     accumulator.entropy_sum += float(loss.entropy.detach().item()) * size
@@ -365,6 +411,23 @@ def _record_minibatch_metrics(
     accumulator.pre_clip_norms.append(float(pre_clip.detach().item()))
     accumulator.post_clip_norms.append(post_clip)
     accumulator.optimizer_steps += 1
+    auxiliary_metrics = auxiliary.metrics
+    auxiliary_count = auxiliary_metrics.included_count
+    accumulator.auxiliary_unweighted_loss_sum += auxiliary_metrics.smooth_l1_loss * auxiliary_count
+    accumulator.auxiliary_weighted_loss_sum += (
+        float(auxiliary.weighted.detach().item()) * auxiliary_count
+    )
+    accumulator.auxiliary_included_count += auxiliary_count
+    accumulator.auxiliary_total_count += auxiliary_metrics.total_count
+    if auxiliary_count:
+        assert auxiliary_metrics.mean_prediction is not None
+        assert auxiliary_metrics.mean_target is not None
+        assert auxiliary_metrics.mean_absolute_error is not None
+        accumulator.auxiliary_prediction_sum += auxiliary_metrics.mean_prediction * auxiliary_count
+        accumulator.auxiliary_target_sum += auxiliary_metrics.mean_target * auxiliary_count
+        accumulator.auxiliary_absolute_error_sum += (
+            auxiliary_metrics.mean_absolute_error * auxiliary_count
+        )
 
 
 def _build_update_metrics(
@@ -386,6 +449,7 @@ def _build_update_metrics(
         player_counts=tuple(int(count) for count in packed.player_counts),
         phases=tuple(phases[int(index)] for index in packed.phase_buckets),
     )
+    auxiliary_metrics = _build_auxiliary_metrics(accumulator)
     return PPOUpdateMetrics(
         epochs=config.epochs,
         optimizer_steps=accumulator.optimizer_steps,
@@ -404,15 +468,27 @@ def _build_update_metrics(
         clip_fraction=accumulator.clip_count / denominator,
         value=value_slices[0].metrics,
         value_slices=value_slices,
+        heuristic_auxiliary_weighted_loss=(
+            accumulator.auxiliary_weighted_loss_sum / accumulator.auxiliary_included_count
+            if accumulator.auxiliary_included_count
+            else 0.0
+        ),
+        heuristic_auxiliary=auxiliary_metrics,
     )
 
 
 def _training_targets(
     rollout: RolloutBatch,
     config: PPOConfig,
+    heuristic_auxiliary_config: HeuristicAuxiliaryValueConfig | None = None,
 ) -> _TrainingTargets:
     try:
-        packed = PackedRollout.from_batch(rollout)
+        packed = PackedRollout.from_batch(
+            rollout,
+            heuristic_auxiliary_config=(
+                heuristic_auxiliary_config or HeuristicAuxiliaryValueConfig()
+            ),
+        )
     except ValueError as error:
         raise PPOError(str(error)) from error
     advantages: list[Tensor] = []
@@ -444,6 +520,31 @@ def _training_targets(
         packed=packed,
         advantages=normalized_advantages,
         returns=concatenated_returns,
+    )
+
+
+def _build_auxiliary_metrics(
+    accumulator: _PPOUpdateAccumulator,
+) -> HeuristicAuxiliaryMetrics:
+    count = accumulator.auxiliary_included_count
+    if not count:
+        return HeuristicAuxiliaryMetrics(
+            included_count=0,
+            total_count=accumulator.auxiliary_total_count,
+            included_fraction=0.0,
+            mean_prediction=None,
+            mean_target=None,
+            mean_absolute_error=None,
+            smooth_l1_loss=0.0,
+        )
+    return HeuristicAuxiliaryMetrics(
+        included_count=count,
+        total_count=accumulator.auxiliary_total_count,
+        included_fraction=count / accumulator.auxiliary_total_count,
+        mean_prediction=accumulator.auxiliary_prediction_sum / count,
+        mean_target=accumulator.auxiliary_target_sum / count,
+        mean_absolute_error=accumulator.auxiliary_absolute_error_sum / count,
+        smooth_l1_loss=accumulator.auxiliary_unweighted_loss_sum / count,
     )
 
 

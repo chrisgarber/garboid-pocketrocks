@@ -153,6 +153,32 @@ non-default interval checkpoints, checkpoint retention, start/periodic/final
 evaluation, and checkpoint-league mixing before creating an output directory
 because those controls are not implemented by the current runtime.
 
+## Heuristic-to-neural research
+
+Issue 14's committed research profiles test three separate ways to teach the
+large policy from the released v3 heuristics:
+
+- `heuristic-behavior-cloning-v1.json` first teaches the policy head to copy
+  legal `balanced-v3` actions, then starts ordinary PPO with a fresh optimizer;
+- `heuristic-auxiliary-value-v1.json` adds a small training-only hint to the
+  existing value estimate for bid decisions, without changing rewards, GAE,
+  legal masks, or the deployed model shape;
+- `heuristic-opponent-curriculum-v1.json` trains one focal neural seat against
+  explicit v3 opponents, gradually mixing self-play back in.
+
+`heuristic-bootstrap-control-v1.json` is the fixed-compute control. The loader
+rejects combined strategies so each result remains attributable to one
+change. Every profile uses root seed 42 and exactly 349,860 complete training
+games; cloning substitutes four demonstration rounds for four PPO updates.
+The [experiment plan](../../../docs/superpowers/plans/2026-07-31-heuristic-neural-bootstrapping.md)
+records the exact budget, information boundary, immutable teacher identities,
+and freeze-before-held-out rule.
+
+These profiles create research checkpoints. Losses, teacher agreement,
+rewards, and development scores cannot move a released alias. A checkpoint
+must be frozen first and then pass the ordinary fault-free held-out promotion
+gate with a strictly positive 95% confidence lower bound.
+
 ## Completed evaluation and promotion
 
 The frozen large v1 checkpoint passed the held-out promotion gate against the

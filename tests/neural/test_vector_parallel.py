@@ -12,6 +12,9 @@ from garboid_pocketrocks.neural.config import (  # noqa: E402
     training_encoder_config,
     training_model_config,
 )
+from garboid_pocketrocks.neural.heuristic_curriculum import (  # noqa: E402
+    plan_heuristic_curriculum_episodes,
+)
 from garboid_pocketrocks.neural.model import NeuralPolicy  # noqa: E402
 from garboid_pocketrocks.neural.planning import plan_mirror_episodes  # noqa: E402
 from garboid_pocketrocks.neural.rollout import RolloutBatch  # noqa: E402
@@ -189,3 +192,38 @@ def test_parallel_vector_actors_match_single_process_vector_rollout() -> None:
     assert metrics.decisions == len(parallel.transitions)
     assert metrics.ipc_seconds >= 0.0
     assert metrics.worker_busy_seconds > 0.0
+
+
+def test_parallel_vector_actor_resolves_curriculum_heuristics_locally() -> None:
+    torch.manual_seed(82)
+    config = training_encoder_config()
+    model = NeuralPolicy(config, training_model_config("small"))
+    plans = plan_heuristic_curriculum_episodes(
+        root_seed=82,
+        update_index=0,
+        games_per_cell=1,
+        learner_policy_identity="current",
+    ).plans[:3]
+    reward = RewardConfig()
+    serial, _ = collect_self_play_vectorized(
+        {"current": model},
+        plans,
+        encoder_config=config,
+        reward_config=reward,
+        device=torch.device("cpu"),
+        engine_batch_size=1,
+        max_inference_batch=16,
+    )
+
+    parallel, metrics = collect_self_play_vectorized_parallel(
+        {"current": model},
+        plans,
+        encoder_config=config,
+        reward_config=reward,
+        workers=1,
+        engine_batch_size=1,
+        max_inference_batch=16,
+    )
+
+    assert _records(parallel) == _records(serial)
+    assert metrics.games == 3

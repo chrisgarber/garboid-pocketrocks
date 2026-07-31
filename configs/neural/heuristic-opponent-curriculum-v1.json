@@ -1,0 +1,21 @@
+{
+  "deterministic_algorithms": true,
+  "device": "auto",
+  "games_per_cell": 119,
+  "learner_threads": 4,
+  "max_updates": 196,
+  "max_wall_seconds": null,
+  "model_profile": "large",
+  "opponent_training": "heuristic-opponent-curriculum-v1",
+  "parallel": {
+    "active_games_per_worker": 128,
+    "max_inference_batch": 1024,
+    "max_queue_delay_ms": 1.0,
+    "workers": "auto"
+  },
+  "ppo": {
+    "epochs": 3
+  },
+  "root_seed": 42,
+  "target_decisions_per_update": null
+}

@@ -12,11 +12,17 @@ from pocketrocks import DecisionContext
 
 from garboid_pocketrocks.knowledge import (
     canonical_knowledge,
+    knowledge_for_context,
     value_chart_from_ruleset_name,
 )
 from garboid_pocketrocks.neural.encoding import (
     NeuralBatch,
     NeuralObservation,
+)
+from garboid_pocketrocks.neural.heuristic_auxiliary import (
+    HeuristicAuxiliaryLabel,
+    HeuristicAuxiliaryValueConfig,
+    heuristic_auxiliary_label,
 )
 from garboid_pocketrocks.neural.planning import SelfPlayEpisodePlan
 from garboid_pocketrocks.simulator.session import SessionResult
@@ -138,14 +144,23 @@ class PackedRollout:
     chart_indices: NDArray[np.int64]
     player_counts: NDArray[np.int64]
     phase_buckets: NDArray[np.int64]
+    heuristic_auxiliary_targets: NDArray[np.float32]
+    heuristic_auxiliary_included: NDArray[np.bool_]
     trajectory_ranges: tuple[tuple[int, int], ...]
 
     def __len__(self) -> int:
         return int(self.actions.shape[0])
 
     @classmethod
-    def from_batch(cls, rollout: RolloutBatch) -> PackedRollout:
+    def from_batch(
+        cls,
+        rollout: RolloutBatch,
+        *,
+        heuristic_auxiliary_config: HeuristicAuxiliaryValueConfig | None = None,
+    ) -> PackedRollout:
         """Stack a rollout exactly once while retaining trajectory boundaries."""
+
+        auxiliary_config = heuristic_auxiliary_config or HeuristicAuxiliaryValueConfig()
 
         trajectories: list[tuple[int, tuple[RolloutTransition, ...]]] = []
         for episode in rollout.episodes:
@@ -172,6 +187,18 @@ class PackedRollout:
                 raise RolloutError("packed rollout requires complete terminal trajectories")
 
         observations = tuple(item.observation for item in transitions)
+        auxiliary_labels = (
+            tuple(HeuristicAuxiliaryLabel(target=0.0, included=False) for _item in transitions)
+            if auxiliary_config.target == "disabled"
+            else tuple(
+                heuristic_auxiliary_label(
+                    item.context,
+                    knowledge_for_context(item.context),
+                    auxiliary_config,
+                )
+                for item in transitions
+            )
+        )
         packed = cls(
             global_ids=np.stack([item.global_ids for item in observations]),
             global_numeric=np.stack([item.global_numeric for item in observations]),
@@ -225,6 +252,14 @@ class PackedRollout:
                 [_phase_bucket(item) for item in transitions],
                 dtype=np.int64,
             ),
+            heuristic_auxiliary_targets=np.asarray(
+                [label.target for label in auxiliary_labels],
+                dtype=np.float32,
+            ),
+            heuristic_auxiliary_included=np.asarray(
+                [label.included for label in auxiliary_labels],
+                dtype=np.bool_,
+            ),
             trajectory_ranges=tuple(ranges),
         )
         for value in (
@@ -250,6 +285,8 @@ class PackedRollout:
             packed.chart_indices,
             packed.player_counts,
             packed.phase_buckets,
+            packed.heuristic_auxiliary_targets,
+            packed.heuristic_auxiliary_included,
         ):
             value.flags.writeable = False
         return packed

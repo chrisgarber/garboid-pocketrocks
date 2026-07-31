@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import subprocess
@@ -13,6 +14,11 @@ from typing import cast
 
 import torch
 
+from garboid_pocketrocks.neural.behavior_cloning import (
+    BehaviorCloningTrainer,
+    collect_behavior_cloning_dataset,
+    plan_behavior_cloning_games,
+)
 from garboid_pocketrocks.neural.benchmark import (
     BenchmarkCandidate,
     BenchmarkResult,
@@ -25,7 +31,18 @@ from garboid_pocketrocks.neural.config import (
     training_model_config,
 )
 from garboid_pocketrocks.neural.devices import resolve_device
-from garboid_pocketrocks.neural.identity import trained_neural_bot_id
+from garboid_pocketrocks.neural.heuristic_bootstrap import (
+    bootstrap_strategy,
+    validate_fixed_compute_arm,
+)
+from garboid_pocketrocks.neural.heuristic_curriculum import (
+    HEURISTIC_OPPONENT_CURRICULUM_V1,
+    plan_heuristic_curriculum_episodes,
+)
+from garboid_pocketrocks.neural.identity import (
+    experimental_neural_bot_id,
+    trained_neural_bot_id,
+)
 from garboid_pocketrocks.neural.model import NeuralPolicy
 from garboid_pocketrocks.neural.parallel import collect_self_play_parallel
 from garboid_pocketrocks.neural.planning import (
@@ -102,7 +119,12 @@ def train(
         training_encoder_config(),
         training_model_config(config.model_profile),
     ).to(device)
-    trainer = PPOTrainer(model, resolved.ppo)
+    _run_behavior_cloning_if_configured(resolved, run_dir, model)
+    trainer = PPOTrainer(
+        model,
+        resolved.ppo,
+        heuristic_auxiliary_config=resolved.heuristic_auxiliary,
+    )
     selected_result = next(
         (result for result in benchmarks if result.candidate == candidate),
         None,
@@ -166,7 +188,11 @@ def resume(
             "results": [asdict(result) for result in benchmarks],
         },
     )
-    trainer = PPOTrainer(loaded.model, config.ppo)
+    trainer = PPOTrainer(
+        loaded.model,
+        config.ppo,
+        heuristic_auxiliary_config=config.heuristic_auxiliary,
+    )
     trainer.optimizer = loaded.optimizer
     limit = max_additional_updates
     if limit is not None:
@@ -295,11 +321,10 @@ def _run_updates_with_pool(
             if durations and remaining < max(durations[-5:]):
                 break
         update_started = time.perf_counter()
-        plans = plan_mirror_episodes(
-            root_seed=config.root_seed,
+        plans = _training_plans(
+            config,
             update_index=update_index,
             games_per_cell=games_per_cell,
-            policy_identity="current",
         )
         snapshot = NeuralPolicy(
             model.encoder_config,
@@ -354,10 +379,7 @@ def _run_updates_with_pool(
                 run_config=config,
                 progress=progress,
                 lineage=lineage,
-                champion_identity=trained_neural_bot_id(
-                    config.model_profile,
-                    completed_episodes,
-                ),
+                champion_identity=_checkpoint_identity(config, completed_episodes),
                 league_identities=(),
             ),
             generator_states={"torch": torch.get_rng_state()},
@@ -420,6 +442,81 @@ def _collect(
         active_games_per_worker=config.parallel.active_games_per_worker,
         max_inference_batch=config.parallel.max_inference_batch,
         max_queue_delay_ms=config.parallel.max_queue_delay_ms,
+    )
+
+
+def _run_behavior_cloning_if_configured(
+    config: TrainingRunConfig,
+    run_dir: Path,
+    model: NeuralPolicy,
+) -> None:
+    cloning = config.behavior_cloning
+    if cloning is None:
+        return
+    dataset = collect_behavior_cloning_dataset(
+        plan_behavior_cloning_games(cloning),
+        encoder_config=model.encoder_config,
+    )
+    metrics = BehaviorCloningTrainer(model, cloning).train(dataset)
+    _write_json(
+        run_dir / "behavior-cloning.json",
+        {
+            "config": cloning.to_json_dict(),
+            "dataset": {
+                "cell_game_counts": dataset.cell_game_counts,
+                "dataset_digest": dataset.dataset_digest,
+                "example_count": len(dataset.examples),
+                "game_count": dataset.game_count,
+                "teacher_identity": dataset.teacher_identity,
+                "teacher_profile_digest": dataset.teacher_profile_digest,
+            },
+            "training": asdict(metrics),
+        },
+    )
+
+
+def _training_plans(
+    config: TrainingRunConfig,
+    *,
+    update_index: int,
+    games_per_cell: int,
+) -> tuple[SelfPlayEpisodePlan, ...]:
+    if config.opponent_training == "heuristic-opponent-curriculum-v1":
+        return plan_heuristic_curriculum_episodes(
+            root_seed=config.root_seed,
+            update_index=update_index,
+            games_per_cell=games_per_cell,
+            learner_policy_identity="current",
+            curriculum=HEURISTIC_OPPONENT_CURRICULUM_V1,
+        ).plans
+    return plan_mirror_episodes(
+        root_seed=config.root_seed,
+        update_index=update_index,
+        games_per_cell=games_per_cell,
+        policy_identity="current",
+    )
+
+
+def _checkpoint_identity(
+    config: TrainingRunConfig,
+    completed_games: int,
+) -> str:
+    try:
+        validate_fixed_compute_arm(config)
+    except ValueError:
+        return trained_neural_bot_id(config.model_profile, completed_games)
+    canonical = json.dumps(
+        config.to_json_dict(),
+        allow_nan=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode()
+    return experimental_neural_bot_id(
+        config.model_profile,
+        strategy=bootstrap_strategy(config),
+        root_seed=config.root_seed,
+        completed_games=completed_games,
+        config_digest=hashlib.sha256(canonical).hexdigest(),
     )
 
 
