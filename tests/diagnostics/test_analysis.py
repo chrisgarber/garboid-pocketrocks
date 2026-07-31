@@ -9,15 +9,25 @@ from pocketrocks.sim.constants import ACTION_WIRE_IDS
 
 from garboid_pocketrocks.diagnostics.analysis import (
     DecisionAnalysisError,
+    DecisionReconciliation,
     DecisionReport,
+    DecisionSlice,
+    PhaseOutcome,
     build_decision_report,
 )
 from garboid_pocketrocks.diagnostics.trace import (
+    DecisionExplanation,
     DecisionTrace,
+    HeuristicBidExplanation,
     PendingDecisionTrace,
+    PhaseAwareHeuristicBidExplanation,
     PublicDecisionContext,
     PublicDecisionOutcome,
     RecordedAction,
+)
+from garboid_pocketrocks.heuristics.phases import (
+    public_resource_horizon,
+    select_expert_phase,
 )
 from garboid_pocketrocks.knowledge import canonical_knowledge, ruleset_name
 from garboid_pocketrocks.simulator.monte_carlo import (
@@ -75,6 +85,7 @@ def _trace(
     objective_ids: tuple[int, ...] = (1, 10),
     owned_objective_ids_by_seat: tuple[tuple[int, ...], ...] | None = None,
     selection_source: str = "policy",
+    explanation: DecisionExplanation | None = None,
 ) -> DecisionTrace:
     player_count = game.player_count
     knowledge = canonical_knowledge(player_count, value_chart=game.ruleset_name[5])
@@ -139,7 +150,7 @@ def _trace(
         public_history=(),
         legal_actions=legal_actions,
         selected_action=selected_action,
-        explanation=None,
+        explanation=explanation,
         selection_source=selection_source,  # type: ignore[arg-type]
     )
     return DecisionTrace.from_pending(
@@ -150,6 +161,54 @@ def _trace(
             final_money=score.final_money,
         ),
     )
+
+
+def _phase_aware_trace(
+    game: GameSummary,
+    *,
+    seat: int,
+    future_biddable_resources: int,
+    step_index: int = 0,
+    turn_index: int = 0,
+) -> DecisionTrace:
+    won_resource_count = 14 - future_biddable_resources
+    won_resource_counts = (
+        (
+            0,
+            min(won_resource_count, 3),
+            min(max(won_resource_count - 3, 0), 3),
+            min(max(won_resource_count - 6, 0), 3),
+            min(max(won_resource_count - 9, 0), 3),
+        ),
+        *((0, 0, 0, 0, 0),) * (game.player_count - 1),
+    )
+    ordinary_trace = _trace(
+        game,
+        seat=seat,
+        step_index=step_index,
+        turn_index=turn_index,
+        won_resource_counts_by_seat=won_resource_counts,
+    )
+    knowledge = canonical_knowledge(
+        game.player_count,
+        value_chart=game.ruleset_name[5],
+    )
+    horizon = public_resource_horizon(ordinary_trace.context, knowledge)
+    explanation = PhaseAwareHeuristicBidExplanation(
+        resource_value=3.0,
+        objective_completion_value=0.0,
+        objective_progress_value=0.0,
+        terminal_cash_value=0.0,
+        liquidity_value=0.0,
+        future_cash_value=0.0,
+        total_value=3.0,
+        reservation_bid=3,
+        chosen_bid=3,
+        selected_expert_phase=select_expert_phase(horizon),
+        future_biddable_resources=horizon.future_biddable_resources,
+        total_biddable_resources=horizon.total_biddable_resources,
+    )
+    return replace(ordinary_trace, explanation=explanation)
 
 
 def _ordinary_results(
@@ -620,3 +679,270 @@ def test_tournament_rows_and_condition_statistics_must_reconcile() -> None:
                 ),
             ),
         )
+
+
+def test_phase_aware_report_attributes_all_three_experts_and_reconciles_outcomes() -> None:
+    early_game = _game(
+        game_index=0,
+        final_money=(31, 20, 10),
+        ranks=(1, 2, 3),
+        decision_counts=(1, 0, 0),
+    )
+    middle_game = _game(
+        game_index=1,
+        final_money=(40, 40, 10),
+        ranks=(1, 1, 3),
+        decision_counts=(0, 1, 0),
+        fault_counts=(0, 1, 0),
+    )
+    late_game = _game(
+        game_index=2,
+        final_money=(50, 10, 20),
+        ranks=(1, 3, 2),
+        decision_counts=(0, 0, 1),
+    )
+    traces = (
+        _phase_aware_trace(
+            early_game,
+            seat=0,
+            future_biddable_resources=10,
+            step_index=0,
+            turn_index=12,
+        ),
+        _phase_aware_trace(
+            middle_game,
+            seat=1,
+            future_biddable_resources=5,
+            step_index=0,
+            turn_index=4,
+        ),
+        _phase_aware_trace(
+            late_game,
+            seat=2,
+            future_biddable_resources=4,
+            step_index=0,
+            turn_index=4,
+        ),
+    )
+
+    report = _build(
+        tuple(reversed(traces)),
+        (late_game, middle_game, early_game),
+    )
+
+    assert report.schema_version == 2
+    assert report.phase_outcomes == (
+        PhaseOutcome(
+            selected_expert_phase="early",
+            decision_count=1,
+            eventual_final_money_sum=31,
+            eventual_normalized_finish_sum=1.0,
+            outright_win_decision_count=1,
+            tied_first_decision_count=0,
+            decisions_from_faulted_game_seat=0,
+        ),
+        PhaseOutcome(
+            selected_expert_phase="middle",
+            decision_count=1,
+            eventual_final_money_sum=40,
+            eventual_normalized_finish_sum=1.0,
+            outright_win_decision_count=0,
+            tied_first_decision_count=1,
+            decisions_from_faulted_game_seat=1,
+        ),
+        PhaseOutcome(
+            selected_expert_phase="late",
+            decision_count=1,
+            eventual_final_money_sum=20,
+            eventual_normalized_finish_sum=0.5,
+            outright_win_decision_count=0,
+            tied_first_decision_count=0,
+            decisions_from_faulted_game_seat=0,
+        ),
+    )
+    assert sum(item.decision_count for item in report.phase_outcomes) == 3
+    assert report.reconciliation.selected_expert_decision_count == 3
+    assert {(item.game_phase, item.selected_expert_phase) for item in report.slices} == {
+        ("late", "early"),
+        ("early", "middle"),
+        ("early", "late"),
+    }
+
+
+def test_schema_v2_keeps_nonexpert_decisions_in_ordinary_totals_with_null_phase() -> None:
+    game = _game(
+        decision_counts=(3, 1, 1),
+        fault_counts=(0, 1, 0),
+    )
+    phase_aware = _phase_aware_trace(
+        game,
+        seat=0,
+        future_biddable_resources=10,
+        step_index=0,
+    )
+    ordinary_heuristic = _trace(
+        game,
+        seat=0,
+        step_index=1,
+        explanation=HeuristicBidExplanation(
+            resource_value=3.0,
+            objective_completion_value=0.0,
+            objective_progress_value=0.0,
+            terminal_cash_value=0.0,
+            liquidity_value=0.0,
+            future_cash_value=0.0,
+            total_value=3.0,
+            reservation_bid=3,
+            chosen_bid=3,
+        ),
+    )
+    invalid_input_pass = _trace(
+        game,
+        seat=0,
+        step_index=2,
+        selected_action=RecordedAction("pass"),
+    )
+    fault_fallback = _trace(
+        game,
+        seat=1,
+        selection_source="fault_fallback",
+    )
+    reveal = _trace(
+        game,
+        seat=2,
+        decision_kind="selectInfoToReveal",
+        selected_action=RecordedAction("selectInfoToReveal", 0),
+    )
+
+    report = _build(
+        (
+            reveal,
+            fault_fallback,
+            invalid_input_pass,
+            ordinary_heuristic,
+            phase_aware,
+        ),
+        (game,),
+    )
+
+    assert report.schema_version == 2
+    assert report.reconciliation.trace_decision_count == 5
+    assert report.reconciliation.slice_decision_count == 5
+    assert report.reconciliation.selected_expert_decision_count == 1
+    assert sum(item.decision_count for item in report.phase_outcomes) == 1
+    assert (
+        sum(item.decision_count for item in report.slices if item.selected_expert_phase is None)
+        == 4
+    )
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    (
+        ("selected_expert_phase", None),
+        ("selected_expert_phase", "middle"),
+        ("future_biddable_resources", 11),
+        ("total_biddable_resources", 16),
+    ),
+)
+def test_phase_aware_explanation_is_revalidated_from_public_context(
+    field: str,
+    value: object,
+) -> None:
+    game = _game(decision_counts=(1, 0, 0))
+    trace = _phase_aware_trace(
+        game,
+        seat=0,
+        future_biddable_resources=10,
+    )
+    assert isinstance(trace.explanation, PhaseAwareHeuristicBidExplanation)
+    object.__setattr__(trace.explanation, field, value)
+
+    with pytest.raises(DecisionAnalysisError, match="phase-aware explanation"):
+        _build((trace,), (game,))
+
+
+def test_v1_report_has_no_selected_expert_decisions() -> None:
+    game = _game(decision_counts=(1, 0, 0))
+
+    report = _build((_trace(game, seat=0),), (game,))
+
+    assert report.schema_version == 1
+    assert report.slices[0].selected_expert_phase is None
+    assert report.reconciliation.selected_expert_decision_count == 0
+    assert report.phase_outcomes == ()
+
+
+def test_schema_v2_includes_a_zero_outcome_row_for_an_unselected_phase() -> None:
+    game = _game(decision_counts=(2, 0, 0))
+    traces = (
+        _phase_aware_trace(
+            game,
+            seat=0,
+            future_biddable_resources=10,
+            step_index=0,
+        ),
+        _phase_aware_trace(
+            game,
+            seat=0,
+            future_biddable_resources=4,
+            step_index=1,
+        ),
+    )
+
+    report = _build(traces, (game,))
+
+    middle = report.phase_outcomes[1]
+    assert middle.selected_expert_phase == "middle"
+    assert middle.decision_count == 0
+    assert middle.eventual_final_money_sum == 0
+    assert middle.eventual_normalized_finish_sum == 0.0
+    assert middle.outright_win_decision_count == 0
+    assert middle.tied_first_decision_count == 0
+    assert middle.decisions_from_faulted_game_seat == 0
+
+
+def test_schema_v1_analysis_dataclasses_preserve_legacy_construction() -> None:
+    game = _game(decision_counts=(1, 0, 0))
+    report = _build((_trace(game, seat=0),), (game,))
+    item = report.slices[0]
+    legacy_slice_fields = (
+        "bot_name",
+        "bot_id",
+        "game_phase",
+        "chart",
+        "player_count",
+        "decision_kind",
+        "auction_action",
+        "selected_action_kind",
+        "future_biddable_resources",
+        "total_biddable_resources",
+        "actor_owned_objectives",
+        "opponent_owned_objectives",
+        "unclaimed_objectives",
+        "seat",
+        "opponent_bot_ids",
+        "decision_count",
+        "pass_count",
+        "selected_value_count",
+        "selected_value_sum",
+        "eventual_final_money_sum",
+        "eventual_normalized_finish_sum",
+        "outright_win_decision_count",
+        "tied_first_decision_count",
+        "decisions_from_faulted_game_seat",
+    )
+
+    legacy_slice = DecisionSlice(*(getattr(item, field) for field in legacy_slice_fields))
+    legacy_reconciliation = DecisionReconciliation(1, 3, 1, 1, 1)
+    legacy_report = DecisionReport(
+        1,
+        report.game_summaries,
+        report.decision_traces,
+        (legacy_slice,),
+        legacy_reconciliation,
+    )
+
+    assert legacy_slice.selected_expert_phase is None
+    assert legacy_reconciliation.selected_expert_decision_count == 0
+    assert legacy_report.phase_outcomes == ()

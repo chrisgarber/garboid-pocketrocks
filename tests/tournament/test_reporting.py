@@ -12,6 +12,7 @@ import pytest
 
 from diagnostics.test_analysis import _build as build_decision_report_fixture
 from diagnostics.test_analysis import _game as decision_game_fixture
+from diagnostics.test_analysis import _phase_aware_trace as phase_aware_trace_fixture
 from diagnostics.test_analysis import _trace as decision_trace_fixture
 from garboid_pocketrocks.simulator.monte_carlo import MonteCarloResult
 from garboid_pocketrocks.tournament.analysis import (
@@ -163,6 +164,7 @@ def test_decision_report_adds_sanitized_artifacts_summary_and_html_links(tmp_pat
             "slice_decision_count": 1,
         },
     }
+    assert "selected_expert_decision_count" not in payload["decision_diagnostics"]["reconciliation"]
     assert payload["artifacts"] == {
         "ratings_csv": "ratings.csv",
         "summary_json": "summary.json",
@@ -178,6 +180,44 @@ def test_decision_report_adds_sanitized_artifacts_summary_and_html_links(tmp_pat
     assert '<a href="game-summaries.jsonl">Game summaries</a>' in html
     assert '<a href="decision-traces.jsonl">Decision traces</a>' in html
     assert '<a href="decision-slices.csv">Decision slices</a>' in html
+
+
+def test_schema_v2_summary_adds_selected_expert_reconciliation_count(
+    tmp_path: Path,
+) -> None:
+    config, plan, fit, analysis, bootstrap = _report_inputs()
+    game = decision_game_fixture(decision_counts=(1, 0, 0))
+    trace = phase_aware_trace_fixture(
+        game,
+        seat=0,
+        future_biddable_resources=10,
+    )
+    decision_report = build_decision_report_fixture((trace,), (game,))
+
+    artifacts = write_tournament_artifacts(
+        output_dir=tmp_path,
+        overwrite=False,
+        config=config,
+        plan=plan,
+        fit=fit,
+        analysis=analysis,
+        bootstrap=bootstrap,
+        decision_report=decision_report,
+    )
+
+    payload = json.loads(artifacts.summary_json.read_text(encoding="utf-8"))
+    assert payload["decision_diagnostics"] == {
+        "schema_version": 2,
+        "seed_disclosure": "withheld_for_privacy",
+        "reconciliation": {
+            "game_count": 1,
+            "game_seat_count": 3,
+            "trace_decision_count": 1,
+            "game_summary_decision_count": 1,
+            "slice_decision_count": 1,
+            "selected_expert_decision_count": 1,
+        },
+    }
 
 
 def test_csv_follows_rating_order_and_round_trips_values(tmp_path: Path) -> None:

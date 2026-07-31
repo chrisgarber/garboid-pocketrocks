@@ -11,8 +11,16 @@ from typing import Literal
 
 from pocketrocks.sim.constants import ACTION_WIRE_IDS
 
-from garboid_pocketrocks.diagnostics.trace import DecisionTrace
-from garboid_pocketrocks.heuristics.phases import public_resource_horizon
+from garboid_pocketrocks.diagnostics.trace import (
+    DecisionTrace,
+    PhaseAwareHeuristicBidExplanation,
+)
+from garboid_pocketrocks.heuristics.phases import (
+    HeuristicPhase,
+    PublicResourceHorizon,
+    public_resource_horizon,
+    select_expert_phase,
+)
 from garboid_pocketrocks.knowledge import (
     canonical_knowledge,
     ruleset_name,
@@ -32,6 +40,7 @@ from garboid_pocketrocks.tournament.analysis import (
 type GamePhase = Literal["early", "middle", "late"]
 
 _ACTION_NAME_BY_ID = {wire_id: name for name, wire_id in ACTION_WIRE_IDS.items()}
+_HEURISTIC_PHASES: tuple[HeuristicPhase, ...] = ("early", "middle", "late")
 
 
 class DecisionAnalysisError(ValueError):
@@ -66,6 +75,7 @@ class DecisionSlice:
     outright_win_decision_count: int
     tied_first_decision_count: int
     decisions_from_faulted_game_seat: int
+    selected_expert_phase: HeuristicPhase | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -77,6 +87,20 @@ class DecisionReconciliation:
     trace_decision_count: int
     game_summary_decision_count: int
     slice_decision_count: int
+    selected_expert_decision_count: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class PhaseOutcome:
+    """Additive public outcomes for decisions attributed to one expert."""
+
+    selected_expert_phase: HeuristicPhase
+    decision_count: int
+    eventual_final_money_sum: int
+    eventual_normalized_finish_sum: float
+    outright_win_decision_count: int
+    tied_first_decision_count: int
+    decisions_from_faulted_game_seat: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -88,13 +112,15 @@ class DecisionReport:
     decision_traces: tuple[DecisionTrace, ...]
     slices: tuple[DecisionSlice, ...]
     reconciliation: DecisionReconciliation
+    phase_outcomes: tuple[PhaseOutcome, ...] = ()
 
 
-@dataclass(frozen=True, order=True, slots=True)
+@dataclass(frozen=True, slots=True)
 class _SliceKey:
     bot_name: str
     bot_id: str
     game_phase: GamePhase
+    selected_expert_phase: HeuristicPhase | None
     chart: str
     player_count: int
     decision_kind: str
@@ -150,6 +176,15 @@ class _ConditionAggregate:
     final_money: tuple[int, ...]
 
 
+@dataclass(frozen=True, slots=True)
+class _CanonicalDecisionEvidence:
+    game_summaries: tuple[GameSummary, ...]
+    decision_traces: tuple[DecisionTrace, ...]
+    slices: tuple[DecisionSlice, ...]
+    phase_outcomes: tuple[PhaseOutcome, ...]
+    reconciliation: DecisionReconciliation
+
+
 def build_decision_report(
     traces: Sequence[DecisionTrace],
     *,
@@ -158,6 +193,34 @@ def build_decision_report(
     tournament_analysis: TournamentAnalysis,
 ) -> DecisionReport:
     """Validate every source and group traces into deterministic additive slices."""
+
+    evidence = _canonical_decision_evidence(
+        traces,
+        game_summaries=game_summaries,
+    )
+    bot_aggregates, condition_aggregates = _ordinary_aggregates(evidence.game_summaries)
+    _validate_bot_statistics(bot_statistics, expected=bot_aggregates)
+    _validate_tournament_rows(tournament_analysis.rows, expected=bot_aggregates)
+    _validate_condition_statistics(
+        tournament_analysis.condition_statistics,
+        expected=condition_aggregates,
+    )
+    return DecisionReport(
+        schema_version=(2 if evidence.reconciliation.selected_expert_decision_count else 1),
+        game_summaries=evidence.game_summaries,
+        decision_traces=evidence.decision_traces,
+        slices=evidence.slices,
+        reconciliation=evidence.reconciliation,
+        phase_outcomes=evidence.phase_outcomes,
+    )
+
+
+def _canonical_decision_evidence(
+    traces: Sequence[DecisionTrace],
+    *,
+    game_summaries: Sequence[GameSummary],
+) -> _CanonicalDecisionEvidence:
+    """Rebuild every report-owned aggregate from public traces and game summaries."""
 
     ordered_games = tuple(sorted(game_summaries, key=lambda game: game.game_index))
     games_by_index = _validated_games_by_index(ordered_games)
@@ -175,6 +238,7 @@ def build_decision_report(
 
     traces_per_game_seat: Counter[tuple[int, int]] = Counter()
     slices: dict[_SliceKey, _SliceAccumulator] = {}
+    selected_expert_traces: list[tuple[HeuristicPhase, DecisionTrace, GameSummary]] = []
     for trace in ordered_traces:
         game = _matching_game(trace, games_by_index)
         _validate_trace_against_game(trace, game)
@@ -182,27 +246,31 @@ def build_decision_report(
         key = _slice_key(trace)
         accumulator = slices.setdefault(key, _SliceAccumulator())
         _record_slice(accumulator, trace, game)
+        if key.selected_expert_phase is not None:
+            selected_expert_traces.append((key.selected_expert_phase, trace, game))
 
     expected_decisions = _validate_decision_counts(
         ordered_games,
         traces_per_game_seat=traces_per_game_seat,
     )
-    bot_aggregates, condition_aggregates = _ordinary_aggregates(ordered_games)
-    _validate_bot_statistics(bot_statistics, expected=bot_aggregates)
-    _validate_tournament_rows(tournament_analysis.rows, expected=bot_aggregates)
-    _validate_condition_statistics(
-        tournament_analysis.condition_statistics,
-        expected=condition_aggregates,
+    frozen_slices = tuple(
+        _freeze_slice(key, slices[key]) for key in sorted(slices, key=_slice_key_sort_key)
     )
-
-    frozen_slices = tuple(_freeze_slice(key, slices[key]) for key in sorted(slices))
     slice_decisions = sum(item.decision_count for item in frozen_slices)
     if slice_decisions != len(ordered_traces) or slice_decisions != expected_decisions:
         raise DecisionAnalysisError(
             "slice decision total does not match traces and game-summary decisions"
         )
-    return DecisionReport(
-        schema_version=1,
+    selected_expert_decisions = len(selected_expert_traces)
+    frozen_phase_outcomes = (
+        _phase_outcomes_from_slices(frozen_slices) if selected_expert_decisions else ()
+    )
+    _validate_phase_outcomes(
+        frozen_phase_outcomes,
+        slices=frozen_slices,
+        selected_expert_traces=selected_expert_traces,
+    )
+    return _CanonicalDecisionEvidence(
         game_summaries=ordered_games,
         decision_traces=ordered_traces,
         slices=frozen_slices,
@@ -212,7 +280,9 @@ def build_decision_report(
             trace_decision_count=len(ordered_traces),
             game_summary_decision_count=expected_decisions,
             slice_decision_count=slice_decisions,
+            selected_expert_decision_count=selected_expert_decisions,
         ),
+        phase_outcomes=frozen_phase_outcomes,
     )
 
 
@@ -329,19 +399,21 @@ def _slice_key(trace: DecisionTrace) -> _SliceKey:
         raise DecisionAnalysisError(
             f"decision trace has unknown current auction action {action_id!r}"
         ) from error
-    future_resources, total_resources = _cash_horizon(trace)
+    horizon = _public_resource_horizon(trace)
+    selected_expert_phase = _selected_expert_phase(trace, horizon)
     actor_objectives, opponent_objectives, unclaimed_objectives = _objective_state(trace)
     return _SliceKey(
         bot_name=trace.bot_name,
         bot_id=trace.bot_id,
         game_phase=_game_phase(trace.turn_index),
+        selected_expert_phase=selected_expert_phase,
         chart=trace.chart,
         player_count=trace.context.player_count,
         decision_kind=trace.context.decision_kind,
         auction_action=auction_action,
         selected_action_kind=trace.selected_action.action_kind,
-        future_biddable_resources=future_resources,
-        total_biddable_resources=total_resources,
+        future_biddable_resources=horizon.future_biddable_resources,
+        total_biddable_resources=horizon.total_biddable_resources,
         actor_owned_objectives=actor_objectives,
         opponent_owned_objectives=opponent_objectives,
         unclaimed_objectives=unclaimed_objectives,
@@ -351,6 +423,27 @@ def _slice_key(trace: DecisionTrace) -> _SliceKey:
                 bot_id for seat, bot_id in enumerate(trace.bot_ids_by_seat) if seat != trace.seat
             )
         ),
+    )
+
+
+def _slice_key_sort_key(key: _SliceKey) -> tuple[object, ...]:
+    return (
+        key.bot_name,
+        key.bot_id,
+        key.game_phase,
+        key.selected_expert_phase or "",
+        key.chart,
+        key.player_count,
+        key.decision_kind,
+        key.auction_action,
+        key.selected_action_kind,
+        key.future_biddable_resources,
+        key.total_biddable_resources,
+        key.actor_owned_objectives,
+        key.opponent_owned_objectives,
+        key.unclaimed_objectives,
+        key.seat,
+        key.opponent_bot_ids,
     )
 
 
@@ -365,7 +458,7 @@ def _game_phase(turn_index: int) -> GamePhase:
     return "late"
 
 
-def _cash_horizon(trace: DecisionTrace) -> tuple[int, int]:
+def _public_resource_horizon(trace: DecisionTrace) -> PublicResourceHorizon:
     context = trace.context
     knowledge = canonical_knowledge(
         context.player_count,
@@ -378,10 +471,27 @@ def _cash_horizon(trace: DecisionTrace) -> tuple[int, int]:
         raise DecisionAnalysisError(
             f"decision trace public resource horizon is invalid: {error}"
         ) from error
-    return (
-        horizon.future_biddable_resources,
-        horizon.total_biddable_resources,
-    )
+    return horizon
+
+
+def _selected_expert_phase(
+    trace: DecisionTrace,
+    horizon: PublicResourceHorizon,
+) -> HeuristicPhase | None:
+    explanation = trace.explanation
+    if not isinstance(explanation, PhaseAwareHeuristicBidExplanation):
+        return None
+    if (
+        trace.selection_source != "policy"
+        or trace.context.decision_kind != "submitBid"
+        or explanation.future_biddable_resources != horizon.future_biddable_resources
+        or explanation.total_biddable_resources != horizon.total_biddable_resources
+        or explanation.selected_expert_phase != select_expert_phase(horizon)
+    ):
+        raise DecisionAnalysisError(
+            "phase-aware explanation does not match the public resource horizon"
+        )
+    return explanation.selected_expert_phase
 
 
 def _objective_state(trace: DecisionTrace) -> tuple[int, int, int]:
@@ -437,6 +547,7 @@ def _freeze_slice(key: _SliceKey, accumulator: _SliceAccumulator) -> DecisionSli
         bot_name=key.bot_name,
         bot_id=key.bot_id,
         game_phase=key.game_phase,
+        selected_expert_phase=key.selected_expert_phase,
         chart=key.chart,
         player_count=key.player_count,
         decision_kind=key.decision_kind,
@@ -459,6 +570,95 @@ def _freeze_slice(key: _SliceKey, accumulator: _SliceAccumulator) -> DecisionSli
         tied_first_decision_count=accumulator.tied_first_decision_count,
         decisions_from_faulted_game_seat=accumulator.decisions_from_faulted_game_seat,
     )
+
+
+def _phase_outcomes_from_slices(
+    slices: tuple[DecisionSlice, ...],
+) -> tuple[PhaseOutcome, ...]:
+    outcomes = []
+    for phase in _HEURISTIC_PHASES:
+        matching_slices = tuple(item for item in slices if item.selected_expert_phase == phase)
+        outcomes.append(
+            PhaseOutcome(
+                selected_expert_phase=phase,
+                decision_count=sum(item.decision_count for item in matching_slices),
+                eventual_final_money_sum=sum(
+                    item.eventual_final_money_sum for item in matching_slices
+                ),
+                eventual_normalized_finish_sum=math.fsum(
+                    item.eventual_normalized_finish_sum for item in matching_slices
+                ),
+                outright_win_decision_count=sum(
+                    item.outright_win_decision_count for item in matching_slices
+                ),
+                tied_first_decision_count=sum(
+                    item.tied_first_decision_count for item in matching_slices
+                ),
+                decisions_from_faulted_game_seat=sum(
+                    item.decisions_from_faulted_game_seat for item in matching_slices
+                ),
+            )
+        )
+    return tuple(outcomes)
+
+
+def _validate_phase_outcomes(
+    outcomes: tuple[PhaseOutcome, ...],
+    *,
+    slices: tuple[DecisionSlice, ...],
+    selected_expert_traces: Sequence[tuple[HeuristicPhase, DecisionTrace, GameSummary]],
+) -> None:
+    selected_slices = tuple(item for item in slices if item.selected_expert_phase is not None)
+    if len(selected_expert_traces) != sum(item.decision_count for item in selected_slices):
+        raise DecisionAnalysisError("phase outcome decision total does not match attributed slices")
+    if not selected_expert_traces:
+        if outcomes:
+            raise DecisionAnalysisError("schema-v1 report cannot contain phase outcomes")
+        return
+    if tuple(outcome.selected_expert_phase for outcome in outcomes) != _HEURISTIC_PHASES:
+        raise DecisionAnalysisError("phase outcomes do not cover every expert in canonical order")
+    for outcome in outcomes:
+        matching_traces = tuple(
+            (trace, game)
+            for phase, trace, game in selected_expert_traces
+            if phase == outcome.selected_expert_phase
+        )
+        integer_totals = (
+            (
+                outcome.decision_count,
+                len(matching_traces),
+            ),
+            (
+                outcome.eventual_final_money_sum,
+                sum(trace.outcome.final_money for trace, _game in matching_traces),
+            ),
+            (
+                outcome.outright_win_decision_count,
+                sum(
+                    trace.outcome.rank == 1 and not trace.outcome.first_place_tied
+                    for trace, _game in matching_traces
+                ),
+            ),
+            (
+                outcome.tied_first_decision_count,
+                sum(trace.outcome.first_place_tied for trace, _game in matching_traces),
+            ),
+            (
+                outcome.decisions_from_faulted_game_seat,
+                sum(game.fault_counts[trace.seat] > 0 for trace, game in matching_traces),
+            ),
+        )
+        normalized_finish_sum = math.fsum(
+            (game.player_count - trace.outcome.rank) / (game.player_count - 1)
+            for trace, game in matching_traces
+        )
+        if any(actual != expected for actual, expected in integer_totals) or not _same_float(
+            outcome.eventual_normalized_finish_sum,
+            normalized_finish_sum,
+        ):
+            raise DecisionAnalysisError(
+                f"phase outcome {outcome.selected_expert_phase!r} does not match attributed slices"
+            )
 
 
 def _ordinary_aggregates(
