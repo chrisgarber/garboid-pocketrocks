@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from dataclasses import FrozenInstanceError, fields, replace
 from typing import cast
 
@@ -17,6 +19,7 @@ from garboid_pocketrocks.diagnostics.trace import (
     DecisionTrace,
     HeuristicBidExplanation,
     NeuralPolicyExplanation,
+    OpponentAwareHeuristicBidExplanation,
     PendingDecisionTrace,
     PublicDecisionOutcome,
     RecordedAction,
@@ -24,6 +27,11 @@ from garboid_pocketrocks.diagnostics.trace import (
     decision_trace_payload,
     legal_actions_for_context,
     public_context_from_sdk,
+)
+from garboid_pocketrocks.heuristics.opponent_bids import (
+    OPPONENT_BID_MODEL_NAME,
+    CompetitiveBidPoint,
+    OpponentBidDistribution,
 )
 
 
@@ -90,7 +98,12 @@ def _history() -> PublicHistory:
 def _pending(
     *,
     selected_action: RecordedAction | None = None,
-    explanation: HeuristicBidExplanation | NeuralPolicyExplanation | None = None,
+    explanation: (
+        HeuristicBidExplanation
+        | OpponentAwareHeuristicBidExplanation
+        | NeuralPolicyExplanation
+        | None
+    ) = None,
 ) -> PendingDecisionTrace:
     return PendingDecisionTrace(
         game_index=2,
@@ -116,6 +129,61 @@ def _outcome() -> PublicDecisionOutcome:
         rank=1,
         first_place_tied=True,
         final_money=48,
+    )
+
+
+def _opponent_aware_explanation(
+    *,
+    chosen_bid: int = 3,
+    model_config_digest: str = "a" * 64,
+) -> OpponentAwareHeuristicBidExplanation:
+    win_deltas = (0.0, 2.0, 4.0, 8.0, 6.0, -2.0, -4.0, -6.0)
+    return OpponentAwareHeuristicBidExplanation(
+        resource_value=6.5,
+        objective_completion_value=0.0,
+        objective_progress_value=1.25,
+        terminal_cash_value=-3.0,
+        liquidity_value=-0.5,
+        future_cash_value=-0.75,
+        total_value=8.0,
+        reservation_bid=4,
+        chosen_bid=chosen_bid,
+        public_game_phase="early",
+        model_name=OPPONENT_BID_MODEL_NAME,
+        model_config_digest=model_config_digest,
+        opponent_distributions=tuple(
+            OpponentBidDistribution(
+                opponent_seat=seat,
+                legal_max_amount=7 - seat,
+                probabilities_by_amount=(1.0,) + (0.0,) * (7 - seat),
+                prior_only=False,
+                history_round_count=2,
+                effective_history_weight=3.0,
+            )
+            for seat in (1, 2)
+        ),
+        competitive_bid_points=tuple(
+            CompetitiveBidPoint(
+                effective_bid=bid,
+                win_probability=0.5,
+                win_delta=win_delta,
+                expected_surplus=win_delta * 0.5,
+            )
+            for bid, win_delta in enumerate(win_deltas)
+        ),
+    )
+
+
+def _opponent_pending(
+    *,
+    selected_action: RecordedAction | None = None,
+    explanation: OpponentAwareHeuristicBidExplanation | None = None,
+) -> PendingDecisionTrace:
+    pending = _pending(selected_action=selected_action)
+    return replace(
+        pending,
+        context=replace(pending.context, cash_by_seat=(7, 6, 5)),
+        explanation=explanation or _opponent_aware_explanation(),
     )
 
 
@@ -342,6 +410,37 @@ def test_typed_explanations_round_trip_without_arbitrary_metadata() -> None:
         decision_trace_from_payload({**payload, "explanation": explanation_payload})
 
 
+def test_ordinary_heuristic_trace_schema_v1_canonical_json_bytes_are_unchanged() -> None:
+    explanation = HeuristicBidExplanation(
+        resource_value=6.5,
+        objective_completion_value=0.0,
+        objective_progress_value=1.25,
+        terminal_cash_value=-3.0,
+        liquidity_value=-0.5,
+        future_cash_value=-0.75,
+        total_value=3.5,
+        reservation_bid=4,
+        chosen_bid=3,
+    )
+    trace = DecisionTrace.from_pending(_pending(explanation=explanation), _outcome())
+
+    canonical_json_line = (
+        json.dumps(
+            decision_trace_payload(trace),
+            allow_nan=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+        + "\n"
+    ).encode()
+
+    assert len(canonical_json_line) == 1694
+    assert (
+        hashlib.sha256(canonical_json_line).hexdigest()
+        == "58b445f7e9006c7d1d2b9c521e4409f88059af573a9c7bc9cbfc4f622fc899a5"
+    )
+
+
 def test_neural_explanation_probabilities_round_trip_in_canonical_action_order() -> None:
     explanation = _neural_explanation()
     payload = decision_trace_payload(
@@ -353,3 +452,269 @@ def test_neural_explanation_probabilities_round_trip_in_canonical_action_order()
     assert explanation_payload["legal_action_probabilities"] == list(
         explanation.legal_action_probabilities
     )
+
+
+def test_opponent_aware_bid_uses_strict_trace_schema_v2() -> None:
+    explanation = _opponent_aware_explanation()
+    trace = DecisionTrace.from_pending(_opponent_pending(explanation=explanation), _outcome())
+
+    payload = decision_trace_payload(trace)
+
+    assert payload["schema_version"] == 2
+    explanation_payload = cast(dict[str, object], payload["explanation"])
+    assert explanation_payload["kind"] == "opponent_aware_heuristic_bid"
+    assert explanation_payload["public_game_phase"] == "early"
+    assert explanation_payload["model_name"] == OPPONENT_BID_MODEL_NAME
+    assert explanation_payload["model_config_digest"] == "a" * 64
+    assert explanation_payload["opponent_distributions"] == [
+        {
+            "opponent_seat": seat,
+            "legal_max_amount": 7 - seat,
+            "probabilities_by_amount": [1.0] + [0.0] * (7 - seat),
+            "prior_only": False,
+            "history_round_count": 2,
+            "effective_history_weight": 3.0,
+        }
+        for seat in (1, 2)
+    ]
+    assert [
+        point["effective_bid"]
+        for point in cast(list[dict[str, object]], explanation_payload["competitive_bid_points"])
+    ] == list(range(8))
+    assert decision_trace_from_payload(payload) == trace
+
+
+def test_opponent_aware_explanation_requires_canonical_complete_opponents_and_bids() -> None:
+    explanation = _opponent_aware_explanation()
+
+    with pytest.raises(ValueError, match="unique and ascending"):
+        replace(
+            explanation,
+            opponent_distributions=tuple(reversed(explanation.opponent_distributions)),
+        )
+    with pytest.raises(ValueError, match="all non-actor seats"):
+        _opponent_pending(
+            explanation=replace(
+                explanation,
+                opponent_distributions=explanation.opponent_distributions[:1],
+            )
+        )
+    with pytest.raises(ValueError, match="every legal bid"):
+        _opponent_pending(
+            explanation=replace(
+                explanation,
+                competitive_bid_points=explanation.competitive_bid_points[:-1],
+            )
+        )
+
+
+def test_opponent_aware_explanation_requires_phase_argmax_and_selected_action_agreement() -> None:
+    explanation = _opponent_aware_explanation()
+
+    with pytest.raises(ValueError, match="trace turn"):
+        _opponent_pending(explanation=replace(explanation, public_game_phase="middle"))
+    points = list(explanation.competitive_bid_points)
+    points[2] = CompetitiveBidPoint(
+        effective_bid=2,
+        win_probability=0.25,
+        win_delta=8.0,
+        expected_surplus=2.0,
+    )
+    with pytest.raises(ValueError, match="maximize expected surplus"):
+        _opponent_pending(
+            selected_action=RecordedAction("submitBid", 2),
+            explanation=replace(
+                explanation,
+                chosen_bid=2,
+                competitive_bid_points=tuple(points),
+            ),
+        )
+    with pytest.raises(ValueError, match="agree with selected action"):
+        _opponent_pending(
+            selected_action=RecordedAction("submitBid", 2),
+            explanation=explanation,
+        )
+
+
+def test_opponent_aware_explanation_reconciles_public_cash_credit_and_ordinary_values() -> None:
+    explanation = _opponent_aware_explanation()
+    first_distribution = explanation.opponent_distributions[0]
+    wrong_support = replace(
+        first_distribution,
+        legal_max_amount=5,
+        probabilities_by_amount=(1.0, 0.0, 0.0, 0.0, 0.0, 0.0),
+    )
+    with pytest.raises(ValueError, match="public cash and credit"):
+        _opponent_pending(
+            explanation=replace(
+                explanation,
+                opponent_distributions=(
+                    wrong_support,
+                    explanation.opponent_distributions[1],
+                ),
+            )
+        )
+
+    pending = _opponent_pending()
+    with pytest.raises(ValueError, match="nonnegative public credit"):
+        replace(
+            pending,
+            context=replace(pending.context, cash_by_seat=(8, 6, 5)),
+        )
+
+    points = list(explanation.competitive_bid_points)
+    points[3] = CompetitiveBidPoint(
+        effective_bid=3,
+        win_probability=0.5,
+        win_delta=9.0,
+        expected_surplus=4.5,
+    )
+    with pytest.raises(ValueError, match="win delta must agree with total value"):
+        _opponent_pending(explanation=replace(explanation, competitive_bid_points=tuple(points)))
+
+    with pytest.raises(ValueError, match="reservation bid"):
+        _opponent_pending(explanation=replace(explanation, reservation_bid=3))
+
+
+def test_opponent_aware_argmax_breaks_expected_surplus_ties_toward_lower_bid() -> None:
+    explanation = _opponent_aware_explanation()
+    points = list(explanation.competitive_bid_points)
+    points[4] = CompetitiveBidPoint(
+        effective_bid=4,
+        win_probability=0.5,
+        win_delta=8.0,
+        expected_surplus=4.0,
+    )
+
+    assert _opponent_pending(explanation=replace(explanation, competitive_bid_points=tuple(points)))
+    with pytest.raises(ValueError, match="maximize expected surplus"):
+        _opponent_pending(
+            selected_action=RecordedAction("submitBid", 4),
+            explanation=replace(
+                explanation,
+                chosen_bid=4,
+                competitive_bid_points=tuple(points),
+            ),
+        )
+
+
+def test_opponent_aware_trace_decoder_rejects_nested_tampering() -> None:
+    payload = decision_trace_payload(
+        DecisionTrace.from_pending(
+            _opponent_pending(),
+            _outcome(),
+        )
+    )
+    explanation_payload = dict(cast(dict[str, object], payload["explanation"]))
+    distributions = [
+        dict(item)
+        for item in cast(list[dict[str, object]], explanation_payload["opponent_distributions"])
+    ]
+    distributions[0]["probabilities_by_amount"] = [0.25, 0.5]
+
+    with pytest.raises(ValueError, match="sum to one"):
+        decision_trace_from_payload(
+            {
+                **payload,
+                "explanation": {
+                    **explanation_payload,
+                    "opponent_distributions": distributions,
+                },
+            }
+        )
+
+    points = [
+        dict(item)
+        for item in cast(list[dict[str, object]], explanation_payload["competitive_bid_points"])
+    ]
+    points[3]["expected_surplus"] = 4.5
+    with pytest.raises(ValueError, match="expected surplus must equal"):
+        decision_trace_from_payload(
+            {
+                **payload,
+                "explanation": {
+                    **explanation_payload,
+                    "competitive_bid_points": points,
+                },
+            }
+        )
+
+    distributions = [
+        dict(item)
+        for item in cast(list[dict[str, object]], explanation_payload["opponent_distributions"])
+    ]
+    distributions[0]["hidden_hand"] = [5, 5]
+    with pytest.raises(ValueError, match="unknown opponent distribution fields"):
+        decision_trace_from_payload(
+            {
+                **payload,
+                "explanation": {
+                    **explanation_payload,
+                    "opponent_distributions": distributions,
+                },
+            }
+        )
+
+
+@pytest.mark.parametrize("digest", ("A" * 64, "a" * 63, "g" * 64))
+def test_opponent_aware_explanation_requires_lowercase_sha256_digest(digest: str) -> None:
+    with pytest.raises(ValueError, match="lowercase SHA-256"):
+        _opponent_aware_explanation(model_config_digest=digest)
+
+
+def test_opponent_aware_explanation_requires_stable_model_name() -> None:
+    with pytest.raises(ValueError, match="model name is unknown"):
+        replace(_opponent_aware_explanation(), model_name="public-opponent-bids-v2")
+
+
+def test_trace_decoder_rejects_v1_v2_explanation_mixing() -> None:
+    ordinary_payload = decision_trace_payload(
+        DecisionTrace.from_pending(
+            _pending(
+                explanation=HeuristicBidExplanation(
+                    resource_value=6.5,
+                    objective_completion_value=0.0,
+                    objective_progress_value=1.25,
+                    terminal_cash_value=-3.0,
+                    liquidity_value=-0.5,
+                    future_cash_value=-0.75,
+                    total_value=3.5,
+                    reservation_bid=4,
+                    chosen_bid=3,
+                ),
+            ),
+            _outcome(),
+        )
+    )
+    opponent_payload = decision_trace_payload(
+        DecisionTrace.from_pending(
+            _opponent_pending(),
+            _outcome(),
+        )
+    )
+
+    with pytest.raises(ValueError, match="schema|explanation"):
+        decision_trace_from_payload({**ordinary_payload, "schema_version": 2})
+    with pytest.raises(ValueError, match="schema|explanation"):
+        decision_trace_from_payload({**opponent_payload, "schema_version": 1})
+    with pytest.raises(ValueError, match="schema|explanation"):
+        decision_trace_from_payload({**opponent_payload, "schema_version": 3})
+    with pytest.raises(ValueError, match="schema|explanation"):
+        decision_trace_from_payload({**opponent_payload, "explanation": None})
+
+
+@pytest.mark.parametrize(
+    "pending",
+    (
+        _pending(),
+        replace(_pending(), selected_action=RecordedAction("pass")),
+        replace(_pending(), selection_source="fault_fallback"),
+    ),
+)
+def test_null_explanation_paths_remain_trace_schema_v1(
+    pending: PendingDecisionTrace,
+) -> None:
+    payload = decision_trace_payload(DecisionTrace.from_pending(pending, _outcome()))
+
+    assert payload["schema_version"] == 1
+    assert payload["explanation"] is None

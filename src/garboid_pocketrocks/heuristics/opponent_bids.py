@@ -48,6 +48,7 @@ _PHASE_PRESSURE = {
     "middle": Fraction(1),
     "late": Fraction(5, 4),
 }
+OPPONENT_BID_MODEL_NAME = "public-opponent-bids-v1"
 
 
 def _is_integer(value: object) -> bool:
@@ -124,6 +125,40 @@ class OpponentBidDistribution:
             raise ValueError("effective history weight must be finite and nonnegative")
         if self.prior_only and self.effective_history_weight != 0.0:
             raise ValueError("prior-only distributions cannot have effective history weight")
+
+
+@dataclass(frozen=True, slots=True)
+class CompetitiveBidPoint:
+    """The expected competitive surplus for one legal effective bid."""
+
+    effective_bid: int
+    win_probability: float
+    win_delta: float
+    expected_surplus: float
+
+    def __post_init__(self) -> None:
+        if not _is_integer(self.effective_bid) or self.effective_bid < 0:
+            raise ValueError("effective bid must be a nonnegative integer")
+        _validate_probability(self.win_probability, name="win probability")
+        if (
+            isinstance(self.win_delta, bool)
+            or not isinstance(self.win_delta, (int, float))
+            or not math.isfinite(self.win_delta)
+        ):
+            raise ValueError("win delta must be finite")
+        if (
+            isinstance(self.expected_surplus, bool)
+            or not isinstance(self.expected_surplus, (int, float))
+            or not math.isfinite(self.expected_surplus)
+        ):
+            raise ValueError("expected surplus must be finite")
+        if not math.isclose(
+            self.expected_surplus,
+            self.win_probability * self.win_delta,
+            rel_tol=1e-12,
+            abs_tol=1e-12,
+        ):
+            raise ValueError("expected surplus must equal win probability times win delta")
 
 
 @dataclass(frozen=True, slots=True)

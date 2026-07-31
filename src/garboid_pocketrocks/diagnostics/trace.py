@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Literal, cast
@@ -17,6 +18,12 @@ from garboid_pocketrocks.adapters.public_history import (
     PublicHistory,
     PublicInformationRevealed,
     PublicTurnOpened,
+)
+from garboid_pocketrocks.heuristics.game_phase import GamePhase, game_phase_for_turn_index
+from garboid_pocketrocks.heuristics.opponent_bids import (
+    OPPONENT_BID_MODEL_NAME,
+    CompetitiveBidPoint,
+    OpponentBidDistribution,
 )
 
 type RecordedActionKind = Literal["pass", "submitBid", "selectInfoToReveal"]
@@ -215,6 +222,20 @@ class HeuristicBidExplanation:
 
 
 @dataclass(frozen=True, slots=True)
+class OpponentAwareHeuristicBidExplanation(HeuristicBidExplanation):
+    """A heuristic bid with its complete public opponent-model audit trail."""
+
+    public_game_phase: GamePhase
+    model_name: str
+    model_config_digest: str
+    opponent_distributions: tuple[OpponentBidDistribution, ...]
+    competitive_bid_points: tuple[CompetitiveBidPoint, ...]
+
+    def __post_init__(self) -> None:
+        _validate_explanation(self)
+
+
+@dataclass(frozen=True, slots=True)
 class NeuralPolicyExplanation:
     """Closed explanation for one masked neural-policy selection."""
 
@@ -227,7 +248,11 @@ class NeuralPolicyExplanation:
         _validate_explanation(self)
 
 
-type DecisionExplanation = HeuristicBidExplanation | NeuralPolicyExplanation
+type DecisionExplanation = (
+    HeuristicBidExplanation
+    | OpponentAwareHeuristicBidExplanation
+    | NeuralPolicyExplanation
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -344,6 +369,11 @@ def _validate_pending(trace: PendingDecisionTrace | DecisionTrace) -> None:
                 raise ValueError("heuristic bid explanation requires a bid action")
             if trace.explanation.chosen_bid != selected_bid:
                 raise ValueError("heuristic chosen bid must agree with selected action")
+            if isinstance(trace.explanation, OpponentAwareHeuristicBidExplanation):
+                _validate_opponent_aware_explanation_against_trace(
+                    trace.explanation,
+                    trace,
+                )
         elif isinstance(trace.explanation, NeuralPolicyExplanation):
             probabilities = trace.explanation.legal_action_probabilities
             if len(probabilities) != len(trace.legal_actions):
@@ -372,6 +402,71 @@ def _validate_pending(trace: PendingDecisionTrace | DecisionTrace) -> None:
         raise ValueError("trace actor identity must match the lineup seat")
 
 
+def _validate_opponent_aware_explanation_against_trace(
+    explanation: OpponentAwareHeuristicBidExplanation,
+    trace: PendingDecisionTrace | DecisionTrace,
+) -> None:
+    context = trace.context
+    if context.decision_kind != "submitBid" or context.legal_max_amount is None:
+        raise ValueError("opponent-aware explanation requires a bid context")
+    if explanation.public_game_phase != game_phase_for_turn_index(trace.turn_index):
+        raise ValueError("opponent-aware explanation phase must agree with the trace turn")
+    if not 0 <= trace.seat < context.player_count:
+        raise ValueError("opponent-aware explanation requires a valid actor seat")
+    if len(context.cash_by_seat) != context.player_count:
+        raise ValueError("opponent-aware explanation requires cash for every seat")
+    actor_cash = context.cash_by_seat[trace.seat]
+    additional_credit = context.legal_max_amount - actor_cash
+    if additional_credit < 0:
+        raise ValueError("opponent-aware explanation requires nonnegative public credit")
+    expected_seats = tuple(seat for seat in range(context.player_count) if seat != trace.seat)
+    actual_seats = tuple(
+        distribution.opponent_seat for distribution in explanation.opponent_distributions
+    )
+    if actual_seats != expected_seats:
+        raise ValueError(
+            "opponent-aware distributions must cover all non-actor seats in canonical order"
+        )
+    for distribution in explanation.opponent_distributions:
+        expected_legal_max = context.cash_by_seat[distribution.opponent_seat] + additional_credit
+        if distribution.legal_max_amount != expected_legal_max:
+            raise ValueError(
+                "opponent distribution legal maximum must agree with public cash and credit"
+            )
+    expected_bids = tuple(range(context.legal_max_amount + 1))
+    actual_bids = tuple(point.effective_bid for point in explanation.competitive_bid_points)
+    if actual_bids != expected_bids:
+        raise ValueError("competitive bid points must enumerate every legal bid from zero")
+    if explanation.chosen_bid >= len(explanation.competitive_bid_points):
+        raise ValueError("opponent-aware chosen bid must have a competitive bid point")
+    chosen_point = explanation.competitive_bid_points[explanation.chosen_bid]
+    if not math.isclose(
+        chosen_point.win_delta,
+        explanation.total_value,
+        rel_tol=1e-12,
+        abs_tol=1e-12,
+    ):
+        raise ValueError("chosen competitive bid win delta must agree with total value")
+    expected_reservation_bid = max(
+        (
+            point.effective_bid
+            for point in explanation.competitive_bid_points
+            if point.win_delta >= 0.0
+        ),
+        default=0,
+    )
+    if explanation.reservation_bid != expected_reservation_bid:
+        raise ValueError("opponent-aware reservation bid must agree with nonnegative win deltas")
+    best_point = max(
+        explanation.competitive_bid_points,
+        key=lambda point: (point.expected_surplus, -point.effective_bid),
+    )
+    if explanation.chosen_bid != best_point.effective_bid:
+        raise ValueError(
+            "opponent-aware chosen bid must maximize expected surplus with lower-bid ties"
+        )
+
+
 def _validate_explanation(explanation: DecisionExplanation) -> None:
     if isinstance(explanation, HeuristicBidExplanation):
         heuristic_values = (
@@ -395,6 +490,37 @@ def _validate_explanation(explanation: DecisionExplanation) -> None:
             or explanation.chosen_bid > explanation.reservation_bid
         ):
             raise ValueError("heuristic explanation bids are invalid")
+        if isinstance(explanation, OpponentAwareHeuristicBidExplanation):
+            if explanation.public_game_phase not in ("early", "middle", "late"):
+                raise ValueError("opponent-aware explanation public phase is unknown")
+            if explanation.model_name != OPPONENT_BID_MODEL_NAME:
+                raise ValueError("opponent-aware explanation model name is unknown")
+            if re.fullmatch(r"[0-9a-f]{64}", explanation.model_config_digest) is None:
+                raise ValueError(
+                    "opponent-aware model config digest must be a lowercase SHA-256 digest"
+                )
+            if not isinstance(explanation.opponent_distributions, tuple) or not all(
+                isinstance(distribution, OpponentBidDistribution)
+                for distribution in explanation.opponent_distributions
+            ):
+                raise ValueError("opponent distributions must be a typed tuple")
+            seats = tuple(
+                distribution.opponent_seat for distribution in explanation.opponent_distributions
+            )
+            if seats != tuple(sorted(set(seats))):
+                raise ValueError("opponent distribution seats must be unique and ascending")
+            if (
+                not isinstance(explanation.competitive_bid_points, tuple)
+                or not explanation.competitive_bid_points
+                or not all(
+                    isinstance(point, CompetitiveBidPoint)
+                    for point in explanation.competitive_bid_points
+                )
+            ):
+                raise ValueError("competitive bid points must be a nonempty typed tuple")
+            bids = tuple(point.effective_bid for point in explanation.competitive_bid_points)
+            if bids != tuple(range(len(bids))):
+                raise ValueError("competitive bid points must enumerate bids from zero")
         return
     neural_values = (
         explanation.predicted_value,
@@ -429,7 +555,9 @@ def decision_trace_payload(trace: DecisionTrace) -> dict[str, object]:
     """Encode a complete trace without recursively inspecting foreign objects."""
 
     return {
-        "schema_version": 1,
+        "schema_version": (
+            2 if isinstance(trace.explanation, OpponentAwareHeuristicBidExplanation) else 1
+        ),
         "game_index": trace.game_index,
         "chart": trace.chart,
         "step_index": trace.step_index,
@@ -453,7 +581,8 @@ def decision_trace_from_payload(payload: Mapping[str, object]) -> DecisionTrace:
     """Strictly decode a trace, rejecting every unrecognized schema field."""
 
     _require_exact_fields(payload, _TRACE_FIELDS, "decision trace")
-    if _integer(payload["schema_version"], "schema_version") != 1:
+    schema_version = _integer(payload["schema_version"], "schema_version")
+    if schema_version not in (1, 2):
         raise ValueError("unsupported decision trace schema version")
     context = _public_context_from_payload(_mapping(payload["context"], "context"))
     return DecisionTrace(
@@ -478,7 +607,10 @@ def decision_trace_from_payload(payload: Mapping[str, object]) -> DecisionTrace:
         selected_action=_action_from_payload(
             _mapping(payload["selected_action"], "selected_action")
         ),
-        explanation=_explanation_from_payload(payload["explanation"]),
+        explanation=_explanation_from_payload(
+            payload["explanation"],
+            schema_version=schema_version,
+        ),
         selection_source=_selection_source(payload["selection_source"]),
         outcome=_outcome_from_payload(_mapping(payload["outcome"], "outcome")),
     )
@@ -629,6 +761,42 @@ def _public_event_from_payload(payload: Mapping[str, object]) -> PublicEvent:
 def _explanation_payload(explanation: DecisionExplanation | None) -> dict[str, object] | None:
     if explanation is None:
         return None
+    if isinstance(explanation, OpponentAwareHeuristicBidExplanation):
+        return {
+            "kind": "opponent_aware_heuristic_bid",
+            "resource_value": explanation.resource_value,
+            "objective_completion_value": explanation.objective_completion_value,
+            "objective_progress_value": explanation.objective_progress_value,
+            "terminal_cash_value": explanation.terminal_cash_value,
+            "liquidity_value": explanation.liquidity_value,
+            "future_cash_value": explanation.future_cash_value,
+            "total_value": explanation.total_value,
+            "reservation_bid": explanation.reservation_bid,
+            "chosen_bid": explanation.chosen_bid,
+            "public_game_phase": explanation.public_game_phase,
+            "model_name": explanation.model_name,
+            "model_config_digest": explanation.model_config_digest,
+            "opponent_distributions": [
+                {
+                    "opponent_seat": distribution.opponent_seat,
+                    "legal_max_amount": distribution.legal_max_amount,
+                    "probabilities_by_amount": list(distribution.probabilities_by_amount),
+                    "prior_only": distribution.prior_only,
+                    "history_round_count": distribution.history_round_count,
+                    "effective_history_weight": distribution.effective_history_weight,
+                }
+                for distribution in explanation.opponent_distributions
+            ],
+            "competitive_bid_points": [
+                {
+                    "effective_bid": point.effective_bid,
+                    "win_probability": point.win_probability,
+                    "win_delta": point.win_delta,
+                    "expected_surplus": point.expected_surplus,
+                }
+                for point in explanation.competitive_bid_points
+            ],
+        }
     if isinstance(explanation, HeuristicBidExplanation):
         return {
             "kind": "heuristic_bid",
@@ -651,12 +819,91 @@ def _explanation_payload(explanation: DecisionExplanation | None) -> dict[str, o
     }
 
 
-def _explanation_from_payload(payload: object) -> DecisionExplanation | None:
+def _explanation_from_payload(
+    payload: object,
+    *,
+    schema_version: int,
+) -> DecisionExplanation | None:
     if payload is None:
+        if schema_version == 2:
+            raise ValueError(f"decision trace schema v{schema_version} requires an explanation")
         return None
     explanation = _mapping(payload, "explanation")
     kind = explanation.get("kind")
+    if kind == "opponent_aware_heuristic_bid":
+        if schema_version != 2:
+            raise ValueError("opponent-aware explanation requires decision trace schema v2")
+        fields = frozenset(
+            {
+                "kind",
+                "resource_value",
+                "objective_completion_value",
+                "objective_progress_value",
+                "terminal_cash_value",
+                "liquidity_value",
+                "future_cash_value",
+                "total_value",
+                "reservation_bid",
+                "chosen_bid",
+                "public_game_phase",
+                "model_name",
+                "model_config_digest",
+                "opponent_distributions",
+                "competitive_bid_points",
+            }
+        )
+        _require_exact_fields(explanation, fields, "opponent-aware heuristic explanation")
+        public_game_phase = explanation["public_game_phase"]
+        if public_game_phase not in ("early", "middle", "late"):
+            raise ValueError("opponent-aware explanation public phase is unknown")
+        opponent_aware_explanation = OpponentAwareHeuristicBidExplanation(
+            resource_value=_number(explanation["resource_value"], "resource_value"),
+            objective_completion_value=_number(
+                explanation["objective_completion_value"],
+                "objective_completion_value",
+            ),
+            objective_progress_value=_number(
+                explanation["objective_progress_value"],
+                "objective_progress_value",
+            ),
+            terminal_cash_value=_number(
+                explanation["terminal_cash_value"],
+                "terminal_cash_value",
+            ),
+            liquidity_value=_number(explanation["liquidity_value"], "liquidity_value"),
+            future_cash_value=_number(
+                explanation["future_cash_value"],
+                "future_cash_value",
+            ),
+            total_value=_number(explanation["total_value"], "total_value"),
+            reservation_bid=_integer(explanation["reservation_bid"], "reservation_bid"),
+            chosen_bid=_integer(explanation["chosen_bid"], "chosen_bid"),
+            public_game_phase=public_game_phase,
+            model_name=_string(explanation["model_name"], "model_name"),
+            model_config_digest=_string(
+                explanation["model_config_digest"],
+                "model_config_digest",
+            ),
+            opponent_distributions=tuple(
+                _opponent_distribution_from_payload(_mapping(item, "opponent distribution"))
+                for item in _sequence(
+                    explanation["opponent_distributions"],
+                    "opponent_distributions",
+                )
+            ),
+            competitive_bid_points=tuple(
+                _competitive_bid_point_from_payload(_mapping(item, "competitive bid point"))
+                for item in _sequence(
+                    explanation["competitive_bid_points"],
+                    "competitive_bid_points",
+                )
+            ),
+        )
+        _validate_explanation(opponent_aware_explanation)
+        return opponent_aware_explanation
     if kind == "heuristic_bid":
+        if schema_version != 1:
+            raise ValueError("ordinary heuristic explanation requires decision trace schema v1")
         fields = frozenset(
             {
                 "kind",
@@ -698,6 +945,8 @@ def _explanation_from_payload(payload: object) -> DecisionExplanation | None:
         _validate_explanation(heuristic_explanation)
         return heuristic_explanation
     if kind == "neural_policy":
+        if schema_version != 1:
+            raise ValueError("neural explanation requires decision trace schema v1")
         fields = frozenset(
             {
                 "kind",
@@ -726,6 +975,62 @@ def _explanation_from_payload(payload: object) -> DecisionExplanation | None:
         _validate_explanation(neural_explanation)
         return neural_explanation
     raise ValueError("explanation kind is unknown")
+
+
+def _opponent_distribution_from_payload(
+    payload: Mapping[str, object],
+) -> OpponentBidDistribution:
+    fields = frozenset(
+        {
+            "opponent_seat",
+            "legal_max_amount",
+            "probabilities_by_amount",
+            "prior_only",
+            "history_round_count",
+            "effective_history_weight",
+        }
+    )
+    _require_exact_fields(payload, fields, "opponent distribution")
+    return OpponentBidDistribution(
+        opponent_seat=_integer(payload["opponent_seat"], "opponent_seat"),
+        legal_max_amount=_integer(payload["legal_max_amount"], "legal_max_amount"),
+        probabilities_by_amount=tuple(
+            _number(item, "opponent probability")
+            for item in _sequence(
+                payload["probabilities_by_amount"],
+                "probabilities_by_amount",
+            )
+        ),
+        prior_only=_boolean(payload["prior_only"], "prior_only"),
+        history_round_count=_integer(
+            payload["history_round_count"],
+            "history_round_count",
+        ),
+        effective_history_weight=_number(
+            payload["effective_history_weight"],
+            "effective_history_weight",
+        ),
+    )
+
+
+def _competitive_bid_point_from_payload(
+    payload: Mapping[str, object],
+) -> CompetitiveBidPoint:
+    fields = frozenset(
+        {
+            "effective_bid",
+            "win_probability",
+            "win_delta",
+            "expected_surplus",
+        }
+    )
+    _require_exact_fields(payload, fields, "competitive bid point")
+    return CompetitiveBidPoint(
+        effective_bid=_integer(payload["effective_bid"], "effective_bid"),
+        win_probability=_number(payload["win_probability"], "win_probability"),
+        win_delta=_number(payload["win_delta"], "win_delta"),
+        expected_surplus=_number(payload["expected_surplus"], "expected_surplus"),
+    )
 
 
 def _outcome_payload(outcome: PublicDecisionOutcome) -> dict[str, object]:

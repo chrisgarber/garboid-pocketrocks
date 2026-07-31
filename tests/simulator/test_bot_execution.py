@@ -8,7 +8,13 @@ from garboid_pocketrocks.adapters.public_history import PublicHistory
 from garboid_pocketrocks.diagnostics.trace import (
     ExplainedBotDecision,
     NeuralPolicyExplanation,
+    OpponentAwareHeuristicBidExplanation,
     legal_actions_for_context,
+)
+from garboid_pocketrocks.heuristics.opponent_bids import (
+    OPPONENT_BID_MODEL_NAME,
+    CompetitiveBidPoint,
+    OpponentBidDistribution,
 )
 from garboid_pocketrocks.knowledge import RulesetKnowledge, canonical_knowledge
 from garboid_pocketrocks.simulator.bot_execution import (
@@ -80,6 +86,57 @@ class _RaisingBrain:
         raise RuntimeError("broken policy")
 
 
+class _OpponentExplainingBrain(_OrdinaryBrain):
+    def choose_explained_decision(
+        self,
+        context: DecisionContext,
+        ruleset: RulesetKnowledge,
+        history: PublicHistory,
+    ) -> ExplainedBotDecision:
+        del ruleset, history
+        self.calls += 1
+        legal_max = context.legal_max_amount
+        assert legal_max is not None
+        return ExplainedBotDecision(
+            decision=BotDecision.submit_bid(2),
+            explanation=OpponentAwareHeuristicBidExplanation(
+                resource_value=4.0,
+                objective_completion_value=0.0,
+                objective_progress_value=0.0,
+                terminal_cash_value=0.0,
+                liquidity_value=0.0,
+                future_cash_value=0.0,
+                total_value=4.0,
+                reservation_bid=2,
+                chosen_bid=2,
+                public_game_phase="early",
+                model_name=OPPONENT_BID_MODEL_NAME,
+                model_config_digest="a" * 64,
+                opponent_distributions=tuple(
+                    OpponentBidDistribution(
+                        opponent_seat=seat,
+                        legal_max_amount=0,
+                        probabilities_by_amount=(1.0,),
+                        prior_only=True,
+                        history_round_count=0,
+                        effective_history_weight=0.0,
+                    )
+                    for seat in range(context.player_count)
+                    if seat != context.bot_seat
+                ),
+                competitive_bid_points=tuple(
+                    CompetitiveBidPoint(
+                        effective_bid=bid,
+                        win_probability=1.0,
+                        win_delta=2.0 if bid == 2 else 0.0,
+                        expected_surplus=2.0 if bid == 2 else 0.0,
+                    )
+                    for bid in range(legal_max + 1)
+                ),
+            ),
+        )
+
+
 def _execute(
     brain: object,
     *,
@@ -137,6 +194,15 @@ def test_explanation_capture_must_be_explicitly_requested() -> None:
     assert isinstance(execution.explanation, NeuralPolicyExplanation)
     assert execution.explanation.selected_probability == 0.75
     assert brain.calls == 1
+    assert faults == []
+
+
+def test_opponent_aware_explanation_reuses_heuristic_action_agreement() -> None:
+    execution, faults = _execute(_OpponentExplainingBrain(), request_explanation=True)
+
+    assert execution.decision == BotDecision.submit_bid(2)
+    assert isinstance(execution.explanation, OpponentAwareHeuristicBidExplanation)
+    assert execution.explanation.chosen_bid == 2
     assert faults == []
 
 

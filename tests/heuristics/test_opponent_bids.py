@@ -20,6 +20,7 @@ from garboid_pocketrocks.adapters.public_history import (
 from garboid_pocketrocks.heuristics.errors import HeuristicInputError
 from garboid_pocketrocks.heuristics.game_phase import game_phase_for_turn_index
 from garboid_pocketrocks.heuristics.opponent_bids import (
+    CompetitiveBidPoint,
     LegalBidWinningForecast,
     OpponentBidDistribution,
     OpponentBidForecast,
@@ -31,6 +32,53 @@ from garboid_pocketrocks.heuristics.opponent_bids import (
 )
 
 CHART = (0, 4, 8, 12, 16, 20)
+
+
+def test_competitive_bid_point_is_frozen_slotted_and_self_consistent() -> None:
+    point = CompetitiveBidPoint(
+        effective_bid=3,
+        win_probability=0.25,
+        win_delta=8.0,
+        expected_surplus=2.0,
+    )
+
+    assert {field.name for field in fields(CompetitiveBidPoint)} == {
+        "effective_bid",
+        "win_probability",
+        "win_delta",
+        "expected_surplus",
+    }
+    assert hasattr(CompetitiveBidPoint, "__slots__")
+    with pytest.raises(FrozenInstanceError):
+        point.effective_bid = 4  # type: ignore[misc]
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "message"),
+    (
+        ({"effective_bid": -1}, "nonnegative"),
+        ({"effective_bid": True}, "nonnegative"),
+        ({"win_probability": float("nan")}, "probability"),
+        ({"win_probability": 1.1}, "probability"),
+        ({"win_delta": float("inf")}, "finite"),
+        ({"expected_surplus": float("nan")}, "finite"),
+        ({"expected_surplus": 2.01}, "equal"),
+    ),
+)
+def test_competitive_bid_point_rejects_invalid_values(
+    kwargs: dict[str, int | float],
+    message: str,
+) -> None:
+    values: dict[str, int | float] = {
+        "effective_bid": 3,
+        "win_probability": 0.25,
+        "win_delta": 8.0,
+        "expected_surplus": 2.0,
+    }
+    values.update(kwargs)
+
+    with pytest.raises(ValueError, match=message):
+        CompetitiveBidPoint(**values)  # type: ignore[arg-type]
 
 
 def _setup(
