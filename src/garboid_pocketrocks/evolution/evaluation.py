@@ -493,9 +493,7 @@ def _challenger_finish_deltas(
         baseline_scores = {score.seat: score for score in baseline_summary.scores}
         candidate_scores = {score.seat: score for score in candidate_summary.scores}
         denominator = case.player_count - 1
-        baseline_finish = (
-            case.player_count - baseline_scores[case.focal_seat].rank
-        ) / denominator
+        baseline_finish = (case.player_count - baseline_scores[case.focal_seat].rank) / denominator
         candidate_finish = (
             case.player_count - candidate_scores[case.focal_seat].rank
         ) / denominator
@@ -514,8 +512,7 @@ def _challenger_finish_deltas(
         if deltas
     )
     if not all(
-        math.isfinite(item.normalized_finish_delta) and item.shared_cases > 0
-        for item in results
+        math.isfinite(item.normalized_finish_delta) and item.shared_cases > 0 for item in results
     ):
         raise ValueError("challenger finish deltas must be finite and covered")
     return results

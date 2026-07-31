@@ -400,9 +400,7 @@ def test_writer_rejects_a_different_equal_frozen_bot_spec(
     )
     forged = replace(frozen.bot_spec, brain_factory=EvilFactory())
     development = load_promotion_corpus(
-        Path(
-            f"configs/promotion/development-{frozen.personality}-v3-broad-v1.json"
-        ),
+        Path(f"configs/promotion/development-{frozen.personality}-v3-broad-v1.json"),
         registry=BOT_SPECS_BY_NAME,
     )
     report, summaries, _, held_out = _report_inputs()
@@ -560,9 +558,7 @@ def test_frozen_writer_rejects_a_forged_canonical_name_opponent(
         frozen_candidates=FROZEN_CANDIDATES_BY_NAME,
     )
     development = load_promotion_corpus(
-        Path(
-            f"configs/promotion/development-{frozen.personality}-v3-broad-v1.json"
-        ),
+        Path(f"configs/promotion/development-{frozen.personality}-v3-broad-v1.json"),
         registry=BOT_SPECS_BY_NAME,
     )
     forged_opponent = BotSpec.for_simulation("random", RandomBot.build_brain)

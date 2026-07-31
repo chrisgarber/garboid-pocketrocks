@@ -391,11 +391,7 @@ def _load_catalog_candidate(
     )
     _require_exact_keys(
         scores,
-        (
-            _DEVELOPMENT_SCORE_KEYS_V1
-            if candidate_schema == 1
-            else _DEVELOPMENT_SCORE_KEYS_V2
-        ),
+        (_DEVELOPMENT_SCORE_KEYS_V1 if candidate_schema == 1 else _DEVELOPMENT_SCORE_KEYS_V2),
         subject=f"development scores for {identity}",
     )
     rating_delta = _require_finite_number(
@@ -419,8 +415,7 @@ def _load_catalog_candidate(
         field=f"final money delta for {identity}",
     )
     if rating_delta <= 0.0 or (
-        worst_challenger_finish_delta is not None
-        and worst_challenger_finish_delta <= 0.0
+        worst_challenger_finish_delta is not None and worst_challenger_finish_delta <= 0.0
     ):
         raise FrozenCandidateCatalogError(
             "nonpositive_frozen_candidate",

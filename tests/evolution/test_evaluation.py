@@ -292,8 +292,7 @@ def test_malformed_rating_observation_is_invalid_evidence(
 
 def test_real_development_jobs_match_across_serial_batch_and_workers() -> None:
     corpus = load_promotion_corpus(
-        REPOSITORY_ROOT
-        / "configs/promotion/development-balanced-v3-broad-v1.json",
+        REPOSITORY_ROOT / "configs/promotion/development-balanced-v3-broad-v1.json",
         registry=BOT_SPECS_BY_NAME,
     )
     manifest = load_search_manifest(

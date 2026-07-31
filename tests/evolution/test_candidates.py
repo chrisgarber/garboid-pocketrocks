@@ -40,8 +40,7 @@ REPOSITORY_ROOT = Path(__file__).parents[2]
 @pytest.fixture(scope="module")
 def balanced_manifest() -> SearchManifest:
     corpus = load_promotion_corpus(
-        REPOSITORY_ROOT
-        / "configs/promotion/development-balanced-v3-broad-v1.json",
+        REPOSITORY_ROOT / "configs/promotion/development-balanced-v3-broad-v1.json",
         registry=BOT_SPECS_BY_NAME,
     )
     return load_search_manifest(
@@ -56,8 +55,7 @@ def _decimal_tuple(*values: str) -> tuple[Decimal, ...]:
 
 def _load_large_grid_manifest(tmp_path: Path) -> SearchManifest:
     corpus = load_promotion_corpus(
-        REPOSITORY_ROOT
-        / "configs/promotion/development-balanced-v3-broad-v1.json",
+        REPOSITORY_ROOT / "configs/promotion/development-balanced-v3-broad-v1.json",
         registry=BOT_SPECS_BY_NAME,
     )
     payload = json.loads(

@@ -19,13 +19,11 @@ def test_v3_search_uses_a_separate_broad_field_for_each_personality(
     personality: str,
 ) -> None:
     development = load_promotion_corpus(
-        REPOSITORY_ROOT
-        / f"configs/promotion/development-{personality}-v3-broad-v1.json",
+        REPOSITORY_ROOT / f"configs/promotion/development-{personality}-v3-broad-v1.json",
         registry=BOT_SPECS_BY_NAME,
     )
     held_out = load_promotion_corpus(
-        REPOSITORY_ROOT
-        / f"configs/promotion/held-out-{personality}-v3-broad-v1.json",
+        REPOSITORY_ROOT / f"configs/promotion/held-out-{personality}-v3-broad-v1.json",
         registry=BOT_SPECS_BY_NAME,
     )
     manifest = load_search_manifest(
