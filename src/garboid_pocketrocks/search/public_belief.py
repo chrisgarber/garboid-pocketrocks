@@ -182,6 +182,11 @@ def reconstruct_public_search_position(
     opponent_slots = sum(opponent_hidden_slots_by_seat)
     if opponent_slots > sum(unseen_resource_counts):
         raise HeuristicInputError("opponent hidden slots exceed the unseen resource population")
+    hidden_future_resource_count = sum(unseen_resource_counts) - opponent_slots
+    if context.current_resource_ids[1] == 0 and hidden_future_resource_count != 0:
+        raise HeuristicInputError(
+            "one-card public offer contradicts remaining hidden future resources"
+        )
 
     decision_kind = context.decision_kind
     canonical_fields: dict[str, object] = {

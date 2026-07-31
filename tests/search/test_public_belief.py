@@ -526,6 +526,55 @@ def test_turn_cannot_open_after_public_resources_are_exhausted() -> None:
         )
 
 
+def test_one_card_offer_cannot_hide_additional_future_resources() -> None:
+    _session, context, history, _position = _first_position()
+    turn = history[-1]
+    assert isinstance(turn, PublicTurnOpened)
+    first_resource = context.current_resource_ids[0]
+    changed_turn = replace(turn, resource_ids=(first_resource, 0))
+    changed_context = replace(context, current_resource_ids=(first_resource, 0))
+
+    with pytest.raises(HeuristicInputError, match="one-card public offer"):
+        reconstruct_public_search_position(
+            changed_context,
+            knowledge_for_context(changed_context),
+            (*history[:-1], changed_turn),
+        )
+
+
+def test_real_terminal_one_card_offer_has_no_hidden_future_resources() -> None:
+    found: tuple[DecisionContext, PublicHistory] | None = None
+    for seed in range(64):
+        session = SdkGameSession.start(player_count=3, seed=f"terminal-one-card-{seed}")
+        while not session.terminated:
+            history = public_history_from_sdk_events(session.events)
+            if session.pending.decision_kind == "submitBid":
+                context = session.pending.contexts[0][1]
+                if context.current_resource_ids[0] != 0 and context.current_resource_ids[1] == 0:
+                    found = (context, history)
+                    break
+                decisions = {seat: BotDecision.pass_turn() for seat in session.pending.acting_seats}
+            else:
+                reveal_seat = session.pending.acting_seats[0]
+                decisions = {reveal_seat: BotDecision.select_info_to_reveal(0)}
+            session.step(decisions)
+        if found is not None:
+            break
+
+    assert found is not None
+    context, history = found
+    position = _reconstruct(context, history)
+    world = sample_compatible_worlds(
+        position,
+        candidate_identity=LATE_GAME_PUBLIC_BELIEF_V1_DEV_IDENTITY,
+        sample_count=1,
+    )[0]
+
+    assert sum(position.unseen_resource_counts) == sum(position.opponent_hidden_slots_by_seat)
+    assert world.hidden_future_resource_suits == ()
+    _assert_world_conserves(context, history, position, world)
+
+
 @pytest.mark.parametrize(
     "forged_position",
     (
