@@ -30,7 +30,7 @@ def _context() -> DecisionContext:
         player_count=3,
         starting_cash=30,
         value_chart=(0, 4, 8, 12, 16, 20),
-        objective_ids=(1, 10),
+        objective_ids=(1, 2, 3, 10),
         current_action_id=1,
         current_resource_ids=(3, 0),
         cash_by_seat=(22, 30, 18),
@@ -39,22 +39,26 @@ def _context() -> DecisionContext:
         revealed_info_counts_by_seat=((0, 1, 0, 0, 0), (0, 0, 0, 0, 0), (1, 0, 0, 0, 0)),
         owned_objective_ids_by_seat=((1,), (), ()),
         bot_seat=0,
-        current_hand_suit_ids=(2, 5),
+        current_hand_suit_ids=(2, 5, 1, 3),
         legal_max_amount=7,
-        revealable_count=2,
+        revealable_count=4,
         metadata={"engine_rng_state": "must not reach selector"},
     )
 
 
-def _history() -> PublicHistory:
+def _history(
+    *,
+    starting_cash: int = 30,
+    objective_ids: tuple[int, ...] = (1, 2, 3, 10),
+) -> PublicHistory:
     return (
         PublicGameSetup(
             kind=PublicEventKind.GAME_SETUP,
             player_count=3,
-            starting_cash=30,
+            starting_cash=starting_cash,
             value_chart=(0, 4, 8, 12, 16, 20),
             initial_tiebreak_seat=1,
-            objective_ids=(1, 10),
+            objective_ids=objective_ids,
         ),
         PublicTurnOpened(
             kind=PublicEventKind.TURN_OPENED,
@@ -112,11 +116,11 @@ def test_live_selector_input_copies_only_live_compatible_fields() -> None:
     )
 
     assert same == first
-    assert first.own_hand_suit_ids == (2, 5)
+    assert first.own_hand_suit_ids == (2, 5, 1, 3)
     assert not hasattr(first.context, "metadata")
     assert not hasattr(first.context, "request_id")
     assert not hasattr(first.context, "current_hand_suit_ids")
-    assert replace(first, own_hand_suit_ids=(1, 5)) != first
+    assert replace(first, own_hand_suit_ids=(1, 5, 1, 3)) != first
 
 
 def test_live_selector_input_rejects_ruleset_name_or_objective_tampering() -> None:
@@ -137,11 +141,88 @@ def test_live_selector_input_rejects_ruleset_name_or_objective_tampering() -> No
             _history(),
         )
 
-    unknown_objective = replace(context, objective_ids=(1, 999))
+    unknown_objective = replace(context, objective_ids=(1, 2, 3, 999))
     with pytest.raises(ValueError, match="invalid objective"):
         LiveSelectorInput.from_live_state(
             unknown_objective,
             knowledge_for_context(unknown_objective),
+            _history(),
+        )
+
+
+def test_coherent_context_and_ruleset_tampering_cannot_redefine_sdk_constants() -> None:
+    context = _context()
+
+    changed_cash = replace(context, starting_cash=999)
+    with pytest.raises(ValueError, match="starting cash"):
+        LiveSelectorInput.from_live_state(
+            changed_cash,
+            knowledge_for_context(changed_cash),
+            _history(starting_cash=999),
+        )
+
+    four_private_cards = replace(
+        context,
+        current_hand_suit_ids=(2, 5, 1),
+        revealable_count=3,
+    )
+    with pytest.raises(ValueError, match="private-card total"):
+        LiveSelectorInput.from_live_state(
+            four_private_cards,
+            knowledge_for_context(four_private_cards),
+            _history(),
+        )
+
+    one_objective = replace(
+        context,
+        objective_ids=(1,),
+        owned_objective_ids_by_seat=((1,), (), ()),
+    )
+    with pytest.raises(ValueError, match="wrong number of active objectives"):
+        LiveSelectorInput.from_live_state(
+            one_objective,
+            knowledge_for_context(one_objective),
+            _history(objective_ids=(1,)),
+        )
+
+
+def test_live_selector_input_rejects_invalid_hand_and_public_count_matrices() -> None:
+    context = _context()
+    invalid_hand = replace(context, current_hand_suit_ids=(2, 5, 1, 6))
+    with pytest.raises(ValueError, match="hand contains an invalid suit"):
+        LiveSelectorInput.from_live_state(
+            invalid_hand,
+            knowledge_for_context(invalid_hand),
+            _history(),
+        )
+
+    negative_public_count = replace(
+        context,
+        revealed_info_counts_by_seat=(
+            context.revealed_info_counts_by_seat[0],
+            (-1, 0, 0, 0, 0),
+            context.revealed_info_counts_by_seat[2],
+        ),
+    )
+    with pytest.raises(ValueError, match="nonnegative integers"):
+        LiveSelectorInput.from_live_state(
+            negative_public_count,
+            knowledge_for_context(negative_public_count),
+            _history(),
+        )
+
+    too_many_resources = replace(
+        context,
+        won_resource_counts_by_seat=(
+            (7, 0, 0, 0, 0),
+            context.won_resource_counts_by_seat[1],
+            context.won_resource_counts_by_seat[2],
+        ),
+    )
+    with pytest.raises(ValueError, match="more resource cards"):
+        LiveSelectorInput.from_live_state(
+            too_many_resources,
+            knowledge_for_context(too_many_resources),
             _history(),
         )
 

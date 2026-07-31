@@ -8,7 +8,13 @@ from typing import Literal, Protocol
 
 from pocketrocks import DecisionContext
 
-from garboid_pocketrocks.adapters.public_history import PublicHistory
+from garboid_pocketrocks.adapters.public_history import (
+    PublicAuctionResolved,
+    PublicGameSetup,
+    PublicHistory,
+    PublicInformationRevealed,
+    PublicTurnOpened,
+)
 from garboid_pocketrocks.diagnostics.trace import (
     PublicDecisionContext,
     public_context_from_sdk,
@@ -18,7 +24,12 @@ from garboid_pocketrocks.hybrid.experts import (
     VerifiedPromotedExpertCatalog,
     _require_verified_catalog,
 )
-from garboid_pocketrocks.knowledge import RulesetKnowledge, knowledge_for_context
+from garboid_pocketrocks.knowledge import (
+    RulesetKnowledge,
+    canonical_knowledge,
+    knowledge_for_context,
+    value_chart_from_ruleset_name,
+)
 
 type FallbackReason = Literal[
     "none",
@@ -48,18 +59,202 @@ class LiveSelectorInput:
         """Copy allowlisted context, the bot's own hand, and public history."""
 
         derived = knowledge_for_context(context)
-        if len(set(context.objective_ids)) != len(context.objective_ids) or any(
-            objective_id not in derived.objective_pool for objective_id in context.objective_ids
-        ):
-            raise ValueError("live context contains invalid objective identities")
-        if ruleset != derived:
+        canonical = canonical_knowledge(
+            context.player_count,
+            value_chart=value_chart_from_ruleset_name(derived.name),
+            objectives_enabled=bool(context.objective_ids),
+        )
+        _validate_live_context(context, canonical)
+        _validate_public_history(public_history, context=context, canonical=canonical)
+        if derived != canonical:
+            raise ValueError("live context does not match the canonical PocketRocks ruleset")
+        if ruleset != canonical:
             raise ValueError("provided ruleset knowledge does not match the canonical live ruleset")
         return cls(
             context=public_context_from_sdk(context),
             own_hand_suit_ids=tuple(context.current_hand_suit_ids),
-            ruleset_name=derived.name,
+            ruleset_name=canonical.name,
             public_history=tuple(public_history),
         )
+
+
+def _validate_live_context(
+    context: DecisionContext,
+    canonical: RulesetKnowledge,
+) -> None:
+    player_count = canonical.player_count
+    if context.starting_cash != canonical.starting_cash:
+        raise ValueError("live context starting cash does not match the canonical ruleset")
+    if not 0 <= context.bot_seat < player_count:
+        raise ValueError("live context bot seat is outside the player count")
+    if not 0 <= context.tiebreak_seat < player_count:
+        raise ValueError("live context tiebreak seat is outside the player count")
+    if len(context.objective_ids) != canonical.active_objective_count:
+        raise ValueError("live context has the wrong number of active objectives")
+    if len(set(context.objective_ids)) != len(context.objective_ids) or any(
+        objective_id not in canonical.objective_pool for objective_id in context.objective_ids
+    ):
+        raise ValueError("live context contains invalid objective identities")
+    _require_nonnegative_vector("cash by seat", context.cash_by_seat, length=player_count)
+    won = _require_count_matrix(
+        "won resource counts",
+        context.won_resource_counts_by_seat,
+        rows=player_count,
+        columns=len(canonical.resource_counts),
+    )
+    revealed = _require_count_matrix(
+        "revealed information counts",
+        context.revealed_info_counts_by_seat,
+        rows=player_count,
+        columns=len(canonical.resource_counts),
+    )
+    _require_objective_matrix(
+        context.owned_objective_ids_by_seat,
+        player_count=player_count,
+        active_objectives=frozenset(context.objective_ids),
+    )
+    hand = tuple(context.current_hand_suit_ids)
+    if any(not _is_suit_id(suit_id) for suit_id in hand):
+        raise ValueError("live context hand contains an invalid suit ID")
+    if sum(revealed[context.bot_seat]) + len(hand) != canonical.private_cards_per_player:
+        raise ValueError(
+            "live context focal private-card total does not match the canonical ruleset"
+        )
+    if any(sum(row) > canonical.private_cards_per_player for row in revealed):
+        raise ValueError("live context reveals more private cards than a player owns")
+    visible_information_by_suit = tuple(
+        sum(row[suit_index] for row in revealed)
+        + sum(suit_id == suit_index + 1 for suit_id in hand)
+        for suit_index in range(len(canonical.resource_counts))
+    )
+    if any(
+        visible > available
+        for visible, available in zip(
+            visible_information_by_suit,
+            canonical.resource_counts,
+            strict=True,
+        )
+    ):
+        raise ValueError("live context exposes more information cards than the canonical deck")
+    won_by_suit = tuple(sum(row[index] for row in won) for index in range(len(won[0])))
+    if any(
+        total > available
+        for total, available in zip(won_by_suit, canonical.resource_counts, strict=True)
+    ):
+        raise ValueError("live context awards more resource cards than the canonical deck")
+    resources = tuple(context.current_resource_ids)
+    if len(resources) != 2 or any(not _is_resource_id(resource_id) for resource_id in resources):
+        raise ValueError("live context current resources contain an invalid suit ID")
+    if resources[0] == 0 and resources[1] != 0:
+        raise ValueError("live context current resources are not zero-padded")
+    action_id = context.current_action_id
+    if action_id is not None and (
+        not _is_integer(action_id) or not 1 <= action_id <= len(canonical.action_counts)
+    ):
+        raise ValueError("live context current action ID is invalid")
+    if context.legal_max_amount is not None and (
+        not _is_integer(context.legal_max_amount) or context.legal_max_amount < 0
+    ):
+        raise ValueError("live context legal bid maximum is invalid")
+    if (
+        not _is_integer(context.revealable_count)
+        or context.revealable_count < 0
+        or context.revealable_count > len(hand)
+    ):
+        raise ValueError("live context revealable count is invalid")
+
+
+def _validate_public_history(
+    history: PublicHistory,
+    *,
+    context: DecisionContext,
+    canonical: RulesetKnowledge,
+) -> None:
+    if not history or not isinstance(history[0], PublicGameSetup):
+        raise ValueError("public history must begin with game setup")
+    setup = history[0]
+    if (
+        setup.player_count != canonical.player_count
+        or setup.starting_cash != canonical.starting_cash
+        or setup.value_chart != canonical.value_chart
+        or setup.objective_ids != context.objective_ids
+        or not 0 <= setup.initial_tiebreak_seat < canonical.player_count
+    ):
+        raise ValueError("public history setup does not match the canonical live context")
+    for event in history[1:]:
+        if isinstance(event, PublicTurnOpened):
+            if not 1 <= event.action_id <= len(canonical.action_counts) or any(
+                not _is_resource_id(resource_id) for resource_id in event.resource_ids
+            ):
+                raise ValueError("public history turn contains an invalid action or resource")
+            if event.resource_ids[0] == 0 and event.resource_ids[1] != 0:
+                raise ValueError("public history resources are not zero-padded")
+        elif isinstance(event, PublicAuctionResolved):
+            _require_nonnegative_vector(
+                "public auction bids",
+                event.bids_by_seat,
+                length=canonical.player_count,
+            )
+        elif isinstance(event, PublicInformationRevealed):
+            if not 0 <= event.seat < canonical.player_count or not _is_suit_id(event.suit_id):
+                raise ValueError("public history reveal contains an invalid seat or suit")
+        else:
+            raise ValueError("public history contains an unsupported event")
+
+
+def _require_nonnegative_vector(
+    name: str,
+    values: tuple[int, ...],
+    *,
+    length: int,
+) -> tuple[int, ...]:
+    output = tuple(values)
+    if len(output) != length or any(not _is_integer(value) or value < 0 for value in output):
+        raise ValueError(f"live context {name} must contain {length} nonnegative integers")
+    return output
+
+
+def _require_count_matrix(
+    name: str,
+    values: tuple[tuple[int, ...], ...],
+    *,
+    rows: int,
+    columns: int,
+) -> tuple[tuple[int, ...], ...]:
+    output = tuple(tuple(row) for row in values)
+    if len(output) != rows:
+        raise ValueError(f"live context {name} must contain one row per player")
+    for row in output:
+        _require_nonnegative_vector(name, row, length=columns)
+    return output
+
+
+def _require_objective_matrix(
+    values: tuple[tuple[int, ...], ...],
+    *,
+    player_count: int,
+    active_objectives: frozenset[int],
+) -> None:
+    rows = tuple(tuple(row) for row in values)
+    if len(rows) != player_count:
+        raise ValueError("live context owned objectives must contain one row per player")
+    flattened = tuple(objective_id for row in rows for objective_id in row)
+    if len(set(flattened)) != len(flattened) or any(
+        not _is_integer(value) or value not in active_objectives for value in flattened
+    ):
+        raise ValueError("live context owned objectives contain invalid or duplicate identities")
+
+
+def _is_integer(value: object) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def _is_suit_id(value: object) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and 1 <= value <= 5
+
+
+def _is_resource_id(value: object) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and 0 <= value <= 5
 
 
 class SelectorInputRejected(ValueError):
