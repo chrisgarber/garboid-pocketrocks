@@ -21,7 +21,7 @@ uv run --extra neural garboid-promote \
   --held-out-corpus configs/promotion/held-out-v1.json \
   --bootstrap-samples 1000 \
   --workers 8 \
-  --output-dir promotion-results/neural-comparison
+  --output-dir artifacts/promotions/neural-comparison
 ```
 
 The candidate may be either a released registered bot name or the exact
@@ -82,6 +82,11 @@ A failure to promote does not prove that the candidate is worse. It can mean
 that the measured advantage was too small or uncertain, that too few
 resampled fits converged, or that the evidence was invalid. Read `failures`,
 coverage, and faults in the report before interpreting the decision.
+
+Complete promotion receipts are local working data and default to the
+gitignored `artifacts/promotions/` directory. Retain historically important
+outcomes as concise dated benchmark notes; do not commit raw paired games,
+bootstrap samples, repeated corpus snapshots, or failed-run receipts.
 
 ## Failure reasons
 

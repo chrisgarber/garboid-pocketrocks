@@ -69,7 +69,7 @@ Rank the curated field with the deterministic tournament:
 
 ```bash
 uv run --extra neural garboid-tournament \
-  --output-dir tournament-results
+  --output-dir artifacts/tournaments/default
 ```
 
 See the [tournament runbook](src/garboid_pocketrocks/tournament/README.md) for
@@ -81,7 +81,7 @@ Run the held-out final exam before promoting a candidate:
 uv run --extra neural garboid-promote \
   --candidate vector_ppo_large_v1_g350k \
   --incumbent vector_ppo_small_v1_g1500 \
-  --output-dir promotion-results/neural-comparison
+  --output-dir artifacts/promotions/neural-comparison
 ```
 
 See the [promotion runbook](src/garboid_pocketrocks/promotion/README.md) for
@@ -92,12 +92,17 @@ Search fixed heuristic coefficient grids on development games:
 ```bash
 uv run garboid-evolve-heuristic \
   --manifest configs/evolution/balanced-v3-search-v1.json \
-  --output-dir evolution-results/balanced-v3-search-v1
+  --output-dir artifacts/evolution/balanced-v3-search-v1
 ```
 
 See the [heuristic evolution runbook](src/garboid_pocketrocks/evolution/README.md)
 for the development-only boundary, deterministic evidence, and frozen-candidate
 handoff to held-out promotion.
+
+Full simulation, training, evolution, and promotion receipts belong under the
+gitignored `artifacts/` tree. Commit versioned inputs, released checkpoints or
+frozen candidates, and concise benchmark conclusions instead of raw per-game
+logs and repeated corpus snapshots.
 
 Install the optional neural dependencies and run the production-backed smoke:
 

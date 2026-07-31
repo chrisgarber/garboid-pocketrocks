@@ -28,7 +28,6 @@ from garboid_pocketrocks.simulator.monte_carlo import MonteCarloRunner
 
 REPOSITORY_ROOT = Path(__file__).parents[2]
 CATALOG_DIR = REPOSITORY_ROOT / "src" / "garboid_pocketrocks" / "heuristics" / "frozen_candidates"
-BENCHMARK_DIR = REPOSITORY_ROOT / "docs" / "benchmarks" / "evolution"
 EXPECTED_IDENTITIES = (
     "aggressive-v3-candidate-g007-s008-c70e11540db9",
     "balanced-v3-candidate-g006-s010-e3971899626c",
@@ -85,40 +84,30 @@ def test_catalog_exposes_exact_frozen_records_and_provenance() -> None:
         assert candidate.candidate_evaluations_digest == expected["evaluations"]
 
 
-def test_catalog_files_are_exact_copies_of_committed_development_freezes() -> None:
+def test_catalog_index_hashes_and_describes_packaged_freezes() -> None:
     index = json.loads((CATALOG_DIR / "index.json").read_text(encoding="utf-8"))
 
     assert set(index) == {"schema_version", "candidates"}
     assert index["schema_version"] == 1
     assert [entry["identity"] for entry in index["candidates"]] == list(EXPECTED_IDENTITIES)
     for entry in index["candidates"]:
-        identity = entry["identity"]
-        personality = identity.partition("-")[0]
         installed = CATALOG_DIR / entry["file"]
-        benchmark = BENCHMARK_DIR / f"{personality}-v3-search-v1" / "frozen-candidate.json"
-        assert installed.read_bytes() == benchmark.read_bytes()
         assert hashlib.sha256(installed.read_bytes()).hexdigest() == entry["sha256"]
-        search_dir = benchmark.parent
-        report = json.loads((search_dir / "search-report.json").read_text(encoding="utf-8"))
-        manifest = json.loads((search_dir / "search-manifest.json").read_text(encoding="utf-8"))
-        corpus = json.loads(
-            (search_dir / "development-corpus-snapshot.json").read_text(encoding="utf-8")
-        )
+        payload = json.loads(installed.read_text(encoding="utf-8"))
+        assert payload["identity"] == entry["identity"]
+        assert payload["personality"] == entry["personality"]
+        assert payload["predecessor_name"] == entry["predecessor_name"]
+        assert payload["repository_commit"] == entry["repository_commit"]
+        assert payload["profile_digest"] == entry["profile_digest"]
+        assert payload["search"]["name"] == entry["search_name"]
+        assert payload["search"]["manifest_digest"] == entry["manifest_digest"]
+        assert payload["development_corpus"]["name"] == entry["development_corpus_name"]
+        assert payload["development_corpus"]["digest"] == entry["development_corpus_digest"]
+        assert payload["source_evidence"]["search_report_sha256"] == entry["search_report_sha256"]
         assert (
-            hashlib.sha256((search_dir / "search-report.json").read_bytes()).hexdigest()
-            == entry["search_report_sha256"]
-        )
-        assert (
-            hashlib.sha256((search_dir / "candidate-evaluations.jsonl").read_bytes()).hexdigest()
+            payload["source_evidence"]["candidate_evaluations_sha256"]
             == entry["candidate_evaluations_sha256"]
         )
-        assert report["status"] == "frozen_improvement"
-        assert report["frozen_candidate_identity"] == identity
-        assert report["search"]["name"] == entry["search_name"]
-        assert manifest["digest"] == entry["manifest_digest"]
-        assert corpus["recipe"]["purpose"] == "development"
-        assert corpus["recipe"]["name"] == entry["development_corpus_name"]
-        assert corpus["digest"] == entry["development_corpus_digest"]
 
 
 def test_frozen_specs_are_picklable_local_only_and_not_released() -> None:

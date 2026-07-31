@@ -10,7 +10,7 @@ Run a search from the repository root:
 ```bash
 uv run garboid-evolve-heuristic \
   --manifest configs/evolution/balanced-v3-search-v1.json \
-  --output-dir evolution-results/balanced-v3-search-v1
+  --output-dir artifacts/evolution/balanced-v3-search-v1
 ```
 
 The manifest owns the search seed, generations, population and elite counts,
@@ -49,6 +49,12 @@ nonempty output directory is rejected. `--overwrite` replaces the known
 artifact generation transactionally, preserves unrelated files, and removes a
 stale `frozen-candidate.json` if the replacement run does not freeze a winner.
 If replacement fails, the prior known artifact generation is restored.
+
+These complete receipts are local working data and default to the gitignored
+`artifacts/evolution/` directory. Keep a concise dated benchmark note when a
+result matters historically, along with the versioned manifest and promoted
+`frozen-candidate.json`; do not commit per-game logs, repeated corpus snapshots,
+or complete candidate-evaluation streams.
 
 The frozen candidate must still pass the separate
 [promotion gate](../promotion/README.md) on held-out games before it can become

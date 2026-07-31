@@ -78,11 +78,8 @@ uv run garboid-simulate \
 The [v1 benchmark](../../../docs/benchmarks/2026-07-28-heuristic-v1.md) and
 [v2 future-cash benchmark](../../../docs/benchmarks/2026-07-29-future-cash-heuristic.md)
 record frozen results. The v3 coefficients are the frozen winners that passed
-their held-out promotion gates for
-[aggressive](../../../docs/benchmarks/promotions/2026-07-30-aggressive-v3-candidate-g007-s008-c70e11540db9-vs-aggressive-v2/promotion-report.json),
-[balanced](../../../docs/benchmarks/promotions/2026-07-30-balanced-v3-candidate-g006-s010-e3971899626c-vs-balanced-v2/promotion-report.json),
-and
-[passive](../../../docs/benchmarks/promotions/2026-07-30-passive-v3-candidate-g006-s001-812832214cd5-vs-passive-v2/promotion-report.json).
+their held-out promotion gates, as recorded in the concise
+[v3 promotion benchmark](../../../docs/benchmarks/2026-07-30-heuristic-v3-candidate-promotions.md).
 The
 [visualization runbook](../../../docs/analysis/heuristic-bot-visualizations.md)
 defines the 100,000-game analysis and its metrics.

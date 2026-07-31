@@ -28,9 +28,23 @@ htmlcov/
 /artifacts/
 /checkpoints/
 /data/
+/evolution-results/
+/promotion-results/
+/tournament-results/
 *.onnx
 *.pt
 *.pth
 !src/garboid_pocketrocks/neural/checkpoints/
 !src/garboid_pocketrocks/neural/checkpoints/**/
 !src/garboid_pocketrocks/neural/checkpoints/**/model.pt
+
+# Raw benchmark receipts are reproducible local outputs, not documentation.
+/docs/benchmarks/**/candidate-evaluations.jsonl
+/docs/benchmarks/**/corpus-snapshot.json
+/docs/benchmarks/**/development-corpus-snapshot.json
+/docs/benchmarks/**/development-games.jsonl
+/docs/benchmarks/**/paired-games.jsonl
+/docs/benchmarks/**/promotion-report.json
+/docs/benchmarks/**/search-manifest.json
+/docs/benchmarks/**/search-report.json
+/docs/benchmarks/**/selection-log.jsonl

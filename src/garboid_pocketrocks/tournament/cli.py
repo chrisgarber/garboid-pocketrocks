@@ -88,7 +88,12 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--bootstrap-samples", type=_nonnegative_int, default=200)
     parser.add_argument("--bots", type=_csv)
     parser.add_argument("--exclude-bots", type=_csv, default=())
-    parser.add_argument("--output-dir", type=Path, default=Path("tournament-results"))
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=Path("artifacts/tournaments"),
+        help="local output directory; defaults under the gitignored artifacts tree",
+    )
     parser.add_argument("--overwrite", action="store_true")
     parser.add_argument("--decision-reports", action="store_true")
     return parser

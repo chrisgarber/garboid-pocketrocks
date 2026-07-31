@@ -153,6 +153,7 @@ def test_parser_defaults() -> None:
     assert args.bootstrap_samples == 1_000
     assert args.bootstrap_seed == 0
     assert args.batch_size == 64
+    assert args.output_dir == Path("artifacts/promotions")
 
 
 def test_promoted_candidate_prints_interval_report_and_exits_zero(

@@ -1,6 +1,6 @@
 ---
 name: versioning-bots
-description: Use when changing bot strategy, decisions, coefficients, training, checkpoints, information inputs, action selection, or fixing a bug that materially changes bot behavior or strength
+description: Use when changing bot strategy, decisions, coefficients, training, checkpoints, information inputs, action selection, fixing a bug that materially changes bot behavior or strength, or deciding which training and evaluation artifacts belong in Git
 ---
 
 # Versioning Bots
@@ -21,6 +21,30 @@ checkpoints, and behavior-changing bug fixes.
 Do not interrupt behavior-preserving refactors, adapters, tests,
 documentation, or observability work. Verify the behavior-preserving claim
 with existing or new tests.
+
+## Retain identities, not run exhaust
+
+Write complete training, evolution, tournament, and promotion outputs under
+the gitignored `artifacts/` tree. Treat per-game logs, replay streams,
+candidate-evaluation streams, bootstrap samples, repeated corpus snapshots,
+and failed-run receipts as ephemeral working data.
+
+Commit only what is needed to reproduce or run a released generation:
+
+- versioned code, manifests, and corpus recipes;
+- frozen coefficients or a released checkpoint and its compact manifest;
+- a concise dated benchmark note with the source commit, seeds, digests,
+  aggregate coverage, uncertainty, faults, and decision.
+
+Before staging a training change, inspect `git diff --stat`, `git diff
+--numstat`, and the output sizes. If generated receipts dominate the change,
+remove them from Git and keep their reproduction command in the benchmark
+note. Do not preserve a zero-game operational failure merely to prove it
+happened.
+
+Commit a raw receipt only when the user explicitly requests it or when a
+minimal machine-readable artifact is required at runtime. Record that reason
+in the benchmark note.
 
 ## Required decision
 
