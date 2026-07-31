@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from dataclasses import FrozenInstanceError
+from collections.abc import Callable
+from dataclasses import FrozenInstanceError, replace
 from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
 
 import pytest
-from pocketrocks import ActionId, Suit
+from pocketrocks import ActionId, BotDecision, Suit
 from pocketrocks.internal.bot_wire_v2 import decode_frame
 from pocketrocks.testing import scenario
 
@@ -14,11 +15,14 @@ from garboid_pocketrocks.adapters.public_history import (
     PublicAuctionResolved,
     PublicEventKind,
     PublicGameSetup,
+    PublicHistory,
     PublicHistoryCompatibilityError,
     PublicInformationRevealed,
     PublicTurnOpened,
     public_history_from_sdk_frame,
+    validate_public_history,
 )
+from garboid_pocketrocks.simulator.session import SdkGameSession
 
 
 def _decoded_history_frame(
@@ -129,3 +133,78 @@ def test_production_adapter_does_not_import_sdk_internals() -> None:
     source = Path(public_history_module.__file__).read_text(encoding="utf-8")
 
     assert "pocketrocks.internal" not in source
+
+
+def test_shared_validator_derives_the_exact_open_turn_state() -> None:
+    history = public_history_from_sdk_frame(_decoded_history_frame())
+
+    state = validate_public_history(history)
+
+    assert state.phase == "turn_open"
+    assert state.latest_turn == history[-1]
+    assert state.tiebreak_seat == 1
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    (
+        lambda history: (
+            history[0],
+            replace(history[1], kind=PublicEventKind.GAME_SETUP),
+            *history[2:],
+        ),
+        lambda history: (
+            history[0],
+            replace(history[1], resource_ids=(1,)),
+            *history[2:],
+        ),
+        lambda history: (
+            *history[:2],
+            replace(history[2], bids_by_seat=(2, 5)),
+            *history[3:],
+        ),
+        lambda history: (
+            *history[:3],
+            replace(history[3], seat=2),
+            *history[4:],
+        ),
+        lambda history: (
+            *history[:3],
+            history[4],
+        ),
+    ),
+)
+def test_shared_validator_rejects_malformed_events_and_state_transitions(
+    mutate: Callable[[PublicHistory], PublicHistory],
+) -> None:
+    history = public_history_from_sdk_frame(_decoded_history_frame())
+    malformed = mutate(history)
+
+    with pytest.raises(PublicHistoryCompatibilityError):
+        validate_public_history(malformed)
+
+
+@pytest.mark.parametrize("player_count", (3, 4, 5))
+def test_shared_validator_accepts_complete_sdk_games_after_players_exhaust_their_hands(
+    player_count: int,
+) -> None:
+    session = SdkGameSession.start(player_count=player_count, seed=104_729)
+
+    while not session.terminated:
+        decisions = {
+            seat: (
+                BotDecision.submit_bid(1)
+                if session.pending.decision_kind == "submitBid" and seat == 0
+                else BotDecision.pass_turn()
+            )
+            for seat in session.pending.acting_seats
+        }
+        session.step(decisions)
+
+    history = public_history_from_sdk_frame(SimpleNamespace(common_events=session.events))
+
+    assert validate_public_history(history).setup.player_count == player_count
+    assert any(
+        isinstance(current, PublicAuctionResolved) and isinstance(following, PublicTurnOpened)
+        for current, following in zip(history, history[1:], strict=False)
+    )

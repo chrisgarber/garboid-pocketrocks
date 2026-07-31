@@ -9,11 +9,9 @@ from typing import Literal, Protocol
 from pocketrocks import DecisionContext
 
 from garboid_pocketrocks.adapters.public_history import (
-    PublicAuctionResolved,
-    PublicGameSetup,
     PublicHistory,
-    PublicInformationRevealed,
-    PublicTurnOpened,
+    ValidatedPublicHistory,
+    validate_public_history,
 )
 from garboid_pocketrocks.diagnostics.trace import (
     PublicDecisionContext,
@@ -65,7 +63,8 @@ class LiveSelectorInput:
             objectives_enabled=bool(context.objective_ids),
         )
         _validate_live_context(context, canonical)
-        _validate_public_history(public_history, context=context, canonical=canonical)
+        history_state = validate_public_history(public_history)
+        _bind_history_to_context(history_state, context=context, canonical=canonical)
         if derived != canonical:
             raise ValueError("live context does not match the canonical PocketRocks ruleset")
         if ruleset != canonical:
@@ -159,47 +158,49 @@ def _validate_live_context(
     if (
         not _is_integer(context.revealable_count)
         or context.revealable_count < 0
-        or context.revealable_count > len(hand)
+        or context.revealable_count != len(hand)
     ):
-        raise ValueError("live context revealable count is invalid")
+        raise ValueError("live context revealable count must equal the focal hand length")
 
 
-def _validate_public_history(
-    history: PublicHistory,
+def _bind_history_to_context(
+    history: ValidatedPublicHistory,
     *,
     context: DecisionContext,
     canonical: RulesetKnowledge,
 ) -> None:
-    if not history or not isinstance(history[0], PublicGameSetup):
-        raise ValueError("public history must begin with game setup")
-    setup = history[0]
+    setup = history.setup
     if (
         setup.player_count != canonical.player_count
         or setup.starting_cash != canonical.starting_cash
         or setup.value_chart != canonical.value_chart
         or setup.objective_ids != context.objective_ids
-        or not 0 <= setup.initial_tiebreak_seat < canonical.player_count
     ):
         raise ValueError("public history setup does not match the canonical live context")
-    for event in history[1:]:
-        if isinstance(event, PublicTurnOpened):
-            if not 1 <= event.action_id <= len(canonical.action_counts) or any(
-                not _is_resource_id(resource_id) for resource_id in event.resource_ids
-            ):
-                raise ValueError("public history turn contains an invalid action or resource")
-            if event.resource_ids[0] == 0 and event.resource_ids[1] != 0:
-                raise ValueError("public history resources are not zero-padded")
-        elif isinstance(event, PublicAuctionResolved):
-            _require_nonnegative_vector(
-                "public auction bids",
-                event.bids_by_seat,
-                length=canonical.player_count,
-            )
-        elif isinstance(event, PublicInformationRevealed):
-            if not 0 <= event.seat < canonical.player_count or not _is_suit_id(event.suit_id):
-                raise ValueError("public history reveal contains an invalid seat or suit")
-        else:
-            raise ValueError("public history contains an unsupported event")
+    turn = history.latest_turn
+    if turn is None:
+        raise ValueError("public history has no current turn")
+    if (
+        context.current_action_id != turn.action_id
+        or context.current_resource_ids != turn.resource_ids
+    ):
+        raise ValueError("live context action and resources do not match the latest public turn")
+    if context.tiebreak_seat != history.tiebreak_seat:
+        raise ValueError("live context tiebreak seat does not match public history")
+    if context.decision_kind == "submitBid":
+        if history.phase != "turn_open":
+            raise ValueError("bid decision requires one unresolved public turn")
+        if context.legal_max_amount is None:
+            raise ValueError("bid decision requires a legal bid maximum")
+    elif context.decision_kind == "selectInfoToReveal":
+        if history.phase != "reveal_pending":
+            raise ValueError("reveal decision requires one resolved auction awaiting reveal")
+        if context.legal_max_amount is not None:
+            raise ValueError("reveal decision cannot contain a legal bid maximum")
+        if context.bot_seat != history.tiebreak_seat:
+            raise ValueError("reveal decision must belong to the public auction winner")
+    else:
+        raise ValueError("live context decision kind is unsupported")
 
 
 def _require_nonnegative_vector(

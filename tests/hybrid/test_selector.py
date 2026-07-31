@@ -7,10 +7,12 @@ import pytest
 from pocketrocks import DecisionContext
 
 from garboid_pocketrocks.adapters.public_history import (
+    PublicAuctionResolved,
     PublicEventKind,
     PublicGameSetup,
     PublicHistory,
     PublicTurnOpened,
+    public_history_from_sdk_events,
 )
 from garboid_pocketrocks.hybrid.experts import ExpertAvailability, load_promoted_experts
 from garboid_pocketrocks.hybrid.selector import (
@@ -19,6 +21,7 @@ from garboid_pocketrocks.hybrid.selector import (
     choose_promoted_expert,
 )
 from garboid_pocketrocks.knowledge import knowledge_for_context
+from garboid_pocketrocks.simulator.session import SdkGameSession
 
 
 def _context() -> DecisionContext:
@@ -71,6 +74,24 @@ def _history(
 def _selector_input() -> LiveSelectorInput:
     context = _context()
     return LiveSelectorInput.from_live_state(context, knowledge_for_context(context), _history())
+
+
+def _reveal_context_and_history() -> tuple[DecisionContext, PublicHistory]:
+    context = replace(
+        _context(),
+        decision_kind="selectInfoToReveal",
+        bot_seat=0,
+        tiebreak_seat=0,
+        legal_max_amount=None,
+    )
+    history = (
+        *_history(),
+        PublicAuctionResolved(
+            kind=PublicEventKind.AUCTION_RESOLVED,
+            bids_by_seat=(7, 3, 0),
+        ),
+    )
+    return context, history
 
 
 def _available(*names: str) -> dict[str, ExpertAvailability]:
@@ -225,6 +246,96 @@ def test_live_selector_input_rejects_invalid_hand_and_public_count_matrices() ->
             knowledge_for_context(too_many_resources),
             _history(),
         )
+
+
+def test_selector_input_enforces_sdk_phase_fields_and_latest_public_turn() -> None:
+    context = _context()
+    mismatched_revealable_count = replace(context, revealable_count=3)
+    with pytest.raises(ValueError, match="equal the focal hand length"):
+        LiveSelectorInput.from_live_state(
+            mismatched_revealable_count,
+            knowledge_for_context(mismatched_revealable_count),
+            _history(),
+        )
+
+    bid_without_limit = replace(context, legal_max_amount=None)
+    with pytest.raises(ValueError, match="bid decision requires"):
+        LiveSelectorInput.from_live_state(
+            bid_without_limit,
+            knowledge_for_context(bid_without_limit),
+            _history(),
+        )
+
+    mismatched_action = replace(context, current_action_id=2)
+    with pytest.raises(ValueError, match="latest public turn"):
+        LiveSelectorInput.from_live_state(
+            mismatched_action,
+            knowledge_for_context(mismatched_action),
+            _history(),
+        )
+
+    malformed_resources = replace(
+        context,
+        current_resource_ids=(3,),  # type: ignore[arg-type]
+    )
+    with pytest.raises(ValueError, match="current resources"):
+        LiveSelectorInput.from_live_state(
+            malformed_resources,
+            knowledge_for_context(malformed_resources),
+            _history(),
+        )
+
+    reveal_context, reveal_history = _reveal_context_and_history()
+    accepted = LiveSelectorInput.from_live_state(
+        reveal_context,
+        knowledge_for_context(reveal_context),
+        reveal_history,
+    )
+    assert accepted.context.decision_kind == "selectInfoToReveal"
+
+    reveal_with_bid_limit = replace(reveal_context, legal_max_amount=7)
+    with pytest.raises(ValueError, match="reveal decision cannot"):
+        LiveSelectorInput.from_live_state(
+            reveal_with_bid_limit,
+            knowledge_for_context(reveal_with_bid_limit),
+            reveal_history,
+        )
+
+    bid_after_resolution = replace(context, tiebreak_seat=0)
+    with pytest.raises(ValueError, match="bid decision requires one unresolved"):
+        LiveSelectorInput.from_live_state(
+            bid_after_resolution,
+            knowledge_for_context(bid_after_resolution),
+            reveal_history,
+        )
+
+
+@pytest.mark.parametrize("value_chart", tuple("ABCDE"))
+@pytest.mark.parametrize("player_count", (3, 4, 5))
+@pytest.mark.parametrize("objectives_enabled", (False, True))
+def test_real_sdk_opening_contexts_are_accepted_across_supported_games(
+    value_chart: str,
+    player_count: int,
+    objectives_enabled: bool,
+) -> None:
+    session = SdkGameSession.start(
+        player_count=player_count,
+        seed=f"hybrid-input-{value_chart}-{player_count}-{objectives_enabled}",
+        value_chart=value_chart,
+        objectives_enabled=objectives_enabled,
+    )
+    _seat, context = session.pending.contexts[0]
+    history = public_history_from_sdk_events(session.events)
+
+    selector_input = LiveSelectorInput.from_live_state(
+        context,
+        knowledge_for_context(context),
+        history,
+    )
+
+    assert selector_input.context.player_count == player_count
+    assert selector_input.ruleset_name.startswith(f"live-{value_chart}")
+    assert bool(selector_input.context.objective_ids) is objectives_enabled
 
 
 def test_fixed_input_reproduces_the_same_expert_choice() -> None:
