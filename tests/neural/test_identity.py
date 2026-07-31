@@ -90,7 +90,12 @@ def test_experimental_identity_records_every_selection_input() -> None:
         root_seed=42,
         completed_games=349_860,
         config_digest="a" * 64,
-    ) == ("vector_ppo_large_v2_g349860_behavior-cloning-balanced-v3_s42_caaaaaaaaaaaa")
+        parameter_digest="b" * 64,
+        repository_commit="c" * 40,
+    ) == (
+        "vector_ppo_large_v2_g349860_behavior-cloning-balanced-v3_s42_"
+        "caaaaaaaaaaaa_pbbbbbbbbbbbb_rcccccccccccc"
+    )
 
 
 @pytest.mark.parametrize(
@@ -99,6 +104,8 @@ def test_experimental_identity_records_every_selection_input() -> None:
         ("strategy", "Behavior Cloning"),
         ("root_seed", -1),
         ("config_digest", "not-a-digest"),
+        ("parameter_digest", "not-a-digest"),
+        ("repository_commit", "not-a-commit"),
     ),
 )
 def test_experimental_identity_rejects_ambiguous_values(
@@ -110,6 +117,8 @@ def test_experimental_identity_rejects_ambiguous_values(
         "root_seed": 42,
         "completed_games": 10,
         "config_digest": "a" * 64,
+        "parameter_digest": "b" * 64,
+        "repository_commit": "c" * 40,
     }
     arguments[field] = value
     with pytest.raises(ValueError):

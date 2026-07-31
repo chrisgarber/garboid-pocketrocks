@@ -39,6 +39,7 @@ counts, and 119 games per chart/player cell.
 | Arm | Demonstration rounds | PPO updates | Complete training games |
 |---|---:|---:|---:|
 | Control | 0 | 196 | 349,860 |
+| Focal-seat control | 0 | 196 | 349,860 |
 | Behavior cloning | 4 | 192 | 349,860 |
 | Auxiliary value | 0 | 196 | 349,860 |
 | Opponent curriculum | 0 | 196 | 349,860 |
@@ -47,6 +48,16 @@ For behavior cloning, four 1,785-game demonstration rounds replace four PPO
 updates instead of increasing the game budget. Wall time and neural optimizer
 steps are also reported because different strategies do different work per
 game; the game count is the precommitted primary budget.
+The cloning optimizer follows the immutable
+`sequential-shard-major-epochs-v1` order and persists across shards, so shard
+size is identity-bearing and may change the final weights. A failure before
+the first PPO checkpoint restarts the deterministic cloning stage in full;
+there is no cloning-stage shard checkpoint.
+
+The opponent curriculum is compared with the focal-seat control, not the
+all-seat control. Both use the same focal-seat rotation, one trainable
+trajectory per game, PPO update count, and optimizer settings; only opponent
+selection differs.
 
 ## Information boundaries
 

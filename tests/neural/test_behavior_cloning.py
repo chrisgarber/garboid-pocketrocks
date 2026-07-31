@@ -15,6 +15,7 @@ from garboid_pocketrocks.neural.behavior_cloning import (  # noqa: E402
     BehaviorCloningProvenance,
     BehaviorCloningTrainer,
     balanced_v3_profile_digest,
+    behavior_cloning_game_shards,
     collect_behavior_cloning_dataset,
     plan_behavior_cloning_games,
 )
@@ -78,6 +79,8 @@ def test_config_json_is_complete_exact_key_and_round_trips() -> None:
         "games_per_cell",
         "epochs",
         "minibatch_size",
+        "games_per_shard",
+        "optimization_order",
         "learning_rate",
         "max_gradient_norm",
         "teacher_identity",
@@ -93,6 +96,8 @@ def test_config_json_is_complete_exact_key_and_round_trips() -> None:
         BehaviorCloningConfig.from_json_dict({**payload, "root_seed": True})
     with pytest.raises(ValueError, match="must be a JSON object"):
         BehaviorCloningConfig.from_json_dict([])
+    with pytest.raises(ValueError, match="optimization order is not pinned"):
+        _config(optimization_order="epochs-before-shards")
 
 
 def test_planning_is_repeatable_balanced_and_namespaced() -> None:
@@ -112,6 +117,39 @@ def test_planning_is_repeatable_balanced_and_namespaced() -> None:
         sum(plan.ruleset_name == ruleset and plan.player_count == players for plan in first) == 4
         for ruleset, players in cells
     )
+
+
+def test_game_shards_are_bounded_ordered_and_complete() -> None:
+    plans = plan_behavior_cloning_games(_config(rounds=1, games_per_cell=2))
+
+    shards = behavior_cloning_game_shards(plans, games_per_shard=7)
+
+    assert all(1 <= len(shard) <= 7 for shard in shards)
+    assert tuple(plan for shard in shards for plan in shard) == plans
+
+
+def test_pinned_shard_order_is_repeatable_and_changes_weights_when_reversed() -> None:
+    config = _config(epochs=1, games_per_shard=1)
+    plans = plan_behavior_cloning_games(config)[:2]
+    datasets = tuple(
+        collect_behavior_cloning_dataset(
+            (plan,),
+            encoder_config=training_encoder_config(),
+        )
+        for plan in plans
+    )
+    initial = _model(123).state_dict()
+
+    def trained_state(order: tuple[BehaviorCloningDataset, ...]) -> bytes:
+        model = _model(999)
+        model.load_state_dict(initial)
+        trainer = BehaviorCloningTrainer(model, config)
+        for shard_index, dataset in enumerate(order):
+            trainer.train(dataset, shard_index=shard_index)
+        return _state_bytes(model.state_dict())
+
+    assert trained_state(datasets) == trained_state(datasets)
+    assert trained_state(datasets) != trained_state(tuple(reversed(datasets)))
 
 
 def test_collection_is_public_immutable_legal_and_repeatable() -> None:
@@ -165,6 +203,13 @@ def test_policy_only_training_is_exactly_repeatable_and_reports_finite_metrics()
     assert first_metrics == second_metrics
     assert first_metrics.example_count == len(dataset.examples)
     assert first_metrics.optimizer_steps > 0
+    for epoch_index in range(config.epochs):
+        epoch_minibatches = [
+            update.minibatch_index
+            for update in first_metrics.updates
+            if update.epoch_index == epoch_index
+        ]
+        assert epoch_minibatches == list(range(len(epoch_minibatches)))
     assert all(update.negative_log_likelihood >= 0.0 for update in first_metrics.updates)
     assert all(0.0 <= update.teacher_agreement <= 1.0 for update in first_metrics.updates)
     assert all(update.entropy >= 0.0 for update in first_metrics.updates)

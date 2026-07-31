@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import multiprocessing
+import subprocess
 import threading
 import time
 import traceback
@@ -69,6 +70,11 @@ class _WorkerFailure:
     traceback_text: str
 
 
+@dataclass(frozen=True, slots=True)
+class _WorkerReady:
+    worker_id: int
+
+
 class VectorActorPool:
     """Own reusable CPU actors and collect one frozen-policy update at a time."""
 
@@ -80,6 +86,7 @@ class VectorActorPool:
         workers: int,
         engine_batch_size: int = 128,
         max_inference_batch: int = 1024,
+        expected_repository_commit: str | None = None,
     ) -> None:
         self._require_positive_integer("workers", workers)
         self._require_positive_integer("engine_batch_size", engine_batch_size)
@@ -108,6 +115,7 @@ class VectorActorPool:
                         reward_config,
                         engine_batch_size,
                         max_inference_batch,
+                        expected_repository_commit,
                     ),
                     name=f"persistent-vector-self-play-{worker_id}",
                 )
@@ -120,6 +128,7 @@ class VectorActorPool:
                 child.close()
                 self._connections.append(parent)
                 self._processes.append(process)
+            self._await_worker_startup()
         except BaseException:
             self._shutdown()
             raise
@@ -290,6 +299,33 @@ class VectorActorPool:
             pending[connection] = worker_id
         return pending, ipc_seconds
 
+    def _await_worker_startup(self) -> None:
+        pending = {connection: worker_id for worker_id, connection in enumerate(self._connections)}
+        while pending:
+            ready = wait(pending, timeout=30.0)
+            if not ready:
+                waiting_for = ", ".join(str(worker_id) for worker_id in pending.values())
+                raise VectorPoolError(
+                    f"vector actors {waiting_for} did not attest their source at startup"
+                )
+            for connection in ready:
+                worker_id = pending.pop(cast(Connection, connection))
+                try:
+                    message = cast(Connection, connection).recv()
+                except EOFError as error:
+                    raise VectorPoolError(
+                        f"vector actor {worker_id} exited before source attestation"
+                    ) from error
+                if isinstance(message, _WorkerFailure):
+                    raise VectorPoolError(
+                        f"vector actor {message.worker_id} failed source attestation: "
+                        f"{message.message}\n{message.traceback_text}"
+                    )
+                if not isinstance(message, _WorkerReady) or message.worker_id != worker_id:
+                    raise VectorPoolError(
+                        f"vector actor {worker_id} returned invalid source attestation"
+                    )
+
     @staticmethod
     def _require_positive_integer(name: str, value: object) -> None:
         if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
@@ -388,10 +424,24 @@ def _run_vector_actor(
     reward_config: RewardConfig,
     engine_batch_size: int,
     max_inference_batch: int,
+    expected_repository_commit: str | None,
 ) -> None:
     try:
         torch.set_num_threads(1)
         torch.set_num_interop_threads(1)
+        try:
+            _require_expected_repository_source(expected_repository_commit)
+        except BaseException as error:
+            connection.send(
+                _WorkerFailure(
+                    request_id=-1,
+                    worker_id=worker_id,
+                    message=str(error),
+                    traceback_text=traceback.format_exc(),
+                )
+            )
+            return
+        connection.send(_WorkerReady(worker_id=worker_id))
         while True:
             try:
                 command = connection.recv()
@@ -439,3 +489,45 @@ def _run_vector_actor(
                 )
     finally:
         connection.close()
+
+
+def _require_expected_repository_source(expected_repository_commit: str | None) -> None:
+    """Require an official worker to start from one clean, stable Git commit."""
+
+    if expected_repository_commit is None:
+        return
+    repository_commit_before_status = _repository_commit()
+    dirty = _repository_status()
+    repository_commit_after_status = _repository_commit()
+    if (
+        repository_commit_before_status != expected_repository_commit
+        or repository_commit_after_status != expected_repository_commit
+        or dirty
+    ):
+        raise VectorPoolError(
+            "official vector actor source does not match the expected clean repository commit"
+        )
+
+
+def _repository_commit() -> str:
+    try:
+        return subprocess.run(
+            ("git", "rev-parse", "HEAD"),
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+    except (OSError, subprocess.CalledProcessError) as error:
+        raise VectorPoolError("vector actor requires readable Git provenance") from error
+
+
+def _repository_status() -> str:
+    try:
+        return subprocess.run(
+            ("git", "status", "--porcelain"),
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+    except (OSError, subprocess.CalledProcessError) as error:
+        raise VectorPoolError("vector actor requires readable Git provenance") from error

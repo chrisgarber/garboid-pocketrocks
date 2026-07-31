@@ -1,6 +1,8 @@
 {
   "behavior_cloning": {
     "epochs": 3,
+    "games_per_shard": 64,
+    "optimization_order": "sequential-shard-major-epochs-v1",
     "games_per_cell": 119,
     "learning_rate": 0.0003,
     "max_gradient_norm": 0.5,
@@ -11,7 +13,8 @@
     "teacher_profile_digest": "e3971899626ca3f651b2992d0cc429dc3ffd57fcdbb7cfac8249e6f0f9d9b03e"
   },
   "deterministic_algorithms": true,
-  "device": "auto",
+  "device": "cpu",
+  "experiment_arm": "behavior-cloning-balanced-v3-v1",
   "games_per_cell": 119,
   "learner_threads": 4,
   "max_updates": 192,
@@ -19,10 +22,10 @@
   "model_profile": "large",
   "opponent_training": "mirror-self-play",
   "parallel": {
-    "active_games_per_worker": 128,
+    "active_games_per_worker": 64,
     "max_inference_batch": 1024,
     "max_queue_delay_ms": 1.0,
-    "workers": "auto"
+    "workers": 8
   },
   "ppo": {
     "epochs": 3

@@ -8,6 +8,7 @@ from garboid_pocketrocks.neural.config import ModelProfile
 
 _RESEARCH_STRATEGY = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
 _SHA256 = re.compile(r"[0-9a-f]{64}")
+_COMMIT = re.compile(r"[0-9a-f]{40}")
 
 
 def trained_neural_bot_id(
@@ -38,6 +39,8 @@ def experimental_neural_bot_id(
     root_seed: int,
     completed_games: int,
     config_digest: str,
+    parameter_digest: str,
+    repository_commit: str,
     generation: int = 2,
 ) -> str:
     """Name one immutable research checkpoint without implying promotion."""
@@ -53,4 +56,11 @@ def experimental_neural_bot_id(
         raise ValueError("root_seed must be a nonnegative integer")
     if not isinstance(config_digest, str) or _SHA256.fullmatch(config_digest) is None:
         raise ValueError("config_digest must be a lowercase SHA-256 digest")
-    return f"{base_identity}_{strategy}_s{root_seed}_c{config_digest[:12]}"
+    if not isinstance(parameter_digest, str) or _SHA256.fullmatch(parameter_digest) is None:
+        raise ValueError("parameter_digest must be a lowercase SHA-256 digest")
+    if not isinstance(repository_commit, str) or _COMMIT.fullmatch(repository_commit) is None:
+        raise ValueError("repository_commit must be a lowercase Git commit")
+    return (
+        f"{base_identity}_{strategy}_s{root_seed}_c{config_digest[:12]}_"
+        f"p{parameter_digest[:12]}_r{repository_commit[:12]}"
+    )

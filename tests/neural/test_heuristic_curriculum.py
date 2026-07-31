@@ -9,6 +9,7 @@ import pytest
 pytest.importorskip("torch")
 
 from garboid_pocketrocks.neural.heuristic_curriculum import (  # noqa: E402
+    FOCAL_SEAT_CONTROL_V1,
     HEURISTIC_OPPONENT_CURRICULUM_V1,
     RELEASED_HEURISTIC_V3_IDENTITIES,
     HeuristicCurriculumStage,
@@ -38,6 +39,25 @@ def test_v1_schedule_is_the_frozen_196_update_bootstrap_curriculum() -> None:
     )
     with pytest.raises(FrozenInstanceError):
         schedule.total_updates = 197  # type: ignore[misc]
+
+
+def test_focal_control_uses_the_same_planner_without_teacher_seats() -> None:
+    resolved = plan_heuristic_curriculum_episodes(
+        root_seed=42,
+        update_index=98,
+        games_per_cell=7,
+        learner_policy_identity="current",
+        curriculum=FOCAL_SEAT_CONTROL_V1,
+    )
+
+    assert resolved.heuristic_opponent_count == 0
+    assert all(
+        sum(policy.trainable for policy in plan.seat_policies) == 1
+        and {policy.identity for policy in plan.seat_policies} == {"current"}
+        for plan in resolved.plans
+    )
+    assert len(FOCAL_SEAT_CONTROL_V1.digest) == 64
+    assert FOCAL_SEAT_CONTROL_V1.digest != HEURISTIC_OPPONENT_CURRICULUM_V1.digest
 
 
 @pytest.mark.parametrize(

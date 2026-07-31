@@ -15,7 +15,10 @@ from typing import cast
 import torch
 
 from garboid_pocketrocks.neural.behavior_cloning import (
+    BehaviorCloningMetrics,
     BehaviorCloningTrainer,
+    BehaviorCloningUpdateMetrics,
+    behavior_cloning_game_shards,
     collect_behavior_cloning_dataset,
     plan_behavior_cloning_games,
 )
@@ -25,6 +28,7 @@ from garboid_pocketrocks.neural.benchmark import (
     calibrate,
     calibration_plans,
 )
+from garboid_pocketrocks.neural.checkpoint import parameter_digest
 from garboid_pocketrocks.neural.collector import CollectorMetrics
 from garboid_pocketrocks.neural.config import (
     training_encoder_config,
@@ -32,10 +36,14 @@ from garboid_pocketrocks.neural.config import (
 )
 from garboid_pocketrocks.neural.devices import resolve_device
 from garboid_pocketrocks.neural.heuristic_bootstrap import (
+    EXPERIMENT_GAMES_PER_CELL,
+    TRAINING_CELL_COUNT,
+    HeuristicBootstrapArm,
     bootstrap_strategy,
     validate_fixed_compute_arm,
 )
 from garboid_pocketrocks.neural.heuristic_curriculum import (
+    FOCAL_SEAT_CONTROL_V1,
     HEURISTIC_OPPONENT_CURRICULUM_V1,
     plan_heuristic_curriculum_episodes,
 )
@@ -90,6 +98,18 @@ class TrainingRunResult:
     elapsed_seconds: float
 
 
+@dataclass(frozen=True, slots=True)
+class _OfficialResumeArtifacts:
+    metrics_jsonl: bytes
+    behavior_cloning_json: bytes | None
+
+
+@dataclass(frozen=True, slots=True)
+class _OfficialExperimentRun:
+    arm: HeuristicBootstrapArm
+    repository_commit: str
+
+
 def train(
     config: TrainingRunConfig,
     output_dir: Path,
@@ -97,6 +117,7 @@ def train(
     """Start a new self-play lineage and stop only at an update boundary."""
 
     validate_runtime_support(config)
+    official_experiment = _validate_official_experiment(config)
     run_dir = _prepare_run_dir(output_dir)
     configure_torch_runtime(
         config.root_seed,
@@ -144,6 +165,9 @@ def train(
             resolved,
             estimated_decisions_per_game=estimated_decisions_per_game,
         ),
+        official_repository_commit=(
+            None if official_experiment is None else official_experiment.repository_commit
+        ),
     )
 
 
@@ -166,8 +190,36 @@ def resume(
         raise TrainerError("resume config cannot change the root seed")
     if training_model_config(config.model_profile) != loaded.model.model_config:
         raise TrainerError("resume config cannot change the model profile")
+    if checkpoint_config.experiment_arm is not None and config != checkpoint_config:
+        raise TrainerError("official experiment resume config must exactly match its checkpoint")
     validate_runtime_support(config)
+    official_experiment = _validate_official_experiment(config)
+    if official_experiment is not None:
+        if loaded.manifest.repository_commit != official_experiment.repository_commit:
+            raise TrainerError(
+                "official experiment resume must use the checkpoint's exact source commit"
+            )
+        _validate_official_checkpoint_progress(
+            loaded.manifest.progress,
+            official_experiment.arm,
+        )
+    limit = _resume_update_limit(
+        loaded.manifest.progress.next_update_index,
+        max_additional_updates=max_additional_updates,
+        official_arm=(None if official_experiment is None else official_experiment.arm),
+    )
+    official_artifacts = (
+        _load_official_resume_artifacts(checkpoint, loaded.metrics, config)
+        if official_experiment is not None
+        else None
+    )
     run_dir = _prepare_run_dir(output_dir)
+    if official_artifacts is not None:
+        (run_dir / "metrics.jsonl").write_bytes(official_artifacts.metrics_jsonl)
+        if official_artifacts.behavior_cloning_json is not None:
+            (run_dir / "behavior-cloning.json").write_bytes(
+                official_artifacts.behavior_cloning_json
+            )
     configure_torch_runtime(
         config.root_seed,
         deterministic_algorithms=config.deterministic_algorithms,
@@ -194,11 +246,6 @@ def resume(
         heuristic_auxiliary_config=config.heuristic_auxiliary,
     )
     trainer.optimizer = loaded.optimizer
-    limit = max_additional_updates
-    if limit is not None:
-        if not isinstance(limit, int) or isinstance(limit, bool) or limit <= 0:
-            raise TrainerError("max_additional_updates must be positive")
-        limit += loaded.manifest.progress.next_update_index
     return _run_updates(
         config,
         run_dir,
@@ -216,6 +263,9 @@ def resume(
                 loaded.manifest.progress.completed_decisions
                 / loaded.manifest.progress.completed_episodes
             ),
+        ),
+        official_repository_commit=(
+            None if official_experiment is None else official_experiment.repository_commit
         ),
     )
 
@@ -250,6 +300,82 @@ def inspect_checkpoint(checkpoint: Path) -> dict[str, object]:
     }
 
 
+def _load_official_resume_artifacts(
+    checkpoint: Path,
+    checkpoint_metrics: dict[str, object],
+    config: TrainingRunConfig,
+) -> _OfficialResumeArtifacts:
+    """Validate the official aggregate prefix that a resumed run must preserve."""
+
+    resolved_checkpoint = checkpoint.resolve()
+    if resolved_checkpoint.name != "latest" or resolved_checkpoint.parent.name != "checkpoints":
+        raise TrainerError("official resume checkpoint must use run/checkpoints/latest layout")
+    source_run = resolved_checkpoint.parent.parent
+    metrics_path = source_run / "metrics.jsonl"
+    try:
+        metrics_bytes = metrics_path.read_bytes()
+        metrics_text = metrics_bytes.decode("utf-8")
+    except (OSError, UnicodeDecodeError) as error:
+        raise TrainerError("official resume requires readable prior metrics.jsonl") from error
+    lines = metrics_text.splitlines()
+    if metrics_bytes and not metrics_bytes.endswith(b"\n"):
+        raise TrainerError("official resume metrics.jsonl lacks its terminal newline")
+    expected_count = config.max_updates
+    completed = (
+        _json_int(checkpoint_metrics.get("update_index"), "checkpoint metrics update_index") + 1
+    )
+    if expected_count is None or completed > expected_count or len(lines) != completed:
+        raise TrainerError("official resume metrics.jsonl is not the complete checkpoint prefix")
+    parsed: list[dict[str, object]] = []
+    for expected_index, line in enumerate(lines):
+        if not line.strip():
+            raise TrainerError("official resume metrics.jsonl contains a blank row")
+        try:
+            value = json.loads(
+                line,
+                parse_constant=lambda token: (_ for _ in ()).throw(
+                    ValueError(f"invalid constant {token}")
+                ),
+            )
+        except (json.JSONDecodeError, ValueError) as error:
+            raise TrainerError("official resume metrics.jsonl is invalid JSON") from error
+        if not isinstance(value, dict) or value.get("update_index") != expected_index:
+            raise TrainerError("official resume metrics.jsonl update indices are not contiguous")
+        parsed.append(cast(dict[str, object], value))
+    if not parsed or parsed[-1] != checkpoint_metrics:
+        raise TrainerError("official resume metrics.jsonl does not match checkpoint metrics")
+
+    behavior_path = source_run / "behavior-cloning.json"
+    behavior_bytes: bytes | None = None
+    if config.behavior_cloning is not None:
+        try:
+            behavior_bytes = behavior_path.read_bytes()
+            behavior_value = json.loads(
+                behavior_bytes.decode("utf-8"),
+                parse_constant=lambda token: (_ for _ in ()).throw(
+                    ValueError(f"invalid constant {token}")
+                ),
+            )
+            from garboid_pocketrocks.neural.bootstrap_reporting import (
+                validate_behavior_cloning_payload,
+            )
+
+            validate_behavior_cloning_payload(behavior_value, config.behavior_cloning)
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as error:
+            raise TrainerError(
+                "official cloning resume requires valid prior behavior-cloning.json"
+            ) from error
+    elif behavior_path.exists():
+        raise TrainerError("non-cloning official resume found unexpected behavior-cloning.json")
+    return _OfficialResumeArtifacts(metrics_bytes, behavior_bytes)
+
+
+def _json_int(value: object, name: str) -> int:
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise TrainerError(f"{name} must be an integer")
+    return value
+
+
 def _run_updates(
     config: TrainingRunConfig,
     run_dir: Path,
@@ -260,18 +386,28 @@ def _run_updates(
     lineage: tuple[str, ...],
     max_updates_this_run: int | None,
     games_per_cell: int,
+    official_repository_commit: str | None = None,
 ) -> TrainingRunResult:
     vector_pool: VectorActorPool | None = None
-    workers = config.parallel.workers
-    if next(model.parameters()).device.type == "cpu" and isinstance(workers, int) and workers > 1:
-        vector_pool = VectorActorPool(
-            encoder_config=model.encoder_config,
-            reward_config=config.reward,
-            workers=workers,
-            engine_batch_size=config.parallel.active_games_per_worker,
-            max_inference_batch=config.parallel.max_inference_batch,
-        )
     try:
+        workers = config.parallel.workers
+        if (
+            next(model.parameters()).device.type == "cpu"
+            and isinstance(workers, int)
+            and workers > 1
+        ):
+            if official_repository_commit is not None:
+                _require_official_source_unchanged(official_repository_commit)
+            vector_pool = VectorActorPool(
+                encoder_config=model.encoder_config,
+                reward_config=config.reward,
+                workers=workers,
+                engine_batch_size=config.parallel.active_games_per_worker,
+                max_inference_batch=config.parallel.max_inference_batch,
+                expected_repository_commit=official_repository_commit,
+            )
+            if official_repository_commit is not None:
+                _require_official_source_unchanged(official_repository_commit)
         return _run_updates_with_pool(
             config,
             run_dir,
@@ -282,6 +418,7 @@ def _run_updates(
             max_updates_this_run=max_updates_this_run,
             games_per_cell=games_per_cell,
             vector_pool=vector_pool,
+            official_repository_commit=official_repository_commit,
         )
     finally:
         if vector_pool is not None:
@@ -299,6 +436,7 @@ def _run_updates_with_pool(
     max_updates_this_run: int | None,
     games_per_cell: int,
     vector_pool: VectorActorPool | None,
+    official_repository_commit: str | None = None,
 ) -> TrainingRunResult:
     started = time.perf_counter()
     update_index = initial_progress.next_update_index
@@ -311,6 +449,8 @@ def _run_updates_with_pool(
     checkpoint = run_dir / "checkpoints" / "latest"
 
     while True:
+        if official_repository_commit is not None:
+            _require_official_source_unchanged(official_repository_commit)
         if max_updates_this_run is not None and update_index >= max_updates_this_run:
             break
         elapsed = time.perf_counter() - started
@@ -366,6 +506,9 @@ def _run_updates_with_pool(
             collection[1],
             ppo,
         )
+        if official_repository_commit is not None:
+            _require_official_source_unchanged(official_repository_commit)
+        checkpoint_repository_commit = official_repository_commit or _repository_commit()
         _append_json_line(run_dir / "metrics.jsonl", metrics)
         save_training_checkpoint(
             checkpoint,
@@ -373,13 +516,18 @@ def _run_updates_with_pool(
             optimizer=trainer.optimizer,
             manifest=TrainingCheckpointManifest(
                 schema_version=1,
-                repository_commit=_repository_commit(),
+                repository_commit=checkpoint_repository_commit,
                 encoder_config=model.encoder_config,
                 model_config=model.model_config,
                 run_config=config,
                 progress=progress,
                 lineage=lineage,
-                champion_identity=_checkpoint_identity(config, completed_episodes),
+                champion_identity=_checkpoint_identity(
+                    config,
+                    completed_episodes,
+                    model,
+                    repository_commit=checkpoint_repository_commit,
+                ),
                 league_identities=(),
             ),
             generator_states={"torch": torch.get_rng_state()},
@@ -453,24 +601,68 @@ def _run_behavior_cloning_if_configured(
     cloning = config.behavior_cloning
     if cloning is None:
         return
-    dataset = collect_behavior_cloning_dataset(
+    started = time.perf_counter()
+    game_shards = behavior_cloning_game_shards(
         plan_behavior_cloning_games(cloning),
-        encoder_config=model.encoder_config,
+        games_per_shard=cloning.games_per_shard,
     )
-    metrics = BehaviorCloningTrainer(model, cloning).train(dataset)
+    cloning_trainer = BehaviorCloningTrainer(model, cloning)
+    combined_digest = hashlib.sha256()
+    combined_updates: list[BehaviorCloningUpdateMetrics] = []
+    combined_cell_games: Counter[tuple[str, int]] = Counter()
+    example_count = 0
+    game_count = 0
+    shard_records: list[dict[str, object]] = []
+    for shard_index, game_plans in enumerate(game_shards):
+        dataset = collect_behavior_cloning_dataset(
+            game_plans,
+            encoder_config=model.encoder_config,
+        )
+        shard_metrics = cloning_trainer.train(dataset, shard_index=shard_index)
+        shard_records.append(
+            {
+                "shard_index": shard_index,
+                "game_count": dataset.game_count,
+                "example_count": len(dataset.examples),
+                "dataset_digest": dataset.dataset_digest,
+            }
+        )
+        combined_digest.update(shard_index.to_bytes(8, "big"))
+        combined_digest.update(bytes.fromhex(dataset.dataset_digest))
+        combined_updates.extend(shard_metrics.updates)
+        example_count += len(dataset.examples)
+        game_count += dataset.game_count
+        for ruleset, players, games in dataset.cell_game_counts:
+            combined_cell_games[(ruleset, players)] += games
+    metrics = BehaviorCloningMetrics(
+        config_digest=cloning.config_digest,
+        dataset_digest=combined_digest.hexdigest(),
+        example_count=example_count,
+        epochs=cloning.epochs,
+        optimizer_steps=len(combined_updates),
+        updates=tuple(combined_updates),
+    )
     _write_json(
         run_dir / "behavior-cloning.json",
         {
             "config": cloning.to_json_dict(),
             "dataset": {
-                "cell_game_counts": dataset.cell_game_counts,
-                "dataset_digest": dataset.dataset_digest,
-                "example_count": len(dataset.examples),
-                "game_count": dataset.game_count,
-                "teacher_identity": dataset.teacher_identity,
-                "teacher_profile_digest": dataset.teacher_profile_digest,
+                "cell_game_counts": tuple(
+                    (ruleset, players, games)
+                    for (ruleset, players), games in sorted(combined_cell_games.items())
+                ),
+                "dataset_digest": metrics.dataset_digest,
+                "example_count": example_count,
+                "game_count": game_count,
+                "shard_count": len(game_shards),
+                "shards": shard_records,
+                "teacher_identity": cloning.teacher_identity,
+                "teacher_profile_digest": cloning.teacher_profile_digest,
             },
-            "training": asdict(metrics),
+            "training": {
+                **asdict(metrics),
+                "elapsed_seconds": time.perf_counter() - started,
+            },
         },
     )
 
@@ -481,13 +673,21 @@ def _training_plans(
     update_index: int,
     games_per_cell: int,
 ) -> tuple[SelfPlayEpisodePlan, ...]:
-    if config.opponent_training == "heuristic-opponent-curriculum-v1":
+    if config.opponent_training in (
+        "focal-seat-control-v1",
+        "heuristic-opponent-curriculum-v1",
+    ):
+        curriculum = (
+            FOCAL_SEAT_CONTROL_V1
+            if config.opponent_training == "focal-seat-control-v1"
+            else HEURISTIC_OPPONENT_CURRICULUM_V1
+        )
         return plan_heuristic_curriculum_episodes(
             root_seed=config.root_seed,
             update_index=update_index,
             games_per_cell=games_per_cell,
             learner_policy_identity="current",
-            curriculum=HEURISTIC_OPPONENT_CURRICULUM_V1,
+            curriculum=curriculum,
         ).plans
     return plan_mirror_episodes(
         root_seed=config.root_seed,
@@ -499,25 +699,140 @@ def _training_plans(
 
 def _checkpoint_identity(
     config: TrainingRunConfig,
-    completed_games: int,
+    completed_ppo_games: int,
+    model: NeuralPolicy,
+    *,
+    repository_commit: str,
 ) -> str:
     try:
         validate_fixed_compute_arm(config)
     except ValueError:
-        return trained_neural_bot_id(config.model_profile, completed_games)
+        return trained_neural_bot_id(config.model_profile, completed_ppo_games)
     canonical = json.dumps(
         config.to_json_dict(),
         allow_nan=False,
         separators=(",", ":"),
         sort_keys=True,
     ).encode()
+    demonstration_games = (
+        config.behavior_cloning.rounds * config.behavior_cloning.games_per_cell * 15
+        if config.behavior_cloning is not None
+        else 0
+    )
     return experimental_neural_bot_id(
         config.model_profile,
         strategy=bootstrap_strategy(config),
         root_seed=config.root_seed,
-        completed_games=completed_games,
+        completed_games=completed_ppo_games + demonstration_games,
         config_digest=hashlib.sha256(canonical).hexdigest(),
+        parameter_digest=parameter_digest(model.state_dict()),
+        repository_commit=repository_commit,
     )
+
+
+def _validate_official_experiment(
+    config: TrainingRunConfig,
+) -> _OfficialExperimentRun | None:
+    if config.experiment_arm is None:
+        return None
+    try:
+        arm = validate_fixed_compute_arm(config)
+    except ValueError as error:
+        raise TrainerError(str(error)) from error
+    repository_commit_before_status = _repository_commit()
+    dirty = _repository_status()
+    repository_commit_after_status = _repository_commit()
+    if not _is_exact_repository_commit(
+        repository_commit_before_status
+    ) or not _is_exact_repository_commit(repository_commit_after_status):
+        raise TrainerError("official experiment requires an exact Git source commit")
+    if dirty:
+        raise TrainerError("official experiment requires a clean source tree")
+    if repository_commit_before_status != repository_commit_after_status:
+        raise TrainerError("official experiment source changed while reading Git provenance")
+    return _OfficialExperimentRun(
+        arm=arm,
+        repository_commit=repository_commit_before_status,
+    )
+
+
+def _is_exact_repository_commit(value: str) -> bool:
+    return len(value) == 40 and all(character in "0123456789abcdef" for character in value)
+
+
+def _require_official_source_unchanged(repository_commit: str) -> None:
+    """Stop an official run before source drift can rebrand a checkpoint."""
+
+    if _repository_commit() != repository_commit or _repository_status():
+        raise TrainerError("official experiment source changed during training")
+
+
+def _repository_status() -> str:
+    try:
+        return subprocess.run(
+            ("git", "status", "--porcelain"),
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+    except (OSError, subprocess.CalledProcessError) as error:
+        raise TrainerError("official experiment requires readable Git provenance") from error
+
+
+def _validate_official_checkpoint_progress(
+    progress: TrainingProgress,
+    arm: HeuristicBootstrapArm,
+) -> None:
+    """Require an official checkpoint to be an exact complete-update prefix."""
+
+    update_index = progress.next_update_index
+    games_in_cell = update_index * EXPERIMENT_GAMES_PER_CELL
+    expected_cells = {
+        (f"live-{chart}", player_count): games_in_cell
+        for chart in "ABCDE"
+        for player_count in (3, 4, 5)
+    }
+    actual_cells = {
+        (ruleset, player_count): games for ruleset, player_count, games in progress.cell_games
+    }
+    if (
+        update_index >= arm.ppo_updates
+        or progress.completed_episodes != games_in_cell * TRAINING_CELL_COUNT
+        or len(actual_cells) != len(progress.cell_games)
+        or actual_cells != expected_cells
+    ):
+        raise TrainerError(
+            "official experiment checkpoint is not an exact resumable fixed-budget prefix"
+        )
+
+
+def _resume_update_limit(
+    completed_updates: int,
+    *,
+    max_additional_updates: int | None,
+    official_arm: HeuristicBootstrapArm | None,
+) -> int | None:
+    """Resolve a bounded official resume without changing generic semantics."""
+
+    if max_additional_updates is not None and (
+        not isinstance(max_additional_updates, int)
+        or isinstance(max_additional_updates, bool)
+        or max_additional_updates <= 0
+    ):
+        raise TrainerError("max_additional_updates must be positive")
+    if official_arm is None:
+        return (
+            None if max_additional_updates is None else completed_updates + max_additional_updates
+        )
+    terminal_update = official_arm.ppo_updates
+    requested_terminal = (
+        terminal_update
+        if max_additional_updates is None
+        else completed_updates + max_additional_updates
+    )
+    if requested_terminal > terminal_update:
+        raise TrainerError("official experiment resume exceeds its fixed update budget")
+    return requested_terminal
 
 
 def _resolve_candidate(

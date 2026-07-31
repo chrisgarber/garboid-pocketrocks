@@ -37,6 +37,7 @@ from garboid_pocketrocks.neural.model import NeuralPolicy
 from garboid_pocketrocks.neural.ppo import PPOConfig
 from garboid_pocketrocks.neural.run_config import (
     DeviceName,
+    HeuristicExperimentArm,
     OpponentTrainingMode,
     ParallelConfig,
     TrainingRunConfig,
@@ -403,6 +404,7 @@ def _run_config(value: object) -> TrainingRunConfig:
         "behavior_cloning",
         "heuristic_auxiliary",
         "opponent_training",
+        "experiment_arm",
     }
     if not expected - legacy_optional <= set(payload) <= expected:
         raise TrainingCheckpointError("run_config fields do not match schema")
@@ -460,6 +462,7 @@ def _run_config(value: object) -> TrainingRunConfig:
             else HeuristicAuxiliaryValueConfig.from_json_dict(payload["heuristic_auxiliary"])
         ),
         opponent_training=_opponent_training(payload.get("opponent_training", "mirror-self-play")),
+        experiment_arm=_experiment_arm(payload.get("experiment_arm")),
         parallel=ParallelConfig(
             workers=_workers(parallel["workers"]),
             active_games_per_worker=_integer(
@@ -530,6 +533,20 @@ def _opponent_training(value: object) -> OpponentTrainingMode:
         "heuristic-opponent-curriculum-v1",
     ):
         raise TrainingCheckpointError("opponent_training is not a supported schedule")
+    return value
+
+
+def _experiment_arm(value: object) -> HeuristicExperimentArm | None:
+    if value is None:
+        return None
+    if value not in (
+        "fixed-compute-control-v1",
+        "focal-seat-control-v1",
+        "behavior-cloning-balanced-v3-v1",
+        "auxiliary-value-balanced-v3-v1",
+        "heuristic-opponent-curriculum-v1",
+    ):
+        raise TrainingCheckpointError("experiment_arm is not a supported arm")
     return value
 
 

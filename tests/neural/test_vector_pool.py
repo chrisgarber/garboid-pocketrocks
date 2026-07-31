@@ -291,6 +291,18 @@ def test_pool_rejects_collection_after_close() -> None:
         pool.collect({"current": model}, plans)
 
 
+def test_official_pool_requires_worker_source_attestation() -> None:
+    config = training_encoder_config()
+
+    with pytest.raises(VectorPoolError, match="failed source attestation"):
+        VectorActorPool(
+            encoder_config=config,
+            reward_config=RewardConfig(),
+            workers=1,
+            expected_repository_commit="0000000000000000000000000000000000000000",
+        )
+
+
 def test_pool_remains_usable_after_pre_dispatch_validation_failure() -> None:
     config = training_encoder_config()
     model = NeuralPolicy(config, training_model_config("small"))

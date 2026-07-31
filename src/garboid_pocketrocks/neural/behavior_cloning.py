@@ -41,6 +41,7 @@ from garboid_pocketrocks.training.actions import ActionCodec
 from garboid_pocketrocks.training.bounds import EnvironmentBounds
 
 _BEHAVIOR_CLONING_SEED_TAG = 14
+BEHAVIOR_CLONING_OPTIMIZATION_ORDER = "sequential-shard-major-epochs-v1"
 
 
 class BehaviorCloningError(ValueError):
@@ -49,13 +50,19 @@ class BehaviorCloningError(ValueError):
 
 @dataclass(frozen=True, slots=True)
 class BehaviorCloningConfig:
-    """Fixed planning and optimization budget for one cloning stage."""
+    """Fixed planning and optimization budget for one cloning stage.
+
+    The optimizer is intentionally kept across sequential shards, so changing
+    ``games_per_shard`` changes the update order and therefore the learned weights.
+    """
 
     root_seed: int
     rounds: int
     games_per_cell: int
     epochs: int = 3
     minibatch_size: int = 512
+    games_per_shard: int = 64
+    optimization_order: str = BEHAVIOR_CLONING_OPTIMIZATION_ORDER
     learning_rate: float = 3e-4
     max_gradient_norm: float = 0.5
     teacher_identity: str = BALANCED_V3_TEACHER_IDENTITY
@@ -63,7 +70,13 @@ class BehaviorCloningConfig:
 
     def __post_init__(self) -> None:
         _require_int("root_seed", self.root_seed)
-        for name in ("rounds", "games_per_cell", "epochs", "minibatch_size"):
+        for name in (
+            "rounds",
+            "games_per_cell",
+            "epochs",
+            "minibatch_size",
+            "games_per_shard",
+        ):
             _require_positive_int(name, getattr(self, name))
         for name in ("learning_rate", "max_gradient_norm"):
             value = getattr(self, name)
@@ -76,6 +89,8 @@ class BehaviorCloningConfig:
                 raise BehaviorCloningError(f"{name} must be finite and positive")
         if self.teacher_identity != BALANCED_V3_TEACHER_IDENTITY:
             raise BehaviorCloningError("behavior cloning teacher must be balanced-v3")
+        if self.optimization_order != BEHAVIOR_CLONING_OPTIMIZATION_ORDER:
+            raise BehaviorCloningError("behavior cloning optimization order is not pinned")
         if self.teacher_profile_digest != BALANCED_V3_PROFILE_DIGEST:
             raise BehaviorCloningError("balanced-v3 profile digest does not match the pin")
 
@@ -94,6 +109,8 @@ class BehaviorCloningConfig:
             "games_per_cell": self.games_per_cell,
             "epochs": self.epochs,
             "minibatch_size": self.minibatch_size,
+            "games_per_shard": self.games_per_shard,
+            "optimization_order": self.optimization_order,
             "learning_rate": float(self.learning_rate),
             "max_gradient_norm": float(self.max_gradient_norm),
             "teacher_identity": self.teacher_identity,
@@ -111,6 +128,8 @@ class BehaviorCloningConfig:
             "games_per_cell",
             "epochs",
             "minibatch_size",
+            "games_per_shard",
+            "optimization_order",
             "learning_rate",
             "max_gradient_norm",
             "teacher_identity",
@@ -129,6 +148,8 @@ class BehaviorCloningConfig:
             games_per_cell=_json_int(payload["games_per_cell"], "games_per_cell"),
             epochs=_json_int(payload["epochs"], "epochs"),
             minibatch_size=_json_int(payload["minibatch_size"], "minibatch_size"),
+            games_per_shard=_json_int(payload["games_per_shard"], "games_per_shard"),
+            optimization_order=_json_string(payload["optimization_order"], "optimization_order"),
             learning_rate=_json_number(payload["learning_rate"], "learning_rate"),
             max_gradient_norm=_json_number(
                 payload["max_gradient_norm"],
@@ -212,6 +233,7 @@ class BehaviorCloningDataset:
 class BehaviorCloningUpdateMetrics:
     """Finite diagnostics for one policy-only optimizer step."""
 
+    shard_index: int
     epoch_index: int
     minibatch_index: int
     example_count: int
@@ -341,6 +363,21 @@ def plan_behavior_cloning_games(
     return tuple(plans)
 
 
+def behavior_cloning_game_shards(
+    plans: tuple[BehaviorCloningGamePlan, ...],
+    *,
+    games_per_shard: int,
+) -> tuple[tuple[BehaviorCloningGamePlan, ...], ...]:
+    """Split ordered demonstrations so full experiments stay memory-bounded."""
+
+    _require_positive_int("games_per_shard", games_per_shard)
+    if not plans:
+        raise BehaviorCloningError("behavior cloning sharding requires game plans")
+    return tuple(
+        plans[offset : offset + games_per_shard] for offset in range(0, len(plans), games_per_shard)
+    )
+
+
 def collect_behavior_cloning_dataset(
     plans: tuple[BehaviorCloningGamePlan, ...],
     *,
@@ -413,10 +450,16 @@ class BehaviorCloningTrainer:
             foreach=False,
         )
 
-    def train(self, dataset: BehaviorCloningDataset) -> BehaviorCloningMetrics:
+    def train(
+        self,
+        dataset: BehaviorCloningDataset,
+        *,
+        shard_index: int = 0,
+    ) -> BehaviorCloningMetrics:
         """Train only toward legal teacher actions and return every update metric."""
 
         _verify_teacher_pin()
+        _require_nonnegative_int("shard_index", shard_index)
         if (
             dataset.teacher_identity != self.config.teacher_identity
             or dataset.teacher_profile_digest != self.config.teacher_profile_digest
@@ -425,15 +468,16 @@ class BehaviorCloningTrainer:
         examples = dataset.examples
         prior_mode = self.model.training
         updates: list[BehaviorCloningUpdateMetrics] = []
-        minibatch_index = 0
         try:
             self.model.train()
             for epoch_index in range(self.config.epochs):
+                minibatch_index = 0
                 generator = torch.Generator(device="cpu").manual_seed(
                     derive_seed(
                         self.config.root_seed,
                         "minibatch",
                         _BEHAVIOR_CLONING_SEED_TAG,
+                        shard_index,
                         epoch_index,
                     )
                 )
@@ -482,6 +526,7 @@ class BehaviorCloningTrainer:
 
                     updates.append(
                         BehaviorCloningUpdateMetrics(
+                            shard_index=shard_index,
                             epoch_index=epoch_index,
                             minibatch_index=minibatch_index,
                             example_count=len(chosen),

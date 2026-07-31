@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from dataclasses import dataclass, replace
 from fractions import Fraction
 
 from garboid_pocketrocks.neural.heuristic_teachers import (
     RELEASED_HEURISTIC_V3_IDENTITIES as RELEASED_HEURISTIC_V3_IDENTITIES,
+)
+from garboid_pocketrocks.neural.heuristic_teachers import (
+    released_v3_profile_digest,
 )
 from garboid_pocketrocks.neural.planning import (
     SeatPolicy,
@@ -100,6 +104,36 @@ class HeuristicOpponentCurriculum:
             raise ValueError("update_index is outside the curriculum")
         return next(stage for stage in self.stages if stage.contains(update_index))
 
+    @property
+    def digest(self) -> str:
+        """Bind the schedule to exact stages, teachers, and profile bytes."""
+
+        payload = {
+            "identity": self.identity,
+            "total_updates": self.total_updates,
+            "teachers": [
+                {
+                    "identity": identity,
+                    "profile_digest": released_v3_profile_digest(identity),
+                }
+                for identity in self.heuristic_identities
+            ],
+            "stages": [
+                {
+                    "name": stage.name,
+                    "first_update": stage.first_update,
+                    "stop_update": stage.stop_update,
+                    "heuristic_share": [
+                        stage.heuristic_share.numerator,
+                        stage.heuristic_share.denominator,
+                    ],
+                }
+                for stage in self.stages
+            ],
+        }
+        encoded = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode()
+        return hashlib.sha256(encoded).hexdigest()
+
 
 HEURISTIC_OPPONENT_CURRICULUM_V1 = HeuristicOpponentCurriculum(
     identity="heuristic-opponent-curriculum-v1",
@@ -111,6 +145,13 @@ HEURISTIC_OPPONENT_CURRICULUM_V1 = HeuristicOpponentCurriculum(
         HeuristicCurriculumStage("teacher-self-play-mix", 98, 147, Fraction(1, 2)),
         HeuristicCurriculumStage("self-play-mostly", 147, 196, Fraction(1, 4)),
     ),
+)
+
+FOCAL_SEAT_CONTROL_V1 = HeuristicOpponentCurriculum(
+    identity="focal-seat-control-v1",
+    total_updates=196,
+    heuristic_identities=RELEASED_HEURISTIC_V3_IDENTITIES,
+    stages=(HeuristicCurriculumStage("focal-self-play", 0, 196, Fraction(0, 1)),),
 )
 
 

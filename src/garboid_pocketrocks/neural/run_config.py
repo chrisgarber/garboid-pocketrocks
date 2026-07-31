@@ -23,6 +23,13 @@ OpponentTrainingMode = Literal[
     "focal-seat-control-v1",
     "heuristic-opponent-curriculum-v1",
 ]
+HeuristicExperimentArm = Literal[
+    "fixed-compute-control-v1",
+    "focal-seat-control-v1",
+    "behavior-cloning-balanced-v3-v1",
+    "auxiliary-value-balanced-v3-v1",
+    "heuristic-opponent-curriculum-v1",
+]
 
 
 @dataclass(frozen=True, slots=True)
@@ -70,6 +77,7 @@ class TrainingRunConfig:
         default_factory=HeuristicAuxiliaryValueConfig
     )
     opponent_training: OpponentTrainingMode = "mirror-self-play"
+    experiment_arm: HeuristicExperimentArm | None = None
     parallel: ParallelConfig = field(default_factory=ParallelConfig)
     ppo: PPOConfig = field(default_factory=PPOConfig)
     reward: RewardConfig = field(default_factory=RewardConfig)
@@ -148,6 +156,14 @@ class TrainingRunConfig:
         )
         if enabled_heuristic_strategies > 1:
             raise ValueError("heuristic training strategies must be tested as separate ablations")
+        if self.experiment_arm is not None and self.experiment_arm not in (
+            "fixed-compute-control-v1",
+            "focal-seat-control-v1",
+            "behavior-cloning-balanced-v3-v1",
+            "auxiliary-value-balanced-v3-v1",
+            "heuristic-opponent-curriculum-v1",
+        ):
+            raise ValueError("experiment_arm is not a supported immutable arm")
         if not isinstance(self.parallel, ParallelConfig):
             raise ValueError("parallel must be a ParallelConfig")
         if not isinstance(self.ppo, PPOConfig):
@@ -186,6 +202,7 @@ class TrainingRunConfig:
                 "behavior_cloning",
                 "heuristic_auxiliary",
                 "opponent_training",
+                "experiment_arm",
                 "parallel",
                 "ppo",
                 "reward",
@@ -280,6 +297,9 @@ class TrainingRunConfig:
             ),
             opponent_training=_opponent_training_value(
                 payload.get("opponent_training", defaults.opponent_training)
+            ),
+            experiment_arm=_experiment_arm_value(
+                payload.get("experiment_arm", defaults.experiment_arm)
             ),
             parallel=_read_parallel(payload.get("parallel", defaults.parallel)),
             ppo=_read_ppo(payload.get("ppo", defaults.ppo)),
@@ -527,6 +547,20 @@ def _opponent_training_value(value: object) -> OpponentTrainingMode:
         "heuristic-opponent-curriculum-v1",
     ):
         raise ValueError("opponent_training is not a supported immutable schedule")
+    return value
+
+
+def _experiment_arm_value(value: object) -> HeuristicExperimentArm | None:
+    if value is None:
+        return None
+    if value not in (
+        "fixed-compute-control-v1",
+        "focal-seat-control-v1",
+        "behavior-cloning-balanced-v3-v1",
+        "auxiliary-value-balanced-v3-v1",
+        "heuristic-opponent-curriculum-v1",
+    ):
+        raise ValueError("experiment_arm is not a supported immutable arm")
     return value
 
 
