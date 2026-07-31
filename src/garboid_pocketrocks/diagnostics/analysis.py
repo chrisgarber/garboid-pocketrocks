@@ -11,6 +11,7 @@ from typing import Literal
 
 from pocketrocks.sim.constants import ACTION_WIRE_IDS
 
+from garboid_pocketrocks.diagnostics.game_detail import PublicGameDetail
 from garboid_pocketrocks.diagnostics.trace import DecisionTrace
 from garboid_pocketrocks.knowledge import (
     canonical_knowledge,
@@ -84,6 +85,7 @@ class DecisionReport:
 
     schema_version: int
     game_summaries: tuple[GameSummary, ...]
+    game_details: tuple[PublicGameDetail, ...]
     decision_traces: tuple[DecisionTrace, ...]
     slices: tuple[DecisionSlice, ...]
     reconciliation: DecisionReconciliation
@@ -153,6 +155,7 @@ def build_decision_report(
     traces: Sequence[DecisionTrace],
     *,
     game_summaries: Sequence[GameSummary],
+    game_details: Sequence[PublicGameDetail] = (),
     bot_statistics: Sequence[BotStatistics],
     tournament_analysis: TournamentAnalysis,
 ) -> DecisionReport:
@@ -160,6 +163,8 @@ def build_decision_report(
 
     ordered_games = tuple(sorted(game_summaries, key=lambda game: game.game_index))
     games_by_index = _validated_games_by_index(ordered_games)
+    ordered_details = tuple(sorted(game_details, key=lambda game: game.game_index))
+    _validate_game_details(ordered_details, games_by_index=games_by_index)
     ordered_traces = tuple(
         sorted(
             traces,
@@ -203,6 +208,7 @@ def build_decision_report(
     return DecisionReport(
         schema_version=1,
         game_summaries=ordered_games,
+        game_details=ordered_details,
         decision_traces=ordered_traces,
         slices=frozen_slices,
         reconciliation=DecisionReconciliation(
@@ -213,6 +219,38 @@ def build_decision_report(
             slice_decision_count=slice_decisions,
         ),
     )
+
+
+def _validate_game_details(
+    details: tuple[PublicGameDetail, ...],
+    *,
+    games_by_index: dict[int, GameSummary],
+) -> None:
+    """Require a complete, identity-consistent ledger when details are supplied."""
+
+    if not details:
+        return
+    if tuple(detail.game_index for detail in details) != tuple(sorted(games_by_index)):
+        raise DecisionAnalysisError("game details must cover every game summary exactly once")
+    for detail in details:
+        game = games_by_index[detail.game_index]
+        if (
+            detail.player_count != game.player_count
+            or detail.bot_ids != game.bot_ids
+            or detail.bot_names != game.bot_names
+        ):
+            raise DecisionAnalysisError(
+                f"game detail {detail.game_index} does not match game-summary identities"
+            )
+        if tuple(score.seat for score in detail.scores) != tuple(range(game.player_count)):
+            raise DecisionAnalysisError(
+                f"game detail {detail.game_index} score rows do not cover every seat"
+            )
+        expected_money = {score.seat: score.final_money for score in game.scores}
+        if any(score.total != expected_money[score.seat] for score in detail.scores):
+            raise DecisionAnalysisError(
+                f"game detail {detail.game_index} score totals disagree with game summary"
+            )
 
 
 def _validated_games_by_index(

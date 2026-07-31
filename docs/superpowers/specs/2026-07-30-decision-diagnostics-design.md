@@ -183,6 +183,8 @@ artifacts are unchanged.
 With the flag, the output generation additionally contains:
 
 - `game-summaries.jsonl` — the public per-game bridge to tournament totals;
+- `game-details.jsonl` — the public seed-free turn ledger and terminal score
+  breakdown used for objective and auction economics;
 - `decision-traces.jsonl` — one canonical row per policy decision;
 - `decision-slices.csv` — filterable additive aggregates.
 

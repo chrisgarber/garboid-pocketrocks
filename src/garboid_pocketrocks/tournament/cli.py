@@ -196,6 +196,7 @@ def main() -> None:
     if run.config.decision_reports:
         for path in (
             run.artifacts.game_summaries_jsonl,
+            run.artifacts.game_details_jsonl,
             run.artifacts.decision_traces_jsonl,
             run.artifacts.decision_slices_csv,
         ):

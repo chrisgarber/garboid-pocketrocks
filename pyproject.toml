@@ -33,6 +33,7 @@ garboid-random-bot = "garboid_pocketrocks.bots.random_bot:main"
 garboid-simulate = "garboid_pocketrocks.simulator.cli:main"
 garboid-tournament = "garboid_pocketrocks.tournament.cli:main"
 garboid-train = "garboid_pocketrocks.neural.cli:main"
+garboid-visualize = "garboid_pocketrocks.visualizer.cli:main"
 
 [tool.hatch.metadata]
 allow-direct-references = true

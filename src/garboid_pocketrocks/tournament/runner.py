@@ -86,6 +86,7 @@ class TournamentRunner:
             decision_report = build_decision_report(
                 monte_carlo_result.decision_traces,
                 game_summaries=monte_carlo_result.game_summaries,
+                game_details=monte_carlo_result.game_details,
                 bot_statistics=monte_carlo_result.bot_statistics,
                 tournament_analysis=analysis,
             )
