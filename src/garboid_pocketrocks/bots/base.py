@@ -6,7 +6,10 @@ from typing import Any, ClassVar, Protocol, runtime_checkable
 
 from pocketrocks import BotDecision, DecisionContext, PocketRocksBot
 
-from garboid_pocketrocks.adapters.public_history import PublicHistory
+from garboid_pocketrocks.adapters.public_history import (
+    PublicHistory,
+    public_history_from_sdk_frame,
+)
 from garboid_pocketrocks.knowledge import RulesetKnowledge, knowledge_for_context
 
 
@@ -59,8 +62,26 @@ class PocketRocksFastBot(PocketRocksBot):
         knowledge = self._knowledge_for_context(context)
         return self._brain.choose_decision(context, knowledge)
 
+    def choose_decision_with_history_sync(
+        self,
+        context: DecisionContext,
+        history: PublicHistory,
+    ) -> BotDecision:
+        knowledge = self._knowledge_for_context(context)
+        if isinstance(self._brain, HistoryAwareBotBrain):
+            return self._brain.choose_decision_with_history(context, knowledge, history)
+        return self._brain.choose_decision(context, knowledge)
+
     async def choose_decision(self, context: DecisionContext) -> BotDecision:
         return self.choose_decision_sync(context)
+
+    async def choose_raw_decision(
+        self,
+        frame: object,
+        context: DecisionContext,
+    ) -> BotDecision:
+        history = public_history_from_sdk_frame(frame)
+        return self.choose_decision_with_history_sync(context, history)
 
 
 @dataclass(frozen=True, slots=True)
