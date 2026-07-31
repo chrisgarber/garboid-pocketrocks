@@ -33,13 +33,19 @@ from garboid_pocketrocks.simulator.monte_carlo import MonteCarloRunner
 REPOSITORY_ROOT = Path(__file__).parents[2]
 CATALOG_DIR = REPOSITORY_ROOT / "src" / "garboid_pocketrocks" / "heuristics" / "frozen_candidates"
 BENCHMARK_DIR = REPOSITORY_ROOT / "docs" / "benchmarks" / "evolution"
-EXPECTED_IDENTITIES = (
+EXPECTED_V3_IDENTITIES = (
     "aggressive-v3-candidate-g007-s008-c70e11540db9",
     "balanced-v3-candidate-g006-s010-e3971899626c",
     "passive-v3-candidate-g006-s001-812832214cd5",
 )
-EXPECTED_PROVENANCE = {
-    EXPECTED_IDENTITIES[0]: {
+EXPECTED_V4_IDENTITIES = (
+    "aggressive-v4-candidate-g011-s004-000d194163fa",
+    "balanced-v4-candidate-g009-s000-4d391ce068d7",
+    "passive-v4-candidate-g005-s005-cf4f7b924ee3",
+)
+EXPECTED_IDENTITIES = tuple(sorted((*EXPECTED_V3_IDENTITIES, *EXPECTED_V4_IDENTITIES)))
+EXPECTED_V3_PROVENANCE: dict[str, dict[str, Any]] = {
+    EXPECTED_V3_IDENTITIES[0]: {
         "predecessor": "aggressive-v2",
         "search_name": "aggressive-v3-search-v1",
         "profile": "c70e11540db92d0c77ce5085670ff48105c91aede1ed52c4abb7874a64687b58",
@@ -48,7 +54,7 @@ EXPECTED_PROVENANCE = {
         "evaluations": "4140270b3fe1d744aef103b012ca85970aa561c3f36cb28d70e4e4aa39f9c7a5",
         "freeze": "218e9682d8d174125d4b9e7550fec9afda01ddb4433084143968b6d525d335da",
     },
-    EXPECTED_IDENTITIES[1]: {
+    EXPECTED_V3_IDENTITIES[1]: {
         "predecessor": "balanced-v2",
         "search_name": "balanced-v3-search-v1",
         "profile": "e3971899626ca3f651b2992d0cc429dc3ffd57fcdbb7cfac8249e6f0f9d9b03e",
@@ -57,7 +63,7 @@ EXPECTED_PROVENANCE = {
         "evaluations": "fcf8985f40beddac274f5aa31523ec93b1cfecf0657047e30144ba97140b15e6",
         "freeze": "05bcd898e7fc79062585cb989b67cb2e5641eed6cc59b1a60255de84c8ee2988",
     },
-    EXPECTED_IDENTITIES[2]: {
+    EXPECTED_V3_IDENTITIES[2]: {
         "predecessor": "passive-v2",
         "search_name": "passive-v3-search-v1",
         "profile": "812832214cd5a16115104c50d33e94cba9929a3cc355b4779d6002b52b25e734",
@@ -68,7 +74,144 @@ EXPECTED_PROVENANCE = {
     },
 }
 DEVELOPMENT_DIGEST = "17c016350dbe717641b8cd499b0908e3bc0faa811a3b4f5e574f8713a5bf2b3d"
-V4_EXPERTS = {
+EXPECTED_V4_PROVENANCE: dict[str, dict[str, Any]] = {
+    EXPECTED_V4_IDENTITIES[0]: {
+        "predecessor": "aggressive-v3",
+        "search_name": "aggressive-v4-search-v2",
+        "profile": "000d194163fac76a1e2928631379d7aab9b308025d6edb7583110cd962736b04",
+        "manifest": "71c06a1a246e81c935156ff818f66dcac454719168fabdd4af63ba94249ca69b",
+        "report": "05a77d4bdc177b0aa8b84c43e9ef364ab51533adebd9f2dc67ac3b1da85473bb",
+        "evaluations": "5a1ad67b7db378aaa009e3b59bd891ae71519e682f1eab241e3bf3f41f0c35a2",
+        "selection": "a45a3cbbf9bf57ffecadc6d84437c19f3e2d98379dba7e41dc04063c036e2ed8",
+        "games": "0a633649d4cf4c8ac0b593249f62bae8d64f1a687636a1b5f0722c630192d858",
+        "freeze": "2b63de8569efa4922cbb751ac052a20e46ca2accfdb3b0091d2f67d9858690dd",
+        "rating_delta": 24.713329019553612,
+        "normalized_finish_delta": 2.75,
+        "final_money_delta": 259,
+        "experts": {
+            "early": {
+                "bid_shading": "0.6",
+                "future_cash_weight": "1.95",
+                "liquidity_strength": "0.9",
+                "objective_progress_weight": "0.15",
+            },
+            "middle": {
+                "bid_shading": "0.4",
+                "future_cash_weight": "1.9",
+                "liquidity_strength": "1",
+                "objective_progress_weight": "0.1",
+            },
+            "late": {
+                "bid_shading": "0.5",
+                "future_cash_weight": "2",
+                "liquidity_strength": "1.4",
+                "objective_progress_weight": "0.15",
+            },
+        },
+        "diagnostics": {
+            "winner-decision-slices.csv": (
+                "bdb47a31da14ee95cddc9579b2dc477b6d6a04f99420ede12ebc7ccc3e81b07d"
+            ),
+            "winner-diagnostics.json": (
+                "83d2a3043dd16d0fc30f7f47ee775e78cbaf781d396c2b8497c1c54ad46e5e0a"
+            ),
+            "winner-diagnostics.md": (
+                "e49e4d27635a0bb2b70d83e41458bb15fe021af519ac2d7f3bedfb41c707be39"
+            ),
+        },
+    },
+    EXPECTED_V4_IDENTITIES[1]: {
+        "predecessor": "balanced-v3",
+        "search_name": "balanced-v4-search-v2",
+        "profile": "4d391ce068d794767aff27aaa2782a63f57255402d41fe3ee7b0196edaed036e",
+        "manifest": "e1f1bed8f09aef9193ffeb0ed3e0be822be96df7fd69985c9e4111f5c725933c",
+        "report": "3c84573a97def0068bc417714232d8c7870a331029037aede73235c8d7b6efab",
+        "evaluations": "1756519cb83597435fb395a569950f9f4a022c7aa3af48e9c2cc366c2a16b8e5",
+        "selection": "bce530095669125a9e1162e93cc5a3c7df3ca2cba6a2393fa4fff9d467357cb6",
+        "games": "54c38f79dc3690d1d0ef7eafa35d0f9cb4e8610ee166e19b37e9d053c409e273",
+        "freeze": "126fbbd3d7d20dc66a239c0e7608365352c5077fee81c6b0d88c4410c5b28df3",
+        "rating_delta": 9.953994694126777,
+        "normalized_finish_delta": 0.9166666666666572,
+        "final_money_delta": 92,
+        "experts": {
+            "early": {
+                "bid_shading": "0.35",
+                "future_cash_weight": "1.35",
+                "liquidity_strength": "0.25",
+                "objective_progress_weight": "0.3",
+            },
+            "middle": {
+                "bid_shading": "0.35",
+                "future_cash_weight": "1.55",
+                "liquidity_strength": "0.3",
+                "objective_progress_weight": "0.35",
+            },
+            "late": {
+                "bid_shading": "0.35",
+                "future_cash_weight": "1.45",
+                "liquidity_strength": "0.45",
+                "objective_progress_weight": "0.25",
+            },
+        },
+        "diagnostics": {
+            "winner-decision-slices.csv": (
+                "c6a6372898b25f26b7f34b14bca83743769492a68510f2f2f1aaf77c3f4a6e99"
+            ),
+            "winner-diagnostics.json": (
+                "4ff4b1694b7807e39b58556a050a03d5ed77f825505dff08f70db857712e1029"
+            ),
+            "winner-diagnostics.md": (
+                "7458b3e55f4efb352d14b09c79cb0907195625b9cd6aba004caa607f22d5b24d"
+            ),
+        },
+    },
+    EXPECTED_V4_IDENTITIES[2]: {
+        "predecessor": "passive-v3",
+        "search_name": "passive-v4-search-v2",
+        "profile": "cf4f7b924ee3759d05eff38f47340951fb51c55827e469d8ea96a14e3cd4ccc4",
+        "manifest": "334579f896a0d4281c8926bb4cc5d9bffd9b3c63b8be3d0ae3375699792d4bc6",
+        "report": "dc6f291668c934bf3f16028d1fb5a03d4b36f4ae34f5209142724202d5fbd78c",
+        "evaluations": "9723aafbcaba9566975c8f59650824c1ff5523924e4556d1e760b3f615ea1e13",
+        "selection": "b561137db2cdaaae3ec930b5b52b0d81fae74bf34bf058228d48d94f80ad827c",
+        "games": "1c9acc0e2b948d4661350547c761242d03d85cd74de6dc8a6c47cdb74f0c7f21",
+        "freeze": "36285933ff9a36b45004a5cfd14dd828a7ebda10c6bf34eb87d7511ae8d68f84",
+        "rating_delta": 12.092948249983237,
+        "normalized_finish_delta": 1.8333333333333428,
+        "final_money_delta": 3,
+        "experts": {
+            "early": {
+                "bid_shading": "0.45",
+                "future_cash_weight": "1.8",
+                "liquidity_strength": "1.5",
+                "objective_progress_weight": "0.95",
+            },
+            "middle": {
+                "bid_shading": "0.45",
+                "future_cash_weight": "1.75",
+                "liquidity_strength": "1.5",
+                "objective_progress_weight": "0.95",
+            },
+            "late": {
+                "bid_shading": "0.4",
+                "future_cash_weight": "2",
+                "liquidity_strength": "1.5",
+                "objective_progress_weight": "0.95",
+            },
+        },
+        "diagnostics": {
+            "winner-decision-slices.csv": (
+                "04d94fb3d302a39517bc383cec38bcf751670ed91c220e31beb3cc9fdfbf4db1"
+            ),
+            "winner-diagnostics.json": (
+                "82822bf049202cbaed6db262c5f307e97221cfc1cf7bd34afe1db76c194344d5"
+            ),
+            "winner-diagnostics.md": (
+                "994cfb68e0830841c9473babb4359c42b64933137bc42b549ea379af56ecbea6"
+            ),
+        },
+    },
+}
+SYNTHETIC_V4_EXPERTS = {
     "early": {
         "liquidity_strength": "0.3",
         "future_cash_weight": "1.4",
@@ -103,7 +246,7 @@ V4_BOUNDARY_EVIDENCE = {
     ),
     "slices_digest": "4f8aa60edf31b28c746cb8004a4dd5468ee8ab1b26462550c914b2e3fa50d7ae",
 }
-V4_WINNER_DIAGNOSTICS = {
+SYNTHETIC_V4_WINNER_DIAGNOSTICS = {
     "winner-decision-slices.csv": "1" * 64,
     "winner-diagnostics.json": "2" * 64,
     "winner-diagnostics.md": "3" * 64,
@@ -112,7 +255,7 @@ V4_WINNER_DIAGNOSTICS = {
 
 def _phase_profile_digest() -> str:
     payload = {
-        "experts": V4_EXPERTS,
+        "experts": SYNTHETIC_V4_EXPERTS,
         "phase_selector": PHASE_SELECTOR_NAME,
     }
     encoded = (
@@ -141,7 +284,7 @@ def _schema_v2_frozen_payload() -> dict[str, Any]:
             "normalized_finish_delta": 1.25,
             "rating_delta": 9.5,
         },
-        "experts": V4_EXPERTS,
+        "experts": SYNTHETIC_V4_EXPERTS,
         "generation": 1,
         "identity": f"aggressive-v4-candidate-g001-s002-{profile_digest[:12]}",
         "parent_identity": "aggressive-v4-candidate-g000-s000-000000000000",
@@ -161,7 +304,7 @@ def _schema_v2_frozen_payload() -> dict[str, Any]:
             "development_games_sha256": "d" * 64,
             "search_report_sha256": "e" * 64,
             "selection_log_sha256": "f" * 64,
-            "winner_diagnostics": V4_WINNER_DIAGNOSTICS,
+            "winner_diagnostics": SYNTHETIC_V4_WINNER_DIAGNOSTICS,
         },
     }
 
@@ -206,6 +349,9 @@ def _write_mixed_schema_catalog(
     mirror_mutated_payload_in_entry: bool = False,
 ) -> Path:
     source_index = json.loads((CATALOG_DIR / "index.json").read_text(encoding="utf-8"))
+    source_index["candidates"] = [
+        entry for entry in source_index["candidates"] if "-v3-candidate-" in entry["identity"]
+    ]
     for entry in source_index["candidates"]:
         source = CATALOG_DIR / entry["file"]
         (tmp_path / entry["file"]).write_bytes(source.read_bytes())
@@ -240,20 +386,66 @@ def test_catalog_exposes_exact_frozen_records_and_provenance() -> None:
     assert tuple(item.identity for item in FROZEN_CANDIDATES) == EXPECTED_IDENTITIES
     assert tuple(FROZEN_CANDIDATES_BY_NAME) == EXPECTED_IDENTITIES
 
-    for candidate in FROZEN_CANDIDATES:
-        assert type(candidate) is FrozenCandidate
-        expected = EXPECTED_PROVENANCE[candidate.identity]
-        assert candidate.bot_spec.name == candidate.identity
-        assert candidate.bot_spec.bot_id == candidate.identity
-        assert candidate.predecessor_name == expected["predecessor"]
-        assert candidate.search_name == expected["search_name"]
-        assert candidate.development_corpus_name == "development-v1"
-        assert candidate.development_corpus_digest == DEVELOPMENT_DIGEST
-        assert candidate.freeze_digest == expected["freeze"]
-        assert candidate.profile_digest == expected["profile"]
-        assert candidate.manifest_digest == expected["manifest"]
-        assert candidate.search_report_digest == expected["report"]
-        assert candidate.candidate_evaluations_digest == expected["evaluations"]
+    v3_candidates = tuple(
+        candidate for candidate in FROZEN_CANDIDATES if type(candidate) is FrozenCandidate
+    )
+    assert tuple(candidate.identity for candidate in v3_candidates) == EXPECTED_V3_IDENTITIES
+    for v3_candidate in v3_candidates:
+        assert type(v3_candidate) is FrozenCandidate
+        expected = EXPECTED_V3_PROVENANCE[v3_candidate.identity]
+        assert v3_candidate.bot_spec.name == v3_candidate.identity
+        assert v3_candidate.bot_spec.bot_id == v3_candidate.identity
+        assert v3_candidate.predecessor_name == expected["predecessor"]
+        assert v3_candidate.search_name == expected["search_name"]
+        assert v3_candidate.development_corpus_name == "development-v1"
+        assert v3_candidate.development_corpus_digest == DEVELOPMENT_DIGEST
+        assert v3_candidate.freeze_digest == expected["freeze"]
+        assert v3_candidate.profile_digest == expected["profile"]
+        assert v3_candidate.manifest_digest == expected["manifest"]
+        assert v3_candidate.search_report_digest == expected["report"]
+        assert v3_candidate.candidate_evaluations_digest == expected["evaluations"]
+
+    v4_candidates = tuple(
+        candidate
+        for candidate in FROZEN_CANDIDATES
+        if isinstance(candidate, FrozenPhaseAwareCandidate)
+    )
+    assert tuple(candidate.identity for candidate in v4_candidates) == EXPECTED_V4_IDENTITIES
+    for v4_candidate in v4_candidates:
+        expected = EXPECTED_V4_PROVENANCE[v4_candidate.identity]
+        expected_experts = expected["experts"]
+        assert v4_candidate.bot_spec.name == v4_candidate.identity
+        assert v4_candidate.bot_spec.bot_id == v4_candidate.identity
+        assert v4_candidate.predecessor_name == expected["predecessor"]
+        assert v4_candidate.search_name == expected["search_name"]
+        assert v4_candidate.development_corpus_name == "development-v1"
+        assert v4_candidate.development_corpus_digest == DEVELOPMENT_DIGEST
+        assert v4_candidate.repository_commit == "a66c49e559849b35a290827b51b2e5098524e2d1"
+        assert v4_candidate.freeze_digest == expected["freeze"]
+        assert v4_candidate.profile_digest == expected["profile"]
+        assert v4_candidate.manifest_digest == expected["manifest"]
+        assert v4_candidate.search_report_digest == expected["report"]
+        assert v4_candidate.candidate_evaluations_digest == expected["evaluations"]
+        assert v4_candidate.selection_log_digest == expected["selection"]
+        assert v4_candidate.development_games_digest == expected["games"]
+        assert v4_candidate.rating_delta == expected["rating_delta"]
+        assert v4_candidate.normalized_finish_delta == expected["normalized_finish_delta"]
+        assert v4_candidate.final_money_delta == expected["final_money_delta"]
+        assert v4_candidate.profile.phase_selector == PHASE_SELECTOR_NAME
+        assert dict(v4_candidate.phase_selector_rules) == V4_PHASE_SELECTOR
+        assert v4_candidate.boundary_report_path == V4_BOUNDARY_EVIDENCE["report_path"]
+        assert v4_candidate.boundary_report_digest == V4_BOUNDARY_EVIDENCE["report_digest"]
+        assert v4_candidate.boundary_slices_path == V4_BOUNDARY_EVIDENCE["slices_path"]
+        assert v4_candidate.boundary_slices_digest == V4_BOUNDARY_EVIDENCE["slices_digest"]
+        assert dict(v4_candidate.winner_diagnostics_digests) == expected["diagnostics"]
+        assert dict(v4_candidate.expert_digests) == {
+            phase: _expert_profile_digest(expected_experts[phase])
+            for phase in ("early", "middle", "late")
+        }
+        for phase in ("early", "middle", "late"):
+            expert = getattr(v4_candidate.profile, phase)
+            for coefficient_name, coefficient in expected_experts[phase].items():
+                assert getattr(expert, coefficient_name) == float(coefficient)
 
 
 def test_catalog_files_are_exact_copies_of_committed_development_freezes() -> None:
@@ -264,12 +456,11 @@ def test_catalog_files_are_exact_copies_of_committed_development_freezes() -> No
     assert [entry["identity"] for entry in index["candidates"]] == list(EXPECTED_IDENTITIES)
     for entry in index["candidates"]:
         identity = entry["identity"]
-        personality = identity.partition("-")[0]
         installed = CATALOG_DIR / entry["file"]
-        benchmark = BENCHMARK_DIR / f"{personality}-v3-search-v1" / "frozen-candidate.json"
+        search_dir = BENCHMARK_DIR / entry["search_name"]
+        benchmark = search_dir / "frozen-candidate.json"
         assert installed.read_bytes() == benchmark.read_bytes()
         assert hashlib.sha256(installed.read_bytes()).hexdigest() == entry["sha256"]
-        search_dir = benchmark.parent
         report = json.loads((search_dir / "search-report.json").read_text(encoding="utf-8"))
         manifest = json.loads((search_dir / "search-manifest.json").read_text(encoding="utf-8"))
         corpus = json.loads(
@@ -290,6 +481,46 @@ def test_catalog_files_are_exact_copies_of_committed_development_freezes() -> No
         assert corpus["recipe"]["purpose"] == "development"
         assert corpus["recipe"]["name"] == entry["development_corpus_name"]
         assert corpus["digest"] == entry["development_corpus_digest"]
+        if identity in EXPECTED_V3_PROVENANCE:
+            expected = EXPECTED_V3_PROVENANCE[identity]
+            assert entry["sha256"] == expected["freeze"]
+            continue
+
+        expected = EXPECTED_V4_PROVENANCE[identity]
+        payload = json.loads(installed.read_text(encoding="utf-8"))
+        assert entry["sha256"] == expected["freeze"]
+        assert payload["identity"] == identity
+        assert payload["profile_digest"] == expected["profile"]
+        assert payload["experts"] == expected["experts"]
+        assert payload["phase_selector"] == V4_PHASE_SELECTOR
+        assert payload["boundary_evidence"] == V4_BOUNDARY_EVIDENCE
+        assert payload["source_evidence"] == {
+            "candidate_evaluations_sha256": expected["evaluations"],
+            "development_games_sha256": expected["games"],
+            "search_report_sha256": expected["report"],
+            "selection_log_sha256": expected["selection"],
+            "winner_diagnostics": expected["diagnostics"],
+        }
+        assert (
+            hashlib.sha256((search_dir / "selection-log.jsonl").read_bytes()).hexdigest()
+            == expected["selection"]
+            == entry["selection_log_sha256"]
+        )
+        assert (
+            hashlib.sha256((search_dir / "development-games.jsonl").read_bytes()).hexdigest()
+            == expected["games"]
+            == entry["development_games_sha256"]
+        )
+        for artifact_name, catalog_field in (
+            ("winner-decision-slices.csv", "winner_decision_slices_sha256"),
+            ("winner-diagnostics.json", "winner_diagnostics_json_sha256"),
+            ("winner-diagnostics.md", "winner_diagnostics_markdown_sha256"),
+        ):
+            assert (
+                hashlib.sha256((search_dir / artifact_name).read_bytes()).hexdigest()
+                == expected["diagnostics"][artifact_name]
+                == entry[catalog_field]
+            )
 
 
 def test_frozen_specs_are_picklable_local_only_and_not_released() -> None:
@@ -305,8 +536,12 @@ def test_frozen_specs_are_picklable_local_only_and_not_released() -> None:
 
         restored = pickle.loads(pickle.dumps(spec))
         brain = restored.make_brain(seed=8675309)
-        assert isinstance(brain, HeuristicBotBrain)
-        assert brain.valuator.profile == candidate.profile
+        if isinstance(candidate, FrozenPhaseAwareCandidate):
+            assert isinstance(brain, PhaseAwareHeuristicBotBrain)
+            assert brain.profile == candidate.profile
+        else:
+            assert isinstance(brain, HeuristicBotBrain)
+            assert brain.valuator.profile == candidate.profile
 
 
 def test_mixed_catalog_loads_a_strict_local_only_phase_aware_candidate(
@@ -323,7 +558,7 @@ def test_mixed_catalog_loads_a_strict_local_only_phase_aware_candidate(
             for candidate in candidates
             if not isinstance(candidate, FrozenPhaseAwareCandidate)
         )
-        == EXPECTED_IDENTITIES
+        == EXPECTED_V3_IDENTITIES
     )
     assert phase_candidate.identity == _schema_v2_frozen_payload()["identity"]
     assert phase_candidate.predecessor_name == "aggressive-v3"
@@ -333,7 +568,8 @@ def test_mixed_catalog_loads_a_strict_local_only_phase_aware_candidate(
     assert dict(phase_candidate.phase_selector_rules) == V4_PHASE_SELECTOR
     expert_digests = dict(phase_candidate.expert_digests)
     assert expert_digests == {
-        phase: _expert_profile_digest(V4_EXPERTS[phase]) for phase in ("early", "middle", "late")
+        phase: _expert_profile_digest(SYNTHETIC_V4_EXPERTS[phase])
+        for phase in ("early", "middle", "late")
     }
     assert expert_digests["early"] != expert_digests["middle"]
     assert expert_digests["middle"] != expert_digests["late"]
@@ -344,7 +580,7 @@ def test_mixed_catalog_loads_a_strict_local_only_phase_aware_candidate(
     assert phase_candidate.boundary_slices_digest == V4_BOUNDARY_EVIDENCE["slices_digest"]
     assert phase_candidate.selection_log_digest == "f" * 64
     assert phase_candidate.development_games_digest == "d" * 64
-    assert dict(phase_candidate.winner_diagnostics_digests) == V4_WINNER_DIAGNOSTICS
+    assert dict(phase_candidate.winner_diagnostics_digests) == SYNTHETIC_V4_WINNER_DIAGNOSTICS
 
     spec = phase_candidate.bot_spec
     assert spec.name == phase_candidate.identity

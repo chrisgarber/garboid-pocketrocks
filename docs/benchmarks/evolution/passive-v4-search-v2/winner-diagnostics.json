@@ -1,0 +1,47 @@
+{
+  "development_corpus": {
+    "cases": 240,
+    "digest": "17c016350dbe717641b8cd499b0908e3bc0faa811a3b4f5e574f8713a5bf2b3d",
+    "name": "development-v1"
+  },
+  "manifest_digest": "334579f896a0d4281c8926bb4cc5d9bffd9b3c63b8be3d0ae3375699792d4bc6",
+  "phase_outcomes": [
+    {
+      "decision_count": 1272,
+      "decisions_from_faulted_game_seat": 0,
+      "eventual_final_money_sum": 103481,
+      "eventual_normalized_finish_sum": 1204.75,
+      "outright_win_decision_count": 1092,
+      "selected_expert_phase": "early",
+      "tied_first_decision_count": 9
+    },
+    {
+      "decision_count": 1238,
+      "decisions_from_faulted_game_seat": 0,
+      "eventual_final_money_sum": 98147,
+      "eventual_normalized_finish_sum": 1167.25,
+      "outright_win_decision_count": 1050,
+      "selected_expert_phase": "middle",
+      "tied_first_decision_count": 8
+    },
+    {
+      "decision_count": 1220,
+      "decisions_from_faulted_game_seat": 0,
+      "eventual_final_money_sum": 95994,
+      "eventual_normalized_finish_sum": 1147.0,
+      "outright_win_decision_count": 1021,
+      "selected_expert_phase": "late",
+      "tied_first_decision_count": 7
+    }
+  ],
+  "reconciliation": {
+    "game_count": 240,
+    "game_seat_count": 1000,
+    "game_summary_decision_count": 18014,
+    "selected_expert_decision_count": 3730,
+    "slice_decision_count": 18014,
+    "trace_decision_count": 18014
+  },
+  "schema_version": 2,
+  "winner_identity": "passive-v4-candidate-g005-s005-cf4f7b924ee3"
+}

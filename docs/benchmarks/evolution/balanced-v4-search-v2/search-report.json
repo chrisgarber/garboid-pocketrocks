@@ -1,0 +1,118 @@
+{
+  "artifacts": [
+    "search-manifest.json",
+    "search-report.json",
+    "candidate-evaluations.jsonl",
+    "selection-log.jsonl",
+    "development-games.jsonl",
+    "development-corpus-snapshot.json",
+    "frozen-candidate.json",
+    "winner-decision-slices.csv",
+    "winner-diagnostics.json",
+    "winner-diagnostics.md"
+  ],
+  "best_result": {
+    "candidate": {
+      "experts": {
+        "early": {
+          "bid_shading": "0.35",
+          "future_cash_weight": "1.35",
+          "liquidity_strength": "0.25",
+          "objective_progress_weight": "0.3"
+        },
+        "late": {
+          "bid_shading": "0.35",
+          "future_cash_weight": "1.45",
+          "liquidity_strength": "0.45",
+          "objective_progress_weight": "0.25"
+        },
+        "middle": {
+          "bid_shading": "0.35",
+          "future_cash_weight": "1.55",
+          "liquidity_strength": "0.3",
+          "objective_progress_weight": "0.35"
+        }
+      },
+      "generation": 9,
+      "identity": "balanced-v4-candidate-g009-s000-4d391ce068d7",
+      "parent_identity": "balanced-v4-candidate-g008-s002-8f1c6a27b486",
+      "personality": "balanced",
+      "phase_selector": {
+        "early": "3*future>=2*total",
+        "kind": "public-resource-horizon-v1",
+        "late": "otherwise",
+        "middle": "3*future>=total"
+      },
+      "profile_digest": "4d391ce068d794767aff27aaa2782a63f57255402d41fe3ee7b0196edaed036e",
+      "slot": 0
+    },
+    "candidate_identity": "balanced-v4-candidate-g009-s000-4d391ce068d7",
+    "final_money_delta": 92,
+    "generation": 9,
+    "normalized_finish_delta": 0.9166666666666572,
+    "rating_delta": 9.953994694126777,
+    "slot": 0
+  },
+  "coverage": {
+    "completed_baseline_games": 240,
+    "completed_candidate_games": 46080,
+    "completed_generations": 12,
+    "evaluated_candidates": 192,
+    "proposed_candidates": 192,
+    "requested_baseline_games": 240,
+    "requested_candidate_games": 46080
+  },
+  "development_corpus": {
+    "cases": 240,
+    "digest": "17c016350dbe717641b8cd499b0908e3bc0faa811a3b4f5e574f8713a5bf2b3d",
+    "name": "development-v1"
+  },
+  "execution": {
+    "batch_size": 64,
+    "workers": 8
+  },
+  "failures": [],
+  "frozen_candidate_identity": "balanced-v4-candidate-g009-s000-4d391ce068d7",
+  "repository_commit": "a66c49e559849b35a290827b51b2e5098524e2d1",
+  "schema_version": 2,
+  "search": {
+    "boundary_evidence": {
+      "report_digest": "9961f26f32270dcebc98df443588e96cbde2f953858cd131c66a37aeecaa9b01",
+      "report_path": "docs/benchmarks/2026-07-30-heuristic-v4-phase-boundaries.md",
+      "slices_digest": "4f8aa60edf31b28c746cb8004a4dd5468ee8ab1b26462550c914b2e3fa50d7ae",
+      "slices_path": "docs/benchmarks/tournaments/2026-07-30-heuristic-v3-phase-boundaries-development/phase-boundary-slices.csv"
+    },
+    "elite_count": 4,
+    "generation_count": 12,
+    "manifest_digest": "e1f1bed8f09aef9193ffeb0ed3e0be822be96df7fd69985c9e4111f5c725933c",
+    "name": "balanced-v4-search-v2",
+    "personality": "balanced",
+    "phase_selector": {
+      "early": "3*future>=2*total",
+      "kind": "public-resource-horizon-v1",
+      "late": "otherwise",
+      "middle": "3*future>=total"
+    },
+    "population_size": 16,
+    "predecessor_name": "balanced-v3"
+  },
+  "selected_candidate_identity": "balanced-v4-candidate-g009-s000-4d391ce068d7",
+  "status": "frozen_improvement",
+  "winner_diagnostics": {
+    "artifacts": [
+      {
+        "name": "winner-decision-slices.csv",
+        "sha256": "c6a6372898b25f26b7f34b14bca83743769492a68510f2f2f1aaf77c3f4a6e99"
+      },
+      {
+        "name": "winner-diagnostics.json",
+        "sha256": "4ff4b1694b7807e39b58556a050a03d5ed77f825505dff08f70db857712e1029"
+      },
+      {
+        "name": "winner-diagnostics.md",
+        "sha256": "7458b3e55f4efb352d14b09c79cb0907195625b9cd6aba004caa607f22d5b24d"
+      }
+    ],
+    "winner_identity": "balanced-v4-candidate-g009-s000-4d391ce068d7"
+  }
+}
