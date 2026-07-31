@@ -11,7 +11,10 @@ from dataclasses import dataclass
 from pocketrocks.sim.constants import ACTION_WIRE_IDS
 
 from garboid_pocketrocks.diagnostics.game_detail import PublicGameDetail
-from garboid_pocketrocks.diagnostics.trace import DecisionTrace
+from garboid_pocketrocks.diagnostics.trace import (
+    DecisionTrace,
+    OpponentAwareHeuristicBidExplanation,
+)
 from garboid_pocketrocks.heuristics.game_phase import (
     GamePhase,
     game_phase_for_turn_index,
@@ -33,6 +36,7 @@ from garboid_pocketrocks.tournament.analysis import (
 )
 
 _ACTION_NAME_BY_ID = {wire_id: name for name, wire_id in ACTION_WIRE_IDS.items()}
+MIN_SAFE_OPPONENT_MODEL_GAMES = 30
 
 
 class DecisionAnalysisError(ValueError):
@@ -90,6 +94,42 @@ class DecisionReport:
     decision_traces: tuple[DecisionTrace, ...]
     slices: tuple[DecisionSlice, ...]
     reconciliation: DecisionReconciliation
+
+
+@dataclass(frozen=True, slots=True)
+class PredictedOpponentBidAggregate:
+    """A publication-safe average across many opponent forecasts."""
+
+    effective_bid: int
+    forecast_count: int
+    predicted_probability_sum: float
+
+
+@dataclass(frozen=True, slots=True)
+class CompetitiveBidAggregate:
+    """Additive results for one legal bid across many public decisions."""
+
+    effective_bid: int
+    decision_count: int
+    chosen_count: int
+    predicted_win_probability_sum: float
+    win_delta_sum: float
+    expected_surplus_sum: float
+
+
+@dataclass(frozen=True, slots=True)
+class OpponentModelSummary:
+    """Low-dimensional opponent-model evidence safe to publish as one cohort."""
+
+    model_name: str
+    model_config_digest: str
+    distinct_game_count: int
+    decision_count: int
+    opponent_forecast_count: int
+    chosen_pass_count: int
+    chosen_positive_bid_count: int
+    predicted_opponent_bids: tuple[PredictedOpponentBidAggregate, ...]
+    competitive_bids: tuple[CompetitiveBidAggregate, ...]
 
 
 @dataclass(frozen=True, order=True, slots=True)
@@ -150,6 +190,20 @@ class _ConditionAggregate:
     first_place_ties: int
     normalized_finishes: tuple[float, ...]
     final_money: tuple[int, ...]
+
+
+@dataclass(slots=True)
+class _OpponentModelAccumulator:
+    game_indexes: set[int]
+    decision_count: int
+    opponent_forecast_count: int
+    chosen_pass_count: int
+    chosen_positive_bid_count: int
+    probability_distributions: list[tuple[float, ...]]
+    win_probability_values: dict[int, list[float]]
+    win_delta_values: dict[int, list[float]]
+    expected_surplus_values: dict[int, list[float]]
+    chosen_counts: Counter[int]
 
 
 def build_decision_report(
@@ -220,6 +274,104 @@ def build_decision_report(
             slice_decision_count=slice_decisions,
         ),
     )
+
+
+def build_opponent_model_summaries(
+    report: DecisionReport,
+) -> tuple[OpponentModelSummary, ...]:
+    """Aggregate opponent forecasts without retaining game or decision identifiers.
+
+    This renderer-facing summary is intended for committed evidence. Each model
+    configuration is one cohort, and every cohort must span at least thirty
+    distinct games. Local per-decision reasoning remains available in the raw
+    decision-trace JSON.
+    """
+
+    cohorts: dict[tuple[str, str], _OpponentModelAccumulator] = {}
+    for trace in report.decision_traces:
+        explanation = trace.explanation
+        if not isinstance(explanation, OpponentAwareHeuristicBidExplanation):
+            continue
+        if trace.game_index is None:
+            raise DecisionAnalysisError("opponent-model publication summary requires a game index")
+        key = (explanation.model_name, explanation.model_config_digest)
+        cohort = cohorts.setdefault(
+            key,
+            _OpponentModelAccumulator(
+                game_indexes=set(),
+                decision_count=0,
+                opponent_forecast_count=0,
+                chosen_pass_count=0,
+                chosen_positive_bid_count=0,
+                probability_distributions=[],
+                win_probability_values=defaultdict(list),
+                win_delta_values=defaultdict(list),
+                expected_surplus_values=defaultdict(list),
+                chosen_counts=Counter(),
+            ),
+        )
+        cohort.game_indexes.add(trace.game_index)
+        cohort.decision_count += 1
+        cohort.opponent_forecast_count += len(explanation.opponent_distributions)
+        cohort.chosen_pass_count += int(explanation.chosen_bid == 0)
+        cohort.chosen_positive_bid_count += int(explanation.chosen_bid > 0)
+        cohort.chosen_counts[explanation.chosen_bid] += 1
+        for distribution in explanation.opponent_distributions:
+            cohort.probability_distributions.append(distribution.probabilities_by_amount)
+        for point in explanation.competitive_bid_points:
+            cohort.win_probability_values[point.effective_bid].append(point.win_probability)
+            cohort.win_delta_values[point.effective_bid].append(point.win_delta)
+            cohort.expected_surplus_values[point.effective_bid].append(point.expected_surplus)
+
+    summaries = []
+    for (model_name, model_config_digest), cohort in sorted(cohorts.items()):
+        distinct_game_count = len(cohort.game_indexes)
+        if distinct_game_count < MIN_SAFE_OPPONENT_MODEL_GAMES:
+            raise DecisionAnalysisError(
+                f"opponent-model publication cohort {model_config_digest!r} has "
+                f"{distinct_game_count} distinct games; at least "
+                f"{MIN_SAFE_OPPONENT_MODEL_GAMES} are required"
+            )
+        maximum_predicted_bid = max(
+            (len(distribution) - 1 for distribution in cohort.probability_distributions),
+            default=-1,
+        )
+        predicted_opponent_bids = tuple(
+            PredictedOpponentBidAggregate(
+                effective_bid=effective_bid,
+                forecast_count=cohort.opponent_forecast_count,
+                predicted_probability_sum=math.fsum(
+                    distribution[effective_bid] if effective_bid < len(distribution) else 0.0
+                    for distribution in cohort.probability_distributions
+                ),
+            )
+            for effective_bid in range(maximum_predicted_bid + 1)
+        )
+        competitive_bids = tuple(
+            CompetitiveBidAggregate(
+                effective_bid=effective_bid,
+                decision_count=len(values),
+                chosen_count=cohort.chosen_counts[effective_bid],
+                predicted_win_probability_sum=math.fsum(values),
+                win_delta_sum=math.fsum(cohort.win_delta_values[effective_bid]),
+                expected_surplus_sum=math.fsum(cohort.expected_surplus_values[effective_bid]),
+            )
+            for effective_bid, values in sorted(cohort.win_probability_values.items())
+        )
+        summaries.append(
+            OpponentModelSummary(
+                model_name=model_name,
+                model_config_digest=model_config_digest,
+                distinct_game_count=distinct_game_count,
+                decision_count=cohort.decision_count,
+                opponent_forecast_count=cohort.opponent_forecast_count,
+                chosen_pass_count=cohort.chosen_pass_count,
+                chosen_positive_bid_count=cohort.chosen_positive_bid_count,
+                predicted_opponent_bids=predicted_opponent_bids,
+                competitive_bids=competitive_bids,
+            )
+        )
+    return tuple(summaries)
 
 
 def _validate_game_details(

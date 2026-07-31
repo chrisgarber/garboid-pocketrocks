@@ -16,7 +16,11 @@ from garboid_pocketrocks.simulator.monte_carlo import GameSummary
 from garboid_pocketrocks.simulator.session import SessionScore
 
 if TYPE_CHECKING:
-    from garboid_pocketrocks.diagnostics.analysis import DecisionReport, DecisionSlice
+    from garboid_pocketrocks.diagnostics.analysis import (
+        DecisionReport,
+        DecisionSlice,
+        OpponentModelSummary,
+    )
 
 GAME_SUMMARIES_NAME = "game-summaries.jsonl"
 GAME_DETAILS_NAME = "game-details.jsonl"
@@ -69,6 +73,153 @@ class RenderedDecisionArtifacts:
             (DECISION_TRACES_NAME, self.decision_traces_jsonl),
             (DECISION_SLICES_NAME, self.decision_slices_csv),
         )
+
+
+@dataclass(frozen=True, slots=True)
+class RenderedOpponentModelSummary:
+    """Cohort-aggregated opponent-model evidence in machine and human forms."""
+
+    summary_json: str
+    summary_markdown: str
+
+
+def render_opponent_model_summary(
+    *,
+    decision_report: DecisionReport,
+) -> RenderedOpponentModelSummary:
+    """Render publishable aggregates, failing closed for a small cohort."""
+
+    from garboid_pocketrocks.diagnostics.analysis import (
+        MIN_SAFE_OPPONENT_MODEL_GAMES,
+        build_opponent_model_summaries,
+    )
+
+    if decision_report.schema_version != 1:
+        raise ValueError("unsupported decision report schema version")
+    summaries = build_opponent_model_summaries(decision_report)
+    payload = {
+        "schema_version": 1,
+        "report_kind": "public_opponent_bid_model_summary",
+        "privacy": {
+            "aggregation": "model_configuration_cohort",
+            "minimum_distinct_games": MIN_SAFE_OPPONENT_MODEL_GAMES,
+            "contains_game_or_decision_identifiers": False,
+            "contains_per_decision_tables": False,
+        },
+        "model_summaries": [_opponent_model_summary_payload(summary) for summary in summaries],
+    }
+    return RenderedOpponentModelSummary(
+        summary_json=_render_json(payload) + "\n",
+        summary_markdown=_opponent_model_summary_markdown(
+            summaries,
+            minimum_distinct_games=MIN_SAFE_OPPONENT_MODEL_GAMES,
+        ),
+    )
+
+
+def _opponent_model_summary_payload(summary: OpponentModelSummary) -> dict[str, object]:
+    return {
+        "model_name": summary.model_name,
+        "model_config_digest": summary.model_config_digest,
+        "cohort": {
+            "distinct_game_count": summary.distinct_game_count,
+            "decision_count": summary.decision_count,
+            "opponent_forecast_count": summary.opponent_forecast_count,
+        },
+        "chosen_actions": {
+            "pass_count": summary.chosen_pass_count,
+            "positive_bid_count": summary.chosen_positive_bid_count,
+        },
+        "predicted_opponent_bid_distribution": [
+            {
+                "effective_bid": item.effective_bid,
+                "opponent_forecast_count": item.forecast_count,
+                "mean_predicted_probability": (
+                    item.predicted_probability_sum / item.forecast_count
+                ),
+            }
+            for item in summary.predicted_opponent_bids
+        ],
+        "expected_surplus_by_legal_bid": [
+            {
+                "effective_bid": item.effective_bid,
+                "decision_count": item.decision_count,
+                "chosen_count": item.chosen_count,
+                "mean_predicted_win_probability": (
+                    item.predicted_win_probability_sum / item.decision_count
+                ),
+                "mean_win_delta": item.win_delta_sum / item.decision_count,
+                "mean_expected_surplus": item.expected_surplus_sum / item.decision_count,
+            }
+            for item in summary.competitive_bids
+        ],
+    }
+
+
+def _opponent_model_summary_markdown(
+    summaries: Sequence[OpponentModelSummary],
+    *,
+    minimum_distinct_games: int,
+) -> str:
+    lines = [
+        "# Public opponent-bid model summary",
+        "",
+        "This report combines public forecasts across model-configuration cohorts of at least "
+        f"{minimum_distinct_games} distinct games. It contains no game IDs, decision IDs, "
+        "seeds, per-decision rows, or individual probability tables.",
+    ]
+    if not summaries:
+        lines.extend(("", "No opponent-aware decisions were recorded."))
+    for summary in summaries:
+        lines.extend(
+            (
+                "",
+                f"## {summary.model_name}",
+                "",
+                f"Configuration digest: `{summary.model_config_digest}`",
+                "",
+                f"Cohort: {summary.distinct_game_count} distinct games, "
+                f"{summary.decision_count} decisions, and "
+                f"{summary.opponent_forecast_count} opponent forecasts.",
+                "",
+                "### Chosen actions",
+                "",
+                "| Action | Times chosen |",
+                "| --- | ---: |",
+                f"| Pass (effective bid 0) | {summary.chosen_pass_count} |",
+                f"| Positive bid | {summary.chosen_positive_bid_count} |",
+                "",
+                "### Predicted opponent bids",
+                "",
+                "| Effective bid | Mean predicted probability | Opponent forecasts |",
+                "| ---: | ---: | ---: |",
+            )
+        )
+        lines.extend(
+            f"| {item.effective_bid} | "
+            f"{item.predicted_probability_sum / item.forecast_count:.6f} | "
+            f"{item.forecast_count} |"
+            for item in summary.predicted_opponent_bids
+        )
+        lines.extend(
+            (
+                "",
+                "### Expected surplus by legal bid",
+                "",
+                "| Effective bid | Mean predicted win probability | Mean win delta | "
+                "Mean expected surplus | Times available | Times chosen |",
+                "| ---: | ---: | ---: | ---: | ---: | ---: |",
+            )
+        )
+        lines.extend(
+            f"| {item.effective_bid} | "
+            f"{item.predicted_win_probability_sum / item.decision_count:.6f} | "
+            f"{item.win_delta_sum / item.decision_count:.6f} | "
+            f"{item.expected_surplus_sum / item.decision_count:.6f} | "
+            f"{item.decision_count} | {item.chosen_count} |"
+            for item in summary.competitive_bids
+        )
+    return "\n".join(lines) + "\n"
 
 
 def render_decision_artifacts(
@@ -164,6 +315,18 @@ def _render_json_lines(payloads: Iterable[Mapping[str, object]]) -> str:
             )
             + "\n"
             for payload in payloads
+        )
+    except ValueError as error:
+        raise ValueError("Decision artifacts must contain only finite JSON numbers.") from error
+
+
+def _render_json(payload: Mapping[str, object]) -> str:
+    try:
+        return json.dumps(
+            payload,
+            allow_nan=False,
+            separators=(",", ":"),
+            sort_keys=True,
         )
     except ValueError as error:
         raise ValueError("Decision artifacts must contain only finite JSON numbers.") from error
