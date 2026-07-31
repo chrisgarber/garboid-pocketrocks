@@ -1,0 +1,125 @@
+{
+  "experts": [
+    {
+      "executable": {
+        "artifact_digest": "218e9682d8d174125d4b9e7550fec9afda01ddb4433084143968b6d525d335da",
+        "artifact_name": "aggressive-v3-candidate-g007-s008-c70e11540db9",
+        "digest": "c70e11540db92d0c77ce5085670ff48105c91aede1ed52c4abb7874a64687b58",
+        "kind": "heuristic_profile"
+      },
+      "expert_name": "aggressive-v3",
+      "incumbent_name": "aggressive-v2",
+      "promoted_candidate_identity": "aggressive-v3-candidate-g007-s008-c70e11540db9",
+      "promotion": {
+        "bootstrap": {"converged": 1000, "requested": 1000, "seed": 0},
+        "confidence_interval_95": {"lower": 191.07134861693405, "upper": 280.1109053312352},
+        "corpora": {
+          "development": {"digest": "17c016350dbe717641b8cd499b0908e3bc0faa811a3b4f5e574f8713a5bf2b3d", "name": "development-v1"},
+          "held_out": {"digest": "de686b97e9318d840554514d71158e7d30e4b1603c6692d68b73bc77947b10da", "name": "held-out-v1"}
+        },
+        "coverage": {"completed_games": 960, "completed_pairs": 480, "requested_games": 960, "requested_pairs": 480},
+        "failures": [],
+        "faults": 0,
+        "promoted": true,
+        "rating_difference": 231.9549699979907,
+        "repository_commit": "7a59af3e37d5124536f1f7ba7366a1953b929137",
+        "rule": {"charts": ["A", "B", "C", "D", "E"], "fault_mode": "record_and_pass", "objectives_enabled": [true], "player_counts": [3, 4, 5]},
+        "source_artifact": "docs/benchmarks/2026-07-30-heuristic-v3-candidate-promotions.md",
+        "source_sha256": "0e461fa853a62860b37e2c955e3e5316b16701c1ab3534367c163d288f363d39",
+        "warnings": []
+      },
+      "promotion_evidence_digest": "82e10eda2a869fec9da2a502362a7371fc75936b80eb9878281d55a64fd70ad8"
+    },
+    {
+      "executable": {
+        "artifact_digest": "05bcd898e7fc79062585cb989b67cb2e5641eed6cc59b1a60255de84c8ee2988",
+        "artifact_name": "balanced-v3-candidate-g006-s010-e3971899626c",
+        "digest": "e3971899626ca3f651b2992d0cc429dc3ffd57fcdbb7cfac8249e6f0f9d9b03e",
+        "kind": "heuristic_profile"
+      },
+      "expert_name": "balanced-v3",
+      "incumbent_name": "balanced-v2",
+      "promoted_candidate_identity": "balanced-v3-candidate-g006-s010-e3971899626c",
+      "promotion": {
+        "bootstrap": {"converged": 1000, "requested": 1000, "seed": 0},
+        "confidence_interval_95": {"lower": 102.76507930109351, "upper": 188.82823172726077},
+        "corpora": {
+          "development": {"digest": "17c016350dbe717641b8cd499b0908e3bc0faa811a3b4f5e574f8713a5bf2b3d", "name": "development-v1"},
+          "held_out": {"digest": "de686b97e9318d840554514d71158e7d30e4b1603c6692d68b73bc77947b10da", "name": "held-out-v1"}
+        },
+        "coverage": {"completed_games": 960, "completed_pairs": 480, "requested_games": 960, "requested_pairs": 480},
+        "failures": [],
+        "faults": 0,
+        "promoted": true,
+        "rating_difference": 143.35885513014068,
+        "repository_commit": "7a59af3e37d5124536f1f7ba7366a1953b929137",
+        "rule": {"charts": ["A", "B", "C", "D", "E"], "fault_mode": "record_and_pass", "objectives_enabled": [true], "player_counts": [3, 4, 5]},
+        "source_artifact": "docs/benchmarks/2026-07-30-heuristic-v3-candidate-promotions.md",
+        "source_sha256": "0e461fa853a62860b37e2c955e3e5316b16701c1ab3534367c163d288f363d39",
+        "warnings": []
+      },
+      "promotion_evidence_digest": "f405eddfd9302b73efe9209eceff4184f87445bfc6fd7a835b97cb4a104f1de2"
+    },
+    {
+      "executable": {
+        "artifact_digest": "0617870c8641e9d25237354b5fe5a1df4f15637af0e46e8c11b1c13e7054adee",
+        "artifact_name": "passive-v3-candidate-g006-s001-812832214cd5",
+        "digest": "812832214cd5a16115104c50d33e94cba9929a3cc355b4779d6002b52b25e734",
+        "kind": "heuristic_profile"
+      },
+      "expert_name": "passive-v3",
+      "incumbent_name": "passive-v2",
+      "promoted_candidate_identity": "passive-v3-candidate-g006-s001-812832214cd5",
+      "promotion": {
+        "bootstrap": {"converged": 1000, "requested": 1000, "seed": 0},
+        "confidence_interval_95": {"lower": 256.50646874507333, "upper": 360.10282152090446},
+        "corpora": {
+          "development": {"digest": "17c016350dbe717641b8cd499b0908e3bc0faa811a3b4f5e574f8713a5bf2b3d", "name": "development-v1"},
+          "held_out": {"digest": "de686b97e9318d840554514d71158e7d30e4b1603c6692d68b73bc77947b10da", "name": "held-out-v1"}
+        },
+        "coverage": {"completed_games": 960, "completed_pairs": 480, "requested_games": 960, "requested_pairs": 480},
+        "failures": [],
+        "faults": 0,
+        "promoted": true,
+        "rating_difference": 303.80330913850275,
+        "repository_commit": "7a59af3e37d5124536f1f7ba7366a1953b929137",
+        "rule": {"charts": ["A", "B", "C", "D", "E"], "fault_mode": "record_and_pass", "objectives_enabled": [true], "player_counts": [3, 4, 5]},
+        "source_artifact": "docs/benchmarks/2026-07-30-heuristic-v3-candidate-promotions.md",
+        "source_sha256": "0e461fa853a62860b37e2c955e3e5316b16701c1ab3534367c163d288f363d39",
+        "warnings": []
+      },
+      "promotion_evidence_digest": "9ff459f8f76ceb14b062f49d92b34419d079080463a3d3b23bba866a2703f07e"
+    },
+    {
+      "executable": {
+        "artifact_digest": "2ff577e25cf20f4217290a18ecf3d23188d0a5cddb392aa571ba54f2e1cd8974",
+        "artifact_name": "vector_ppo_large_v1_g350k",
+        "digest": "088160ad4006b2bac3691980d7f3e9dc56635fd57e6ad2b94068497e199f0e5c",
+        "kind": "neural_checkpoint"
+      },
+      "expert_name": "vector_ppo_large_v1_g350k",
+      "incumbent_name": "vector_ppo_small_v1_g1500",
+      "promoted_candidate_identity": "vector_ppo_large_v1_g350k",
+      "promotion": {
+        "bootstrap": {"converged": 1000, "requested": 1000, "seed": 0},
+        "confidence_interval_95": {"lower": 333.59571588851003, "upper": 429.92008317501353},
+        "corpora": {
+          "development": {"digest": "17c016350dbe717641b8cd499b0908e3bc0faa811a3b4f5e574f8713a5bf2b3d", "name": "development-v1"},
+          "held_out": {"digest": "de686b97e9318d840554514d71158e7d30e4b1603c6692d68b73bc77947b10da", "name": "held-out-v1"}
+        },
+        "coverage": {"completed_games": 960, "completed_pairs": 480, "requested_games": 960, "requested_pairs": 480},
+        "failures": [],
+        "faults": 0,
+        "promoted": true,
+        "rating_difference": 380.4651404425133,
+        "repository_commit": "5852176ff3c28b3f469a85a349be40ce41c05aa8",
+        "rule": {"charts": ["A", "B", "C", "D", "E"], "fault_mode": "record_and_pass", "objectives_enabled": [true], "player_counts": [3, 4, 5]},
+        "source_artifact": "docs/benchmarks/promotions/2026-07-30-vector-ppo-large-v1-g350k-vs-small-v1-g1500/promotion-report.json",
+        "source_sha256": "d16eb73e807396c6c1ae660b84ed6414b79147e49eedd738e330ddf66e23bb76",
+        "warnings": []
+      },
+      "promotion_evidence_digest": "3a9aef2def3db9b72b9f880670c1d43b7e78e2d3588dbe6186e350f6d0db921b"
+    }
+  ],
+  "schema_version": 1
+}

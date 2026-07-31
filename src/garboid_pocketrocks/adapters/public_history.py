@@ -7,6 +7,32 @@ from types import SimpleNamespace
 from typing import Literal
 
 from pocketrocks import OBJECTIVES, ActionId, Suit
+from pocketrocks.sim.constants import (
+    ACTION_DECK,
+    ACTION_WIRE_IDS,
+    INFO_CARDS_PER_PLAYER,
+    INVEST_PAYOUT,
+    ITEM_DECK_SUITS,
+    LOAN_PRINCIPAL,
+    OBJECTIVES_PER_GAME,
+    STARTING_CASH,
+    VALUE_CHARTS,
+    objective_pattern_met,
+)
+
+_ACTION_NAME_BY_ID = {wire_id: name for name, wire_id in ACTION_WIRE_IDS.items()}
+_ACTION_CREDIT_BY_ID = {
+    wire_id: LOAN_PRINCIPAL.get(name, 0) for name, wire_id in ACTION_WIRE_IDS.items()
+}
+_ACTION_COUNT_BY_ID = {
+    wire_id: ACTION_DECK.count(name) for name, wire_id in ACTION_WIRE_IDS.items()
+}
+_AUCTION_ONE = int(ActionId.AUCTION1)
+_AUCTION_TWO = int(ActionId.AUCTION2)
+_SUIT_COUNT = len(Suit)
+_RESOURCE_COUNT_BY_SUIT = tuple(
+    ITEM_DECK_SUITS.count(suit_id) for suit_id in range(1, _SUIT_COUNT + 1)
+)
 
 
 class PublicHistoryCompatibilityError(ValueError):
@@ -54,6 +80,29 @@ type PublicEvent = (
     PublicGameSetup | PublicTurnOpened | PublicAuctionResolved | PublicInformationRevealed
 )
 type PublicHistory = tuple[PublicEvent, ...]
+type PublicHistoryPhase = Literal["ready_for_turn", "turn_open", "reveal_pending"]
+
+
+@dataclass(frozen=True, slots=True)
+class ValidatedPublicHistory:
+    """Cumulative public state reconstructed from one exact event sequence."""
+
+    setup: PublicGameSetup
+    phase: PublicHistoryPhase
+    latest_turn: PublicTurnOpened | None
+    tiebreak_seat: int
+    cash_by_seat: tuple[int, ...]
+    won_resource_counts_by_seat: tuple[tuple[int, ...], ...]
+    revealed_info_counts_by_seat: tuple[tuple[int, ...], ...]
+    owned_objective_ids_by_seat: tuple[tuple[int, ...], ...]
+    loan_principal_by_seat: tuple[int, ...]
+    investment_value_by_seat: tuple[int, ...]
+    legal_max_bid_by_seat: tuple[int, ...] | None
+    visible_resource_ids: tuple[int, ...]
+    biddable_resource_budget: int
+    public_biddable_resource_count: int
+    resolved_turn_count: int
+    seen_action_counts: tuple[int, ...]
 
 
 def public_history_from_sdk_events(events: Sequence[object]) -> PublicHistory:
@@ -105,7 +154,284 @@ def public_history_from_sdk_frame(frame: object) -> PublicHistory:
             reveal_available = False
         else:
             raise _compatibility_error(index, f"unsupported public event kind {kind!r}")
-    return tuple(history)
+    output = tuple(history)
+    validate_public_history(output)
+    return output
+
+
+def validate_public_history(history: PublicHistory) -> ValidatedPublicHistory:
+    """Replay public events and reject any state the pinned SDK rules cannot produce."""
+
+    if type(history) is not tuple or not history or type(history[0]) is not PublicGameSetup:
+        raise PublicHistoryCompatibilityError(
+            "public history must be an exact nonempty tuple beginning with game setup"
+        )
+    setup = history[0]
+    _require_event_kind(setup, PublicEventKind.GAME_SETUP, index=0)
+    if not _is_integer(setup.player_count) or not 3 <= setup.player_count <= 5:
+        raise _compatibility_error(0, "player count must be between three and five")
+    if (
+        not _is_integer(setup.starting_cash)
+        or setup.starting_cash != STARTING_CASH[setup.player_count]
+    ):
+        raise _compatibility_error(0, "starting cash does not match the SDK player count")
+    if not _is_integer_tuple(setup.value_chart) or setup.value_chart not in VALUE_CHARTS.values():
+        raise _compatibility_error(0, "value chart must be one canonical SDK chart")
+    if not _is_integer(setup.initial_tiebreak_seat) or not (
+        0 <= setup.initial_tiebreak_seat < setup.player_count
+    ):
+        raise _compatibility_error(0, "initial tiebreak seat is outside player count")
+    if (
+        not _is_integer_tuple(setup.objective_ids)
+        or len(set(setup.objective_ids)) != len(setup.objective_ids)
+        or len(setup.objective_ids) not in (0, OBJECTIVES_PER_GAME)
+        or any(objective_id not in OBJECTIVES for objective_id in setup.objective_ids)
+    ):
+        raise _compatibility_error(0, "objective IDs do not match a canonical SDK game")
+
+    phase: PublicHistoryPhase = "ready_for_turn"
+    latest_turn: PublicTurnOpened | None = None
+    previous_resolved_turn: PublicTurnOpened | None = None
+    tiebreak_seat = setup.initial_tiebreak_seat
+    private_cards_per_player = INFO_CARDS_PER_PLAYER[setup.player_count]
+    cash_by_seat = [setup.starting_cash] * setup.player_count
+    won_resource_counts_by_seat = [[0] * _SUIT_COUNT for _seat in range(setup.player_count)]
+    revealed_info_counts_by_seat = [[0] * _SUIT_COUNT for _seat in range(setup.player_count)]
+    owned_objective_ids_by_seat: list[list[int]] = [[] for _seat in range(setup.player_count)]
+    loan_principal_by_seat = [0] * setup.player_count
+    investment_value_by_seat = [0] * setup.player_count
+    seen_action_counts = [0] * len(ActionId)
+    resolved_turn_count = 0
+    for index, event in enumerate(history[1:], start=1):
+        if type(event) is PublicTurnOpened:
+            turn = event
+            _require_event_kind(turn, PublicEventKind.TURN_OPENED, index=index)
+            if phase != "ready_for_turn":
+                raise _compatibility_error(index, "turn opened before the prior turn completed")
+            if not _is_integer(turn.action_id):
+                raise _compatibility_error(index, "action ID must be an integer")
+            try:
+                ActionId(turn.action_id)
+            except ValueError as error:
+                raise _compatibility_error(index, "action ID is unknown") from error
+            if (
+                not _is_integer_tuple(turn.resource_ids)
+                or len(turn.resource_ids) != 2
+                or any(not 0 <= resource_id <= _SUIT_COUNT for resource_id in turn.resource_ids)
+                or (turn.resource_ids[0] == 0 and turn.resource_ids[1] != 0)
+                or turn.resource_ids[0] == 0
+            ):
+                raise _compatibility_error(index, "turn resources are malformed")
+            _validate_resource_carry(previous_resolved_turn, turn, index=index)
+            seen_action_counts[turn.action_id - 1] += 1
+            if seen_action_counts[turn.action_id - 1] > _ACTION_COUNT_BY_ID[turn.action_id]:
+                raise _compatibility_error(index, "action appears more often than in the SDK deck")
+            latest_turn = turn
+            phase = "turn_open"
+            _require_known_resources_fit_deck(
+                won_resource_counts_by_seat,
+                revealed_info_counts_by_seat,
+                turn=turn,
+                phase=phase,
+                player_count=setup.player_count,
+                index=index,
+            )
+        elif type(event) is PublicAuctionResolved:
+            resolved = event
+            _require_event_kind(resolved, PublicEventKind.AUCTION_RESOLVED, index=index)
+            if phase != "turn_open":
+                raise _compatibility_error(index, "auction resolved without an open turn")
+            if (
+                not _is_integer_tuple(resolved.bids_by_seat)
+                or len(resolved.bids_by_seat) != setup.player_count
+                or any(bid < 0 for bid in resolved.bids_by_seat)
+            ):
+                raise _compatibility_error(index, "resolved bids are malformed")
+            if latest_turn is None:
+                raise AssertionError("turn-open phase always has a latest turn")
+            bid_credit = _ACTION_CREDIT_BY_ID[latest_turn.action_id]
+            if any(
+                bid > cash_by_seat[seat] + bid_credit
+                for seat, bid in enumerate(resolved.bids_by_seat)
+            ):
+                raise _compatibility_error(
+                    index, "resolved bid exceeds its replayed SDK legal maximum"
+                )
+            tiebreak_seat = _winning_seat(
+                resolved.bids_by_seat,
+                tiebreak_seat=tiebreak_seat,
+            )
+            paid = max(resolved.bids_by_seat)
+            cash_by_seat[tiebreak_seat] -= paid
+            action_name = _ACTION_NAME_BY_ID[latest_turn.action_id]
+            if action_name in LOAN_PRINCIPAL:
+                principal = LOAN_PRINCIPAL[action_name]
+                cash_by_seat[tiebreak_seat] += principal
+                loan_principal_by_seat[tiebreak_seat] += principal
+            if action_name in INVEST_PAYOUT:
+                investment_value_by_seat[tiebreak_seat] += paid + INVEST_PAYOUT[action_name]
+
+            granted_resource_count = (
+                1
+                if latest_turn.action_id == _AUCTION_ONE
+                else 2
+                if latest_turn.action_id == _AUCTION_TWO
+                else 0
+            )
+            for suit_id in latest_turn.resource_ids[:granted_resource_count]:
+                if suit_id:
+                    won_resource_counts_by_seat[tiebreak_seat][suit_id - 1] += 1
+            if granted_resource_count:
+                for objective_id in setup.objective_ids:
+                    if any(
+                        objective_id in owned_objectives
+                        for owned_objectives in owned_objective_ids_by_seat
+                    ):
+                        continue
+                    if objective_pattern_met(
+                        objective_id,
+                        won_resource_counts_by_seat[tiebreak_seat],
+                    ):
+                        owned_objective_ids_by_seat[tiebreak_seat].append(objective_id)
+
+            resolved_turn_count += 1
+            previous_resolved_turn = latest_turn
+            phase = (
+                "reveal_pending"
+                if sum(revealed_info_counts_by_seat[tiebreak_seat]) < private_cards_per_player
+                else "ready_for_turn"
+            )
+            _require_known_resources_fit_deck(
+                won_resource_counts_by_seat,
+                revealed_info_counts_by_seat,
+                turn=latest_turn,
+                phase=phase,
+                player_count=setup.player_count,
+                index=index,
+            )
+        elif type(event) is PublicInformationRevealed:
+            revealed = event
+            _require_event_kind(revealed, PublicEventKind.INFORMATION_REVEALED, index=index)
+            if phase != "reveal_pending":
+                raise _compatibility_error(index, "information revealed without a resolved auction")
+            if not _is_integer(revealed.seat) or not 0 <= revealed.seat < setup.player_count:
+                raise _compatibility_error(index, "information reveal seat is outside player count")
+            if revealed.seat != tiebreak_seat:
+                raise _compatibility_error(
+                    index, "information reveal seat is not the auction winner"
+                )
+            if not _is_integer(revealed.suit_id) or not 1 <= revealed.suit_id <= _SUIT_COUNT:
+                raise _compatibility_error(index, "revealed suit ID is outside the known range")
+            revealed_info_counts_by_seat[revealed.seat][revealed.suit_id - 1] += 1
+            if sum(revealed_info_counts_by_seat[revealed.seat]) > private_cards_per_player:
+                raise _compatibility_error(index, "player reveals more than their initial hand")
+            phase = "ready_for_turn"
+            _require_known_resources_fit_deck(
+                won_resource_counts_by_seat,
+                revealed_info_counts_by_seat,
+                turn=latest_turn,
+                phase=phase,
+                player_count=setup.player_count,
+                index=index,
+            )
+        else:
+            raise _compatibility_error(index, "event class is not part of public history")
+    legal_max_bid_by_seat = (
+        tuple(cash + _ACTION_CREDIT_BY_ID[latest_turn.action_id] for cash in cash_by_seat)
+        if phase == "turn_open" and latest_turn is not None
+        else None
+    )
+    visible_resource_ids = _visible_resource_ids(latest_turn, phase)
+    public_biddable_resource_count = sum(
+        count for row in won_resource_counts_by_seat for count in row
+    ) + len(visible_resource_ids)
+    return ValidatedPublicHistory(
+        setup=setup,
+        phase=phase,
+        latest_turn=latest_turn,
+        tiebreak_seat=tiebreak_seat,
+        cash_by_seat=tuple(cash_by_seat),
+        won_resource_counts_by_seat=tuple(map(tuple, won_resource_counts_by_seat)),
+        revealed_info_counts_by_seat=tuple(map(tuple, revealed_info_counts_by_seat)),
+        owned_objective_ids_by_seat=tuple(map(tuple, owned_objective_ids_by_seat)),
+        loan_principal_by_seat=tuple(loan_principal_by_seat),
+        investment_value_by_seat=tuple(investment_value_by_seat),
+        legal_max_bid_by_seat=legal_max_bid_by_seat,
+        visible_resource_ids=visible_resource_ids,
+        biddable_resource_budget=_biddable_resource_budget(setup.player_count),
+        public_biddable_resource_count=public_biddable_resource_count,
+        resolved_turn_count=resolved_turn_count,
+        seen_action_counts=tuple(seen_action_counts),
+    )
+
+
+def _validate_resource_carry(
+    previous: PublicTurnOpened | None,
+    current: PublicTurnOpened,
+    *,
+    index: int,
+) -> None:
+    if previous is None:
+        return
+    if previous.action_id == _AUCTION_TWO and previous.resource_ids[1] == 0:
+        raise _compatibility_error(
+            index, "terminal one-card Auction2 cannot be followed by another turn"
+        )
+    if previous.action_id == _AUCTION_ONE and current.resource_ids[0] != previous.resource_ids[1]:
+        raise _compatibility_error(index, "resources contradict the one-card auction carry")
+    if previous.action_id not in (_AUCTION_ONE, _AUCTION_TWO) and (
+        current.resource_ids != previous.resource_ids
+    ):
+        raise _compatibility_error(index, "resources change after a non-resource action")
+
+
+def _require_known_resources_fit_deck(
+    won_by_seat: list[list[int]],
+    revealed_by_seat: list[list[int]],
+    *,
+    turn: PublicTurnOpened | None,
+    phase: PublicHistoryPhase,
+    player_count: int,
+    index: int,
+) -> None:
+    visible_resource_ids = _visible_resource_ids(turn, phase)
+    known_by_suit = tuple(
+        sum(row[suit_index] for row in won_by_seat)
+        + sum(row[suit_index] for row in revealed_by_seat)
+        + visible_resource_ids.count(suit_index + 1)
+        for suit_index in range(_SUIT_COUNT)
+    )
+    if any(
+        known > available
+        for known, available in zip(known_by_suit, _RESOURCE_COUNT_BY_SUIT, strict=True)
+    ):
+        raise _compatibility_error(index, "public resources exceed the finite SDK deck")
+    public_biddable_resource_count = sum(count for row in won_by_seat for count in row) + len(
+        visible_resource_ids
+    )
+    if public_biddable_resource_count > _biddable_resource_budget(player_count):
+        raise _compatibility_error(
+            index, "won resources and visible offer exceed the SDK biddable-card budget"
+        )
+
+
+def _biddable_resource_budget(player_count: int) -> int:
+    return len(ITEM_DECK_SUITS) - player_count * INFO_CARDS_PER_PLAYER[player_count]
+
+
+def _visible_resource_ids(
+    turn: PublicTurnOpened | None,
+    phase: PublicHistoryPhase,
+) -> tuple[int, ...]:
+    if turn is None:
+        return ()
+    if phase == "turn_open":
+        return tuple(suit_id for suit_id in turn.resource_ids if suit_id)
+    if turn.action_id == _AUCTION_ONE:
+        return tuple(suit_id for suit_id in turn.resource_ids[1:] if suit_id)
+    if turn.action_id == _AUCTION_TWO:
+        return ()
+    return tuple(suit_id for suit_id in turn.resource_ids if suit_id)
 
 
 def _common_events(frame: object) -> tuple[object, ...]:
@@ -239,6 +565,24 @@ def _attribute(event: object, name: str, index: int) -> object:
         return getattr(event, name)
     except AttributeError as error:
         raise _compatibility_error(index, f"missing required field {name!r}") from error
+
+
+def _require_event_kind(
+    event: PublicEvent,
+    expected: PublicEventKind,
+    *,
+    index: int,
+) -> None:
+    if event.kind is not expected:
+        raise _compatibility_error(index, "event class and kind disagree")
+
+
+def _is_integer(value: object) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def _is_integer_tuple(value: object) -> bool:
+    return isinstance(value, tuple) and all(_is_integer(item) for item in value)
 
 
 def _compatibility_error(index: int, message: str) -> PublicHistoryCompatibilityError:
