@@ -1,16 +1,20 @@
 from __future__ import annotations
 
+import multiprocessing
+from unittest.mock import Mock
+
 import pytest
 
 torch = pytest.importorskip("torch")
 
 from garboid_pocketrocks.neural.collector import collect_self_play  # noqa: E402
 from garboid_pocketrocks.neural.config import (  # noqa: E402
-    stage1_model_config,
     training_encoder_config,
+    training_model_config,
 )
 from garboid_pocketrocks.neural.model import NeuralPolicy  # noqa: E402
 from garboid_pocketrocks.neural.parallel import (  # noqa: E402
+    _spawn_plan_workers,
     collect_self_play_parallel,
 )
 from garboid_pocketrocks.neural.planning import plan_mirror_episodes  # noqa: E402
@@ -30,10 +34,45 @@ def _records(rollout: RolloutBatch) -> tuple[tuple[int, int, int, float], ...]:
     )
 
 
+def test_plan_worker_partial_startup_failure_cleans_up(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    parents = (Mock(), Mock())
+    children = (Mock(), Mock())
+    first_process = Mock()
+    first_process.is_alive.side_effect = (True, False)
+    startup_error = RuntimeError("second worker failed to start")
+    second_process = Mock()
+    second_process.start.side_effect = startup_error
+    context = Mock()
+    context.Pipe.side_effect = tuple(zip(parents, children, strict=True))
+    context.Process.side_effect = (first_process, second_process)
+    monkeypatch.setattr(
+        multiprocessing,
+        "get_context",
+        lambda method: context,
+    )
+
+    with pytest.raises(RuntimeError) as raised:
+        _spawn_plan_workers(
+            ((), ()),
+            encoder_config=training_encoder_config(),
+            reward_config=RewardConfig(),
+            active_games_per_worker=1,
+        )
+
+    assert raised.value is startup_error
+    first_process.terminate.assert_called_once_with()
+    first_process.join.assert_called_once_with(timeout=5.0)
+    second_process.is_alive.assert_not_called()
+    for endpoint in (*parents, *children):
+        endpoint.close.assert_called_once_with()
+
+
 def test_spawned_workers_match_serial_seeded_rollout() -> None:
     torch.manual_seed(93)
     config = training_encoder_config()
-    model = NeuralPolicy(config, stage1_model_config())
+    model = NeuralPolicy(config, training_model_config("small"))
     plans = plan_mirror_episodes(
         root_seed=93,
         update_index=0,

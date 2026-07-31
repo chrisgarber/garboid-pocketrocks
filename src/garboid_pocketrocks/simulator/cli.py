@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from garboid_pocketrocks.bots import BOT_SPECS_BY_NAME
+from garboid_pocketrocks.knowledge import ruleset_name, value_chart_from_ruleset_name
 from garboid_pocketrocks.simulator.monte_carlo import (
     MonteCarloConfig,
     MonteCarloResult,
@@ -49,7 +50,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument(
         "--ruleset",
-        choices=tuple(f"live-{chart}" for chart in "ABCDE"),
+        choices=tuple(ruleset_name(chart) for chart in "ABCDE"),
         default="live-A",
     )
     parser.add_argument("--workers", type=_positive_int, default=1)
@@ -133,7 +134,7 @@ def main() -> None:
         bot_specs=tuple(_BOT_REGISTRY[name] for name in args.bots),
         games=args.games,
         player_counts=(args.players,),
-        value_charts=(args.ruleset.removeprefix("live-"),),
+        value_charts=(value_chart_from_ruleset_name(args.ruleset),),
         root_seed=args.seed,
         capture_replays=args.replay_dir is not None,
     )

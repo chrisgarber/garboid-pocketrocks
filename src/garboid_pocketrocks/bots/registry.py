@@ -4,6 +4,7 @@ from collections.abc import Mapping
 from types import MappingProxyType
 
 from garboid_pocketrocks.bots.base import BotSpec
+from garboid_pocketrocks.bots.fixed_bid import FIXED_BID_BOT_SPEC
 from garboid_pocketrocks.bots.heuristic import (
     AGGRESSIVE_HEURISTIC_BOT_SPEC,
     AGGRESSIVE_HEURISTIC_V1_BOT_SPEC,
@@ -24,6 +25,7 @@ from garboid_pocketrocks.neural.tournament_bot import (
 
 BOT_SPECS = (
     BotSpec.from_bot_class(RandomBot),
+    FIXED_BID_BOT_SPEC,
     AGGRESSIVE_HEURISTIC_BOT_SPEC,
     BALANCED_HEURISTIC_BOT_SPEC,
     PASSIVE_HEURISTIC_BOT_SPEC,
@@ -40,6 +42,7 @@ BOT_SPECS = (
 
 DEFAULT_TOURNAMENT_BOT_SPECS = (
     BOT_SPECS[0],
+    FIXED_BID_BOT_SPEC,
     AGGRESSIVE_HEURISTIC_V1_BOT_SPEC,
     BALANCED_HEURISTIC_V1_BOT_SPEC,
     PASSIVE_HEURISTIC_V1_BOT_SPEC,

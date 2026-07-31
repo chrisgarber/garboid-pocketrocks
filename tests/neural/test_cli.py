@@ -15,8 +15,9 @@ def test_cli_exposes_all_training_commands(
     assert main(["--help"]) == 0
 
     output = capsys.readouterr().out
-    for command in ("smoke", "train", "resume", "evaluate", "inspect"):
+    for command in ("smoke", "train", "resume", "inspect"):
         assert command in output
+    assert "evaluate" not in output
 
 
 def test_resume_help_accepts_a_long_run_config(
@@ -37,17 +38,22 @@ def test_low_volume_smoke_cli_writes_reloadable_checkpoint(tmp_path: Path) -> No
             str(output_dir),
             "--seed",
             "42",
-            "--updates",
+            "--device",
+            "cpu",
+            "--workers",
             "1",
-            "--games-per-update",
+            "--games-per-cell",
             "1",
         ]
     )
 
     assert exit_code == 0
-    assert (output_dir / "checkpoint/manifest.json").is_file()
-    assert (output_dir / "checkpoint/model.pt").is_file()
-    assert (output_dir / "smoke-result.json").is_file()
+    assert (output_dir / "self-play-smoke-result.json").is_file()
+    checkpoint = output_dir / "checkpoints/latest"
+    for artifact in ("manifest.json", "model.pt", "optimizer.pt", "rng.pt", "metrics.json"):
+        assert (checkpoint / artifact).is_file()
+    assert not (output_dir / "smoke-result.json").exists()
+    assert not (output_dir / "checkpoint").exists()
 
 
 def test_smoke_help_documents_exact_defaults(
@@ -57,17 +63,17 @@ def test_smoke_help_documents_exact_defaults(
 
     output = capsys.readouterr().out
     assert "--seed" in output and "42" in output
-    assert "--updates" in output and "2" in output
-    assert "--games-per-update" in output and "16" in output
-    assert "--device" in output and "cpu" in output
+    assert "--games-per-cell" in output
+    assert "--workers" in output
+    assert "--updates" not in output
+    assert "--games-per-update" not in output
 
 
 @pytest.mark.parametrize(
     "arguments",
     (
-        ("--device", "cuda"),
-        ("--updates", "0"),
-        ("--games-per-update", "0"),
+        ("--workers", "0"),
+        ("--games-per-cell", "0"),
     ),
 )
 def test_smoke_cli_rejects_out_of_scope_values(

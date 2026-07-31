@@ -31,7 +31,7 @@ def compute_gae(
     gamma: float,
     gae_lambda: float,
 ) -> AdvantageBatch:
-    """Compute Stage 1 gamma-one generalized advantage estimates."""
+    """Compute gamma-one generalized advantage estimates."""
 
     _validate_inputs(
         rewards,
@@ -100,6 +100,6 @@ def _validate_inputs(
         raise AdvantageError("bootstrap_value must be finite")
 
     if gamma != 1.0:
-        raise AdvantageError("Stage 1 requires gamma=1.0")
+        raise AdvantageError("training requires gamma=1.0")
     if not math.isfinite(gae_lambda):
         raise AdvantageError("gae_lambda must be finite")

@@ -247,6 +247,32 @@ class TrainingRunConfig:
         return cast(dict[str, object], serialized)
 
 
+def validate_runtime_support(config: TrainingRunConfig) -> None:
+    """Reject parsed settings that the current trainer does not execute."""
+
+    defaults = TrainingRunConfig()
+    unsupported: list[str] = []
+    if config.checkpoint_interval_seconds is not None:
+        unsupported.append("checkpoint_interval_seconds")
+    if config.keep_periodic_checkpoints != defaults.keep_periodic_checkpoints:
+        unsupported.append("keep_periodic_checkpoints")
+    if config.evaluation_interval_seconds is not None:
+        unsupported.append("evaluation_interval_seconds")
+    if config.evaluation_games_per_seat_cell != defaults.evaluation_games_per_seat_cell:
+        unsupported.append("evaluation_games_per_seat_cell")
+    if config.evaluate_at_start:
+        unsupported.append("evaluate_at_start")
+    if config.evaluate_at_end:
+        unsupported.append("evaluate_at_end")
+    if config.league_fraction != 0.0:
+        unsupported.append("league_fraction")
+    if unsupported:
+        raise ValueError(
+            "training configuration requests unsupported runtime controls: "
+            + ", ".join(unsupported)
+        )
+
+
 def _reject_unknown(
     payload: dict[str, object],
     expected: set[str],

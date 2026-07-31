@@ -38,6 +38,7 @@ from garboid_pocketrocks.neural.run_config import (
     DeviceName,
     ParallelConfig,
     TrainingRunConfig,
+    validate_runtime_support,
 )
 from garboid_pocketrocks.neural.seeding import (
     configure_torch_runtime,
@@ -78,6 +79,7 @@ def train(
 ) -> TrainingRunResult:
     """Start a new self-play lineage and stop only at an update boundary."""
 
+    validate_runtime_support(config)
     run_dir = _prepare_run_dir(output_dir)
     configure_torch_runtime(
         config.root_seed,
@@ -132,7 +134,6 @@ def resume(
 ) -> TrainingRunResult:
     """Resume exact model and optimizer state into a new run directory."""
 
-    run_dir = _prepare_run_dir(output_dir)
     loaded = load_training_checkpoint(
         checkpoint,
         device=torch.device("cpu"),
@@ -143,6 +144,8 @@ def resume(
         raise TrainerError("resume config cannot change the root seed")
     if training_model_config(config.model_profile) != loaded.model.model_config:
         raise TrainerError("resume config cannot change the model profile")
+    validate_runtime_support(config)
+    run_dir = _prepare_run_dir(output_dir)
     configure_torch_runtime(
         config.root_seed,
         deterministic_algorithms=config.deterministic_algorithms,

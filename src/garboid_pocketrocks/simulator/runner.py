@@ -1,32 +1,22 @@
 from __future__ import annotations
 
-import random
 from collections.abc import Sequence
 from dataclasses import dataclass
-from enum import StrEnum
 
-from pocketrocks import BotDecision, DecisionContext
+from pocketrocks import BotDecision
 from pocketrocks.sim import TurnRecord
 
 from garboid_pocketrocks.adapters.public_history import public_history_from_sdk_events
-from garboid_pocketrocks.bots.base import BotBrain, BotSpec, HistoryAwareBotBrain
+from garboid_pocketrocks.bots.base import BotSpec
 from garboid_pocketrocks.knowledge import canonical_knowledge
+from garboid_pocketrocks.simulator.bot_execution import BotFault as BotFault
+from garboid_pocketrocks.simulator.bot_execution import FaultMode as FaultMode
+from garboid_pocketrocks.simulator.bot_execution import (
+    choose_brain_decision,
+    initialize_brains,
+)
 from garboid_pocketrocks.simulator.replay import MatchReplay
 from garboid_pocketrocks.simulator.session import SdkGameSession, SessionResult
-
-
-class FaultMode(StrEnum):
-    RAISE = "raise"
-    RECORD_AND_PASS = "record_and_pass"
-
-
-@dataclass(frozen=True, slots=True)
-class BotFault:
-    turn_index: int
-    seat: int
-    bot_name: str
-    error_type: str
-    message: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,23 +41,12 @@ class MatchRunner:
     ) -> MatchResult:
         if len(lineup) != player_count:
             raise ValueError(f"lineup has {len(lineup)} bots but player_count is {player_count}")
-        brain_rng = random.Random(seed)
-        brains: list[BotBrain | None] = []
-        faults: list[BotFault] = []
-        for seat, spec in enumerate(lineup):
-            try:
-                brains.append(spec.make_brain(seed=brain_rng.randrange(2**63)))
-            except Exception as error:
-                if fault_mode is FaultMode.RAISE:
-                    raise
-                brains.append(None)
-                _record_fault(
-                    faults,
-                    turn_index=0,
-                    seat=seat,
-                    bot_name=spec.name,
-                    error=error,
-                )
+        brains, construction_faults = initialize_brains(
+            lineup,
+            seed=seed,
+            fault_mode=fault_mode,
+        )
+        faults = list(construction_faults)
 
         session = SdkGameSession.start(
             player_count=player_count,
@@ -87,31 +66,17 @@ class MatchRunner:
             decisions_by_seat: dict[int, BotDecision] = {}
             history = public_history_from_sdk_events(session.events)
             for seat, context in session.pending.contexts:
-                brain = brains[seat]
-                if brain is None:
-                    decision = _fallback(context)
-                else:
-                    try:
-                        if isinstance(brain, HistoryAwareBotBrain):
-                            decision = brain.choose_decision_with_history(
-                                context,
-                                knowledge,
-                                history,
-                            )
-                        else:
-                            decision = brain.choose_decision(context, knowledge)
-                        context.validate(decision)
-                    except Exception as error:
-                        if fault_mode is FaultMode.RAISE:
-                            raise
-                        _record_fault(
-                            faults,
-                            turn_index=session.snapshot.turn_index,
-                            seat=seat,
-                            bot_name=lineup[seat].name,
-                            error=error,
-                        )
-                        decision = _fallback(context)
+                decision = choose_brain_decision(
+                    brain=brains[seat],
+                    context=context,
+                    knowledge=knowledge,
+                    history=history,
+                    fault_mode=fault_mode,
+                    faults=faults,
+                    turn_index=session.snapshot.turn_index,
+                    seat=seat,
+                    bot_name=lineup[seat].name,
+                )
                 decisions_by_seat[seat] = decision
             recorded = tuple(sorted(decisions_by_seat.items()))
             decisions.append((step_index, recorded))
@@ -140,28 +105,3 @@ class MatchRunner:
             faults=tuple(faults),
             replay=replay,
         )
-
-
-def _fallback(context: DecisionContext) -> BotDecision:
-    if context.decision_kind == "selectInfoToReveal":
-        return BotDecision.select_info_to_reveal(0)
-    return BotDecision.submit_bid(0)
-
-
-def _record_fault(
-    faults: list[BotFault],
-    *,
-    turn_index: int,
-    seat: int,
-    bot_name: str,
-    error: Exception,
-) -> None:
-    faults.append(
-        BotFault(
-            turn_index=turn_index,
-            seat=seat,
-            bot_name=bot_name,
-            error_type=type(error).__name__,
-            message=str(error),
-        )
-    )

@@ -1,12 +1,7 @@
 {
-  "checkpoint_interval_seconds": 900.0,
   "device": "auto",
   "deterministic_algorithms": false,
-  "evaluate_at_end": true,
-  "evaluation_games_per_seat_cell": 4,
-  "evaluation_interval_seconds": 1800.0,
   "games_per_cell": null,
-  "league_fraction": 0.2,
   "learner_threads": 4,
   "max_wall_seconds": 28800.0,
   "model_profile": "large",

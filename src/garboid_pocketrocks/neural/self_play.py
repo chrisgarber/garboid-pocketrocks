@@ -12,7 +12,10 @@ from pocketrocks.exceptions import InvalidBotDecision
 from garboid_pocketrocks.adapters.public_history import (
     public_history_from_sdk_events,
 )
-from garboid_pocketrocks.knowledge import canonical_knowledge
+from garboid_pocketrocks.knowledge import (
+    canonical_knowledge,
+    value_chart_from_ruleset_name,
+)
 from garboid_pocketrocks.neural.config import NeuralEncoderConfig
 from garboid_pocketrocks.neural.encoding import (
     NeuralObservation,
@@ -104,7 +107,7 @@ class SelfPlayGame:
         self.encoder = NeuralObservationEncoder(encoder_config, self.bounds)
         self.knowledge = canonical_knowledge(
             plan.player_count,
-            value_chart=plan.ruleset_name.removeprefix("live-"),
+            value_chart=value_chart_from_ruleset_name(plan.ruleset_name),
         )
         self.session = session
         self.reward_tracker = reward_tracker
@@ -132,7 +135,7 @@ class SelfPlayGame:
             raise SelfPlayError("episode ruleset is outside the encoder support")
         if plan.player_count not in encoder_config.supported_player_counts:
             raise SelfPlayError("episode player count is outside encoder support")
-        chart = plan.ruleset_name.removeprefix("live-")
+        chart = value_chart_from_ruleset_name(plan.ruleset_name)
         session = SdkGameSession.start(
             player_count=plan.player_count,
             seed=plan.engine_seed,

@@ -221,6 +221,10 @@ def test_aggregation_reconciles_games_seats_rulesets_and_decisions() -> None:
 
     result = MonteCarloRunner.run(config)
 
+    assert result.game_summaries
+    assert result.bot_statistics
+    assert not hasattr(result, "games")
+    assert not hasattr(result, "statistics")
     assert [game.game_index for game in result.game_summaries] == list(range(9))
     assert sum(statistics.games for statistics in result.bot_statistics) == 27
     for statistics in result.bot_statistics:
@@ -360,6 +364,29 @@ def test_faults_are_aggregated_for_the_responsible_bot() -> None:
     )
 
     assert raising.faults > 0
+
+
+def test_batched_fault_aggregation_matches_scalar() -> None:
+    config = MonteCarloConfig(
+        bot_specs=(
+            BotSpec("raising", "raising", _raising_brain),
+            _random_spec("one", "one"),
+            _random_spec("two", "two"),
+        ),
+        games=6,
+        player_counts=(3,),
+        value_charts=("A",),
+        root_seed=3,
+        fault_mode=FaultMode.RECORD_AND_PASS,
+    )
+    jobs = MonteCarloRunner.plan(config)
+
+    assert MonteCarloRunner.run_jobs(
+        config,
+        jobs,
+        workers=1,
+        batch_size=4,
+    ) == MonteCarloRunner.run_jobs(config, jobs, workers=1)
 
 
 class ScriptedMetricsBrain:

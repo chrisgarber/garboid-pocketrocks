@@ -32,8 +32,8 @@ from garboid_pocketrocks.neural.checkpoint import (  # noqa: E402
     save_inference_checkpoint,
 )
 from garboid_pocketrocks.neural.config import (  # noqa: E402
-    stage1_encoder_config,
-    stage1_model_config,
+    training_encoder_config,
+    training_model_config,
 )
 from garboid_pocketrocks.neural.encoding import (  # noqa: E402
     NeuralBatch,
@@ -47,7 +47,7 @@ from garboid_pocketrocks.training.bounds import EnvironmentBounds  # noqa: E402
 
 def _model() -> NeuralPolicy:
     torch.manual_seed(71)
-    model = NeuralPolicy(stage1_encoder_config(), stage1_model_config())
+    model = NeuralPolicy(training_encoder_config(), training_model_config("small"))
     model.eval()
     return model
 
@@ -114,7 +114,7 @@ def _history() -> PublicHistory:
 
 
 def _fixture_batch() -> NeuralBatch:
-    config = stage1_encoder_config()
+    config = training_encoder_config()
     bounds = EnvironmentBounds(config.max_bid, config.max_hand_size)
     observation = NeuralObservationEncoder(config, bounds).encode(
         _context(),
@@ -205,8 +205,14 @@ def test_checkpoint_contains_only_sorted_manifest_and_model_state(tmp_path: Path
     )
     assert payload["action_space_size"] == 106
     assert len(payload["action_space_hash"]) == 64
-    assert payload["supported_ruleset_names"] == ["live-A"]
-    assert payload["supported_player_counts"] == [3]
+    assert payload["supported_ruleset_names"] == [
+        "live-A",
+        "live-B",
+        "live-C",
+        "live-D",
+        "live-E",
+    ]
+    assert payload["supported_player_counts"] == [3, 4, 5]
     assert payload["root_seed"] == 42
     assert payload["completed_episodes"] == 32
     assert payload["completed_updates"] == 2

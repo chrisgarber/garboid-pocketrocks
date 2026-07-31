@@ -1,4 +1,4 @@
-"""Minimal, versioned inference checkpoints for Stage 1 neural policies."""
+"""Minimal, versioned inference checkpoints for neural policies."""
 
 from __future__ import annotations
 
@@ -210,7 +210,7 @@ def load_inference_checkpoint(
     *,
     device: torch.device,
 ) -> LoadedInferenceCheckpoint:
-    """Load and validate a trusted local Stage 1 inference checkpoint."""
+    """Load and validate a trusted local inference checkpoint."""
 
     if not path.is_dir():
         raise CheckpointError("checkpoint path must be a directory")

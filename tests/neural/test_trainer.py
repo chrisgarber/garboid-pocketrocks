@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import replace
 from pathlib import Path
 
@@ -10,6 +11,7 @@ pytest.importorskip("torch")
 from garboid_pocketrocks.neural.run_config import (  # noqa: E402
     ParallelConfig,
     TrainingRunConfig,
+    validate_runtime_support,
 )
 from garboid_pocketrocks.neural.trainer import (  # noqa: E402
     inspect_checkpoint,
@@ -69,13 +71,112 @@ def test_committed_profiles_have_exact_wall_envelopes() -> None:
     assert initial.max_wall_seconds == 600.0
     assert initial.model_profile == "medium"
     assert initial.target_decisions_per_update == 131_072
-    assert initial.checkpoint_interval_seconds == 120.0
     assert long.max_wall_seconds == 28_800.0
     assert long.model_profile == "large"
     assert long.target_decisions_per_update == 131_072
-    assert long.checkpoint_interval_seconds == 900.0
-    assert long.evaluation_interval_seconds == 1_800.0
     assert long.learner_threads == 4
+    for config in (initial, long):
+        assert config.checkpoint_interval_seconds is None
+        assert config.keep_periodic_checkpoints == 4
+        assert config.evaluation_interval_seconds is None
+        assert config.evaluation_games_per_seat_cell == 2
+        assert not config.evaluate_at_start
+        assert not config.evaluate_at_end
+        assert config.league_fraction == 0.0
+        validate_runtime_support(config)
+
+
+@pytest.mark.parametrize(
+    ("config", "field"),
+    (
+        (
+            replace(TrainingRunConfig(), checkpoint_interval_seconds=60.0),
+            "checkpoint_interval_seconds",
+        ),
+        (
+            replace(TrainingRunConfig(), keep_periodic_checkpoints=2),
+            "keep_periodic_checkpoints",
+        ),
+        (
+            replace(TrainingRunConfig(), evaluation_interval_seconds=60.0),
+            "evaluation_interval_seconds",
+        ),
+        (
+            replace(TrainingRunConfig(), evaluation_games_per_seat_cell=4),
+            "evaluation_games_per_seat_cell",
+        ),
+        (replace(TrainingRunConfig(), evaluate_at_start=True), "evaluate_at_start"),
+        (replace(TrainingRunConfig(), evaluate_at_end=True), "evaluate_at_end"),
+        (replace(TrainingRunConfig(), league_fraction=0.2), "league_fraction"),
+    ),
+)
+def test_runtime_support_rejects_ignored_controls(
+    config: TrainingRunConfig,
+    field: str,
+) -> None:
+    with pytest.raises(ValueError, match=field):
+        validate_runtime_support(config)
+
+
+def test_train_rejects_unsupported_controls_before_creating_output(
+    tmp_path: Path,
+) -> None:
+    output = tmp_path / "must-not-exist"
+
+    with pytest.raises(ValueError, match="league_fraction"):
+        train(
+            replace(
+                TrainingRunConfig(),
+                league_fraction=0.2,
+            ),
+            output,
+        )
+
+    assert not output.exists()
+
+
+def test_resume_rejects_historical_unsupported_controls_before_creating_output(
+    tmp_path: Path,
+) -> None:
+    config = replace(
+        TrainingRunConfig(),
+        device="cpu",
+        games_per_cell=1,
+        max_updates=1,
+        parallel=ParallelConfig(
+            workers=1,
+            active_games_per_worker=4,
+            max_inference_batch=32,
+        ),
+    )
+    checkpoint = train(config, tmp_path / "source").final_checkpoint
+    manifest_path = checkpoint / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["run_config"].update(
+        {
+            "checkpoint_interval_seconds": 60.0,
+            "keep_periodic_checkpoints": 2,
+            "evaluation_interval_seconds": 120.0,
+            "evaluation_games_per_seat_cell": 4,
+            "evaluate_at_start": True,
+            "evaluate_at_end": True,
+            "league_fraction": 0.2,
+        }
+    )
+    manifest_path.write_text(
+        json.dumps(manifest, allow_nan=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    output = tmp_path / "must-not-exist"
+
+    with pytest.raises(ValueError, match="checkpoint_interval_seconds"):
+        resume(
+            checkpoint,
+            output,
+            max_additional_updates=1,
+        )
+
+    assert not output.exists()
 
 
 def test_target_decisions_use_measured_decisions_per_game() -> None:
