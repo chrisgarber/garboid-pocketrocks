@@ -147,7 +147,7 @@ def test_phase_aware_profile_returns_the_expert_for_each_phase() -> None:
     assert profile.profile_for_phase("late") is late
     assert profile.phase_selector == "public-resource-horizon-v1"
     with pytest.raises(FrozenInstanceError):
-        profile.early = middle
+        profile.early = middle  # type: ignore[misc]
 
 
 @pytest.mark.parametrize("name", ("", "custom", "Balanced"))
@@ -183,7 +183,7 @@ def test_phase_aware_profile_rejects_an_unknown_phase() -> None:
     profile = profile_class("balanced", expert, expert, expert)
 
     with pytest.raises(ValueError, match="phase"):
-        profile.profile_for_phase("endgame")
+        profile.profile_for_phase("endgame")  # type: ignore[arg-type]
 
 
 def test_phase_aware_profile_rejects_an_alternate_selector() -> None:

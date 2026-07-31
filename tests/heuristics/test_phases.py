@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from typing import Any, cast
 
 import pytest
 from pocketrocks import ActionId
@@ -164,8 +165,8 @@ def test_public_horizon_rejects_inconsistent_public_inputs(
     ruleset_change: dict[str, object],
     message: str,
 ) -> None:
-    context = replace(make_context(), **context_change)
-    ruleset = replace(canonical_knowledge(3), **ruleset_change)
+    context = replace(make_context(), **cast(Any, context_change))
+    ruleset = replace(canonical_knowledge(3), **cast(Any, ruleset_change))
 
     with pytest.raises(ValueError, match=message):
         public_resource_horizon(context, ruleset)

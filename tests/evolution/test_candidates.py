@@ -16,6 +16,7 @@ from garboid_pocketrocks.bots.heuristic import (
     HeuristicBotBrain,
     PhaseAwareHeuristicBotBrain,
 )
+from garboid_pocketrocks.diagnostics.trace import PhaseAwareHeuristicBidExplanation
 from garboid_pocketrocks.evolution.candidates import (
     CoefficientGenome,
     HeuristicCandidate,
@@ -777,7 +778,7 @@ def test_phase_candidate_spec_is_picklable_local_and_matches_direct_brain(
             _knowledge(),
             (),
         )
-        assert explained.explanation is not None
+        assert isinstance(explained.explanation, PhaseAwareHeuristicBidExplanation)
         assert explained.explanation.selected_expert_phase == expected_phase
 
 

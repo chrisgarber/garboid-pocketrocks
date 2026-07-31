@@ -3,6 +3,7 @@ from __future__ import annotations
 import pickle
 from collections.abc import Callable
 from dataclasses import replace
+from typing import cast
 
 import pytest
 from pocketrocks import OBJECTIVES, ActionId, BotDecision, DecisionContext, Suit
@@ -43,8 +44,12 @@ from garboid_pocketrocks.bots.heuristic import (
     PASSIVE_HEURISTIC_V3_BOT_SPEC,
     HeuristicBotBrain,
 )
-from garboid_pocketrocks.diagnostics.trace import HeuristicBidExplanation
+from garboid_pocketrocks.diagnostics.trace import (
+    HeuristicBidExplanation,
+    PhaseAwareHeuristicBidExplanation,
+)
 from garboid_pocketrocks.heuristics.errors import HeuristicInputError
+from garboid_pocketrocks.heuristics.phases import HeuristicPhase, PublicResourceHorizon
 from garboid_pocketrocks.heuristics.profiles import (
     BALANCED_PROFILE,
     HEURISTIC_V1,
@@ -558,8 +563,8 @@ def test_phase_aware_brain_matches_the_selected_ordinary_expert(
     ).choose_explained_decision(context, knowledge, ())
 
     assert actual.decision == expected.decision
-    assert actual.explanation is not None
-    assert expected.explanation is not None
+    assert isinstance(actual.explanation, PhaseAwareHeuristicBidExplanation)
+    assert isinstance(expected.explanation, HeuristicBidExplanation)
     assert actual.explanation.selected_expert_phase == expected_phase
     assert actual.explanation.future_biddable_resources == future_resources
     assert actual.explanation.total_biddable_resources == 15
@@ -590,14 +595,17 @@ def test_phase_aware_brain_selects_and_values_exactly_once(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     context, knowledge = _context_with_future_resources(5)
-    original_select = heuristic_module.select_expert_phase
+    original_select = cast(
+        Callable[[PublicResourceHorizon], HeuristicPhase],
+        heuristic_module.__dict__["select_expert_phase"],
+    )
     original_evaluate = HeuristicValuator.evaluate_bid
     selections = []
     evaluations = []
 
-    def record_selection(horizon: object) -> str:
+    def record_selection(horizon: PublicResourceHorizon) -> HeuristicPhase:
         selections.append(horizon)
-        return original_select(horizon)  # type: ignore[arg-type]
+        return original_select(horizon)
 
     def record_evaluation(
         valuator: HeuristicValuator,

@@ -66,6 +66,7 @@ def test_ranks_by_exact_fitness_then_coefficients_and_identity() -> None:
         identity_winner.candidate.identity,
         identity_loser.candidate.identity,
     )
+    assert isinstance(rating_winner.candidate, HeuristicCandidate)
     assert rating_winner.ranking_key.as_tuple() == (
         -11.0,
         -0.0,
