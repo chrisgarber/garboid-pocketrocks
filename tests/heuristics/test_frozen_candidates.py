@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import hashlib
 import json
 import pickle
@@ -211,6 +212,20 @@ EXPECTED_V4_PROVENANCE: dict[str, dict[str, Any]] = {
         },
     },
 }
+EXPECTED_V4_PHASE_OUTCOME_DIGESTS = {
+    EXPECTED_V4_IDENTITIES[0]: "b5b2f0a1264120070ab3cf700f8fe54c6c50f4f23a8a399cfc2741276cff168f",
+    EXPECTED_V4_IDENTITIES[1]: "fedc33758460714c2adf135270d5445fa46a9b6c083116ce7d433fc4ad61c70a",
+    EXPECTED_V4_IDENTITIES[2]: "34bd3041dc5e1d5d17afbe70a9de86b50feb7460279d4f81f00fc16931d03936",
+}
+SAFE_PHASE_OUTCOME_FIELDS = (
+    "selected_expert_phase",
+    "decision_count",
+    "eventual_final_money_sum",
+    "eventual_normalized_finish_sum",
+    "outright_win_decision_count",
+    "tied_first_decision_count",
+    "decisions_from_faulted_game_seat",
+)
 SYNTHETIC_V4_EXPERTS = {
     "early": {
         "liquidity_strength": "0.3",
@@ -512,7 +527,6 @@ def test_catalog_files_are_exact_copies_of_committed_development_freezes() -> No
             == entry["development_games_sha256"]
         )
         for artifact_name, catalog_field in (
-            ("winner-decision-slices.csv", "winner_decision_slices_sha256"),
             ("winner-diagnostics.json", "winner_diagnostics_json_sha256"),
             ("winner-diagnostics.md", "winner_diagnostics_markdown_sha256"),
         ):
@@ -521,6 +535,91 @@ def test_catalog_files_are_exact_copies_of_committed_development_freezes() -> No
                 == expected["diagnostics"][artifact_name]
                 == entry[catalog_field]
             )
+
+
+@pytest.mark.parametrize("identity", EXPECTED_V4_IDENTITIES)
+def test_v4_privacy_redaction_withholds_detailed_slices_and_publishes_phase_totals(
+    identity: str,
+) -> None:
+    expected = EXPECTED_V4_PROVENANCE[identity]
+    search_dir = BENCHMARK_DIR / expected["search_name"]
+    detailed_slices = search_dir / "winner-decision-slices.csv"
+    replacement = search_dir / "winner-phase-outcomes.csv"
+    redaction_path = search_dir / "privacy-redaction.json"
+    diagnostics_path = search_dir / "winner-diagnostics.json"
+    diagnostics = json.loads(diagnostics_path.read_text(encoding="utf-8"))
+    redaction = json.loads(redaction_path.read_text(encoding="utf-8"))
+    frozen = json.loads((search_dir / "frozen-candidate.json").read_text(encoding="utf-8"))
+    catalog = json.loads((CATALOG_DIR / "index.json").read_text(encoding="utf-8"))
+    catalog_entry = next(entry for entry in catalog["candidates"] if entry["identity"] == identity)
+    report = json.loads((search_dir / "search-report.json").read_text(encoding="utf-8"))
+    report_digests = {
+        artifact["name"]: artifact["sha256"]
+        for artifact in report["winner_diagnostics"]["artifacts"]
+    }
+    withheld_digest = expected["diagnostics"]["winner-decision-slices.csv"]
+
+    assert not detailed_slices.exists()
+    assert frozen["source_evidence"]["winner_diagnostics"]["winner-decision-slices.csv"] == (
+        withheld_digest
+    )
+    assert catalog_entry["winner_decision_slices_sha256"] == withheld_digest
+    assert report_digests["winner-decision-slices.csv"] == withheld_digest
+
+    assert set(redaction) == {
+        "promotion_result_changed",
+        "reason",
+        "reason_code",
+        "replacement_artifact",
+        "replacement_basis",
+        "schema_version",
+        "search_name",
+        "search_selection_changed",
+        "surviving_diagnostic_artifacts",
+        "withheld_artifact",
+    }
+    assert redaction["schema_version"] == 1
+    assert redaction["search_name"] == expected["search_name"]
+    assert redaction["reason_code"] == "withhold_high_dimensional_singleton_decision_slices"
+    assert redaction["reason"] == (
+        "The detailed slice table grouped decisions so narrowly that most rows represented "
+        "one decision and could be linked to reproducible game seeds."
+    )
+    assert redaction["replacement_basis"] == (
+        "winner-phase-outcomes.csv is a deterministic three-row projection of phase_outcomes "
+        "in winner-diagnostics.json; no simulation was rerun."
+    )
+    assert redaction["search_selection_changed"] is False
+    assert redaction["promotion_result_changed"] is False
+    assert redaction["withheld_artifact"] == {
+        "name": "winner-decision-slices.csv",
+        "sha256": withheld_digest,
+    }
+
+    replacement_bytes = replacement.read_bytes()
+    replacement_digest = hashlib.sha256(replacement_bytes).hexdigest()
+    assert redaction["replacement_artifact"] == {
+        "name": "winner-phase-outcomes.csv",
+        "sha256": EXPECTED_V4_PHASE_OUTCOME_DIGESTS[identity],
+    }
+    assert replacement_digest == EXPECTED_V4_PHASE_OUTCOME_DIGESTS[identity]
+    assert replacement_bytes.endswith(b"\n")
+    assert b"\r" not in replacement_bytes
+
+    reader = csv.DictReader(replacement_bytes.decode("utf-8").splitlines())
+    rows = list(reader)
+    assert tuple(reader.fieldnames or ()) == SAFE_PHASE_OUTCOME_FIELDS
+    assert len(rows) == 3
+    assert rows == [
+        {field: str(outcome[field]) for field in SAFE_PHASE_OUTCOME_FIELDS}
+        for outcome in diagnostics["phase_outcomes"]
+    ]
+
+    surviving = redaction["surviving_diagnostic_artifacts"]
+    assert set(surviving) == {"winner-diagnostics.json", "winner-diagnostics.md"}
+    for artifact_name, digest in surviving.items():
+        assert hashlib.sha256((search_dir / artifact_name).read_bytes()).hexdigest() == digest
+        assert expected["diagnostics"][artifact_name] == digest
 
 
 def test_frozen_specs_are_picklable_local_only_and_not_released() -> None:

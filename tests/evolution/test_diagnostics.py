@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import csv
+import io
+import json
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import replace
@@ -30,6 +33,17 @@ from .test_runner import (
     _small_phase_inputs,
 )
 
+_PHASE_OUTCOME_FIELDS = (
+    "selected_expert_phase",
+    "contributing_game_count",
+    "decision_count",
+    "eventual_final_money_sum",
+    "eventual_normalized_finish_sum",
+    "outright_win_decision_count",
+    "tied_first_decision_count",
+    "decisions_from_faulted_game_seat",
+)
+
 
 @pytest.fixture(scope="module")
 def frozen_phase_run() -> SearchRun:
@@ -55,6 +69,11 @@ def _tiny_diagnostics_contract() -> Iterator[None]:
             diagnostics_module,
             "_require_exact_winner_case_count",
             return_value=None,
+        ),
+        patch.object(
+            diagnostics_module,
+            "_MIN_SAFE_CONTRIBUTING_GAMES",
+            1,
         ),
     ):
         yield
@@ -286,6 +305,9 @@ def test_retained_diagnostics_are_aggregate_only_and_digest_bound(
 ) -> None:
     diagnostics = _run_tiny_diagnostics(frozen_phase_run)
     retained = "\n".join(content for _, content in diagnostics.named_contents())
+    reader = csv.DictReader(io.StringIO(diagnostics.decision_slices_csv))
+    phase_rows = list(reader)
+    payload = json.loads(diagnostics.diagnostics_json)
     forbidden_private_sentinels = (
         "decision_traces",
         "game_summaries",
@@ -296,8 +318,65 @@ def test_retained_diagnostics_are_aggregate_only_and_digest_bound(
         "private_hand",
         "snapshot",
     )
+    forbidden_join_dimensions = {
+        "bot_name",
+        "bot_id",
+        "game_phase",
+        "chart",
+        "player_count",
+        "decision_kind",
+        "auction_action",
+        "selected_action_kind",
+        "future_biddable_resources",
+        "total_biddable_resources",
+        "actor_owned_objectives",
+        "opponent_owned_objectives",
+        "unclaimed_objectives",
+        "seat",
+        "opponent_bot_ids",
+        "pass_count",
+        "selected_value_count",
+        "selected_value_sum",
+    }
 
     assert all(sentinel not in retained for sentinel in forbidden_private_sentinels)
+    assert tuple(reader.fieldnames or ()) == _PHASE_OUTCOME_FIELDS
+    assert forbidden_join_dimensions.isdisjoint(reader.fieldnames or ())
+    assert [row["selected_expert_phase"] for row in phase_rows] == [
+        "early",
+        "middle",
+        "late",
+    ]
+    assert payload["schema_version"] == 3
+    assert payload["aggregation"] == {
+        "unit": "selected_expert_phase",
+        "minimum_contributing_games": 1,
+    }
+    outcomes_by_phase = {
+        str(outcome.selected_expert_phase): outcome
+        for outcome in diagnostics.decision_report.phase_outcomes
+    }
+    json_by_phase = {
+        outcome["selected_expert_phase"]: outcome for outcome in payload["phase_outcomes"]
+    }
+    for row in phase_rows:
+        phase = row["selected_expert_phase"]
+        outcome = outcomes_by_phase[phase]
+        json_outcome = json_by_phase[phase]
+        assert int(row["contributing_game_count"]) == json_outcome["contributing_game_count"]
+        assert int(row["decision_count"]) == outcome.decision_count
+        assert int(row["eventual_final_money_sum"]) == outcome.eventual_final_money_sum
+        assert float(row["eventual_normalized_finish_sum"]) == pytest.approx(
+            outcome.eventual_normalized_finish_sum
+        )
+        assert int(row["outright_win_decision_count"]) == (outcome.outright_win_decision_count)
+        assert int(row["tied_first_decision_count"]) == outcome.tied_first_decision_count
+        assert int(row["decisions_from_faulted_game_seat"]) == (
+            outcome.decisions_from_faulted_game_seat
+        )
+        assert (
+            f"| {phase} | {row['contributing_game_count']} | {row['decision_count']} |"
+        ) in diagnostics.diagnostics_markdown
     assert tuple(name for name, _ in diagnostics.named_contents()) == (
         "winner-decision-slices.csv",
         "winner-diagnostics.json",
@@ -305,3 +384,19 @@ def test_retained_diagnostics_are_aggregate_only_and_digest_bound(
     )
     assert diagnostics.digests_by_name == dict(diagnostics.artifact_digests)
     assert len(diagnostics.digests_by_name) == 3
+
+
+def test_sparse_phase_aggregation_fails_closed(
+    frozen_phase_run: SearchRun,
+) -> None:
+    diagnostics = _run_tiny_diagnostics(frozen_phase_run)
+
+    assert diagnostics_module._MIN_SAFE_CONTRIBUTING_GAMES == 30
+    with pytest.raises(WinnerDiagnosticsError) as captured:
+        diagnostics_module._retained_diagnostic_contents(
+            frozen_phase_run,
+            decision_report=diagnostics.decision_report,
+        )
+
+    assert captured.value.code == "unsafe_diagnostic_aggregation"
+    assert str(diagnostics_module._MIN_SAFE_CONTRIBUTING_GAMES) in str(captured.value)

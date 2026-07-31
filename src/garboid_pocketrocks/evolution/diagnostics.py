@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import csv
 import hashlib
+import io
 import json
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
@@ -12,8 +14,8 @@ from garboid_pocketrocks.diagnostics.analysis import (
     DecisionReport,
     build_decision_report,
 )
-from garboid_pocketrocks.diagnostics.reporting import (
-    render_decision_artifacts,
+from garboid_pocketrocks.diagnostics.trace import (
+    PhaseAwareHeuristicBidExplanation,
 )
 from garboid_pocketrocks.evolution.candidates import (
     PhaseAwareHeuristicCandidate,
@@ -35,6 +37,17 @@ from garboid_pocketrocks.tournament.rating import (
     observations_from_games,
 )
 
+_MIN_SAFE_CONTRIBUTING_GAMES = 30
+_PHASE_OUTCOME_FIELDS = (
+    "selected_expert_phase",
+    "contributing_game_count",
+    "decision_count",
+    "eventual_final_money_sum",
+    "eventual_normalized_finish_sum",
+    "outright_win_decision_count",
+    "tied_first_decision_count",
+    "decisions_from_faulted_game_seat",
+)
 WINNER_DECISION_SLICES_NAME = "winner-decision-slices.csv"
 WINNER_DIAGNOSTICS_JSON_NAME = "winner-diagnostics.json"
 WINNER_DIAGNOSTICS_MARKDOWN_NAME = "winner-diagnostics.md"
@@ -155,7 +168,6 @@ def run_winner_diagnostics(
             decision_report,
             expected_games=len(diagnostic_plan.candidate_jobs),
         )
-        rendered = render_decision_artifacts(decision_report=decision_report)
     except WinnerDiagnosticsError:
         raise
     except Exception as error:
@@ -166,7 +178,6 @@ def run_winner_diagnostics(
     contents = _retained_diagnostic_contents(
         run,
         decision_report=decision_report,
-        decision_slices_csv=rendered.decision_slices_csv,
     )
     return WinnerDiagnostics(
         winner_identity=run.frozen_candidate.identity,
@@ -220,11 +231,9 @@ def validate_winner_diagnostics_evidence(
             canonical_report,
             expected_games=len(rebuilt_plan.candidate_jobs),
         )
-        rendered = render_decision_artifacts(decision_report=canonical_report)
         canonical_contents = _retained_diagnostic_contents(
             run,
             decision_report=canonical_report,
-            decision_slices_csv=rendered.decision_slices_csv,
         )
     except WinnerDiagnosticsError:
         raise
@@ -408,10 +417,15 @@ def _diagnostics_payload(
     run: SearchRun,
     *,
     decision_report: DecisionReport,
+    contributing_game_counts: Mapping[str, int],
 ) -> dict[str, object]:
     reconciliation = decision_report.reconciliation
     return {
-        "schema_version": 2,
+        "schema_version": 3,
+        "aggregation": {
+            "unit": "selected_expert_phase",
+            "minimum_contributing_games": _MIN_SAFE_CONTRIBUTING_GAMES,
+        },
         "winner_identity": run.frozen_candidate.identity
         if run.frozen_candidate is not None
         else None,
@@ -432,6 +446,7 @@ def _diagnostics_payload(
         "phase_outcomes": [
             {
                 "selected_expert_phase": outcome.selected_expert_phase,
+                "contributing_game_count": contributing_game_counts[outcome.selected_expert_phase],
                 "decision_count": outcome.decision_count,
                 "eventual_final_money_sum": outcome.eventual_final_money_sum,
                 "eventual_normalized_finish_sum": (outcome.eventual_normalized_finish_sum),
@@ -448,11 +463,19 @@ def _retained_diagnostic_contents(
     run: SearchRun,
     *,
     decision_report: DecisionReport,
-    decision_slices_csv: str,
 ) -> tuple[tuple[str, str], ...]:
+    contributing_game_counts = _phase_contributing_game_counts(decision_report)
+    phase_outcomes_csv = _render_phase_outcomes_csv(
+        decision_report,
+        contributing_game_counts=contributing_game_counts,
+    )
     summary_json = (
         json.dumps(
-            _diagnostics_payload(run, decision_report=decision_report),
+            _diagnostics_payload(
+                run,
+                decision_report=decision_report,
+                contributing_game_counts=contributing_game_counts,
+            ),
             allow_nan=False,
             indent=2,
             sort_keys=True,
@@ -460,24 +483,90 @@ def _retained_diagnostic_contents(
         + "\n"
     )
     return (
-        (WINNER_DECISION_SLICES_NAME, decision_slices_csv),
+        # The external filename is retained for frozen-provenance compatibility.
+        (WINNER_DECISION_SLICES_NAME, phase_outcomes_csv),
         (WINNER_DIAGNOSTICS_JSON_NAME, summary_json),
         (
             WINNER_DIAGNOSTICS_MARKDOWN_NAME,
-            _diagnostics_markdown(run, decision_report=decision_report),
+            _diagnostics_markdown(
+                run,
+                decision_report=decision_report,
+                contributing_game_counts=contributing_game_counts,
+            ),
         ),
     )
+
+
+def _phase_contributing_game_counts(
+    decision_report: DecisionReport,
+) -> dict[str, int]:
+    game_indexes_by_phase: dict[str, set[int]] = {
+        outcome.selected_expert_phase: set() for outcome in decision_report.phase_outcomes
+    }
+    for trace in decision_report.decision_traces:
+        explanation = trace.explanation
+        if not isinstance(explanation, PhaseAwareHeuristicBidExplanation):
+            continue
+        if trace.game_index is None:
+            raise WinnerDiagnosticsError(
+                "invalid_decision_reconciliation",
+                "phase-aware winner traces must identify their contributing game",
+            )
+        game_indexes_by_phase[explanation.selected_expert_phase].add(trace.game_index)
+
+    contributing_game_counts = {
+        phase: len(game_indexes) for phase, game_indexes in game_indexes_by_phase.items()
+    }
+    unsafe_phases = tuple(
+        phase
+        for phase, count in contributing_game_counts.items()
+        if count < _MIN_SAFE_CONTRIBUTING_GAMES
+    )
+    if unsafe_phases:
+        raise WinnerDiagnosticsError(
+            "unsafe_diagnostic_aggregation",
+            "winner diagnostic phase outcomes require at least "
+            f"{_MIN_SAFE_CONTRIBUTING_GAMES} contributing games per phase",
+        )
+    return contributing_game_counts
+
+
+def _render_phase_outcomes_csv(
+    decision_report: DecisionReport,
+    *,
+    contributing_game_counts: Mapping[str, int],
+) -> str:
+    stream = io.StringIO(newline="")
+    writer = csv.DictWriter(stream, fieldnames=_PHASE_OUTCOME_FIELDS)
+    writer.writeheader()
+    for outcome in decision_report.phase_outcomes:
+        writer.writerow(
+            {
+                "selected_expert_phase": outcome.selected_expert_phase,
+                "contributing_game_count": contributing_game_counts[outcome.selected_expert_phase],
+                "decision_count": outcome.decision_count,
+                "eventual_final_money_sum": outcome.eventual_final_money_sum,
+                "eventual_normalized_finish_sum": (outcome.eventual_normalized_finish_sum),
+                "outright_win_decision_count": outcome.outright_win_decision_count,
+                "tied_first_decision_count": outcome.tied_first_decision_count,
+                "decisions_from_faulted_game_seat": (outcome.decisions_from_faulted_game_seat),
+            }
+        )
+    return stream.getvalue()
 
 
 def _diagnostics_markdown(
     run: SearchRun,
     *,
     decision_report: DecisionReport,
+    contributing_game_counts: Mapping[str, int],
 ) -> str:
     reconciliation = decision_report.reconciliation
     rows = "\n".join(
         "| "
-        f"{outcome.selected_expert_phase} | {outcome.decision_count} | "
+        f"{outcome.selected_expert_phase} | "
+        f"{contributing_game_counts[outcome.selected_expert_phase]} | "
+        f"{outcome.decision_count} | "
         f"{outcome.eventual_final_money_sum} | "
         f"{outcome.eventual_normalized_finish_sum:.12g} | "
         f"{outcome.outright_win_decision_count} | "
@@ -494,9 +583,10 @@ def _diagnostics_markdown(
         f"- Games: {reconciliation.game_count}\n"
         f"- Reconciled decisions: {reconciliation.trace_decision_count}\n"
         f"- Expert selections: {reconciliation.selected_expert_decision_count}\n\n"
-        "| Expert phase | Decisions | Final-money sum | Normalized-finish sum | "
+        "| Expert phase | Contributing games | Decisions | Final-money sum | "
+        "Normalized-finish sum | "
         "Wins | Tied first | Faulted-seat decisions |\n"
-        "| --- | ---: | ---: | ---: | ---: | ---: | ---: |\n"
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n"
         f"{rows}\n"
     )
 

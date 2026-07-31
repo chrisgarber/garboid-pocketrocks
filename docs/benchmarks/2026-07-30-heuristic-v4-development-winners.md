@@ -76,6 +76,17 @@ The selected-expert counts reconcile to 3,730 decisions for each winner:
 aggregated by phase and does not contain raw per-decision traces or
 reproducible game seeds.
 
+The original `winner-decision-slices.csv` files were later withheld because
+their high-dimensional grouping left most rows with a single contributing
+decision that could be linked to reproducible development-game seeds. Their
+SHA-256 digests remain bound in the immutable search, frozen candidate,
+catalog, and promotion records as tombstones; the bytes are not published.
+Each search directory now contains a three-row `winner-phase-outcomes.csv`
+derived exactly from `winner-diagnostics.json` without rerunning a simulation,
+and a `privacy-redaction.json` record mapping the withheld digest to that safe
+replacement. This publication-only redaction changed neither search selection
+nor the held-out promotion result.
+
 | Personality | Phase | Selected-expert decisions | Eventual final-money sum | Eventual normalized-finish sum | Outright-win decisions | Tied-first decisions | Decisions from faulted game seats |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | Aggressive | Early | 1,272 | 100,979 | 1189.8333333333333 | 1,050 | 11 | 0 |
@@ -108,8 +119,11 @@ with zero decisions from faulted game seats.
 - [Winner diagnostics](evolution/aggressive-v4-search-v2/winner-diagnostics.json) —
   SHA-256
   `83d2a3043dd16d0fc30f7f47ee775e78cbaf781d396c2b8497c1c54ad46e5e0a`;
-  [aggregate decision slices](evolution/aggressive-v4-search-v2/winner-decision-slices.csv)
+  [phase outcomes](evolution/aggressive-v4-search-v2/winner-phase-outcomes.csv)
   SHA-256
+  `b5b2f0a1264120070ab3cf700f8fe54c6c50f4f23a8a399cfc2741276cff168f`;
+  [privacy redaction](evolution/aggressive-v4-search-v2/privacy-redaction.json).
+  The withheld slice digest is
   `bdb47a31da14ee95cddc9579b2dc477b6d6a04f99420ede12ebc7ccc3e81b07d`.
 
 ### Balanced
@@ -125,8 +139,11 @@ with zero decisions from faulted game seats.
 - [Winner diagnostics](evolution/balanced-v4-search-v2/winner-diagnostics.json) —
   SHA-256
   `4ff4b1694b7807e39b58556a050a03d5ed77f825505dff08f70db857712e1029`;
-  [aggregate decision slices](evolution/balanced-v4-search-v2/winner-decision-slices.csv)
+  [phase outcomes](evolution/balanced-v4-search-v2/winner-phase-outcomes.csv)
   SHA-256
+  `fedc33758460714c2adf135270d5445fa46a9b6c083116ce7d433fc4ad61c70a`;
+  [privacy redaction](evolution/balanced-v4-search-v2/privacy-redaction.json).
+  The withheld slice digest is
   `c6a6372898b25f26b7f34b14bca83743769492a68510f2f2f1aaf77c3f4a6e99`.
 
 ### Passive
@@ -142,6 +159,9 @@ with zero decisions from faulted game seats.
 - [Winner diagnostics](evolution/passive-v4-search-v2/winner-diagnostics.json) —
   SHA-256
   `82822bf049202cbaed6db262c5f307e97221cfc1cf7bd34afe1db76c194344d5`;
-  [aggregate decision slices](evolution/passive-v4-search-v2/winner-decision-slices.csv)
+  [phase outcomes](evolution/passive-v4-search-v2/winner-phase-outcomes.csv)
   SHA-256
+  `34bd3041dc5e1d5d17afbe70a9de86b50feb7460279d4f81f00fc16931d03936`;
+  [privacy redaction](evolution/passive-v4-search-v2/privacy-redaction.json).
+  The withheld slice digest is
   `04d94fb3d302a39517bc383cec38bcf751670ed91c220e31beb3cc9fdfbf4db1`.

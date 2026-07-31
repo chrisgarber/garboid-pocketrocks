@@ -141,6 +141,13 @@ once for that winner on the development corpus. The report records:
 - win and tied-first decision counts; and
 - faults and reconciliation totals.
 
+High-dimensional decision slices are reconciliation inputs, not publishable
+artifacts. They remain transient with the raw traces and game summaries.
+Published winner evidence groups only by `selected_expert_phase`, and each
+early, middle, and late aggregate must contain decisions from at least 30
+distinct contributing games. The contributing game identities are counted
+while the traces are in memory and are never serialized.
+
 This is descriptive evidence, not a causal estimate and not a second
 selection pass. No losing search candidate receives a decision-diagnostics
 run, and diagnostic results cannot trigger retuning.
@@ -330,19 +337,36 @@ Each complete search retains the existing authoritative artifact set:
   corpus; and
 - `frozen-candidate.json` — present only for an eligible development winner.
 
-The winner-only diagnostic run constructs and reconciles raw traces in
-temporary storage, then retains only privacy-safe aggregate evidence:
+The winner-only diagnostic run constructs and reconciles raw traces and
+detailed decision slices in temporary storage, then retains only privacy-safe
+phase aggregates:
 
-- `winner-decision-slices.csv`;
+- `winner-decision-slices.csv` — a legacy filename that now contains only the
+  three phase-outcome rows;
 - `winner-diagnostics.json`; and
 - `winner-diagnostics.md`.
 
-The search report points to the diagnostic generation and stores its artifact
-digests. No committed artifact combines per-decision rows with reproducible
-game seeds. Reporting stays canonical, finite, deterministic, and
-transactional. All files are rendered and validated before the prior known
-generation is replaced; a replacement failure restores the previous
-generation and preserves unrelated files.
+The CSV contains exactly one row for each selected expert phase and only the
+phase name, selection count, final-money and normalized-finish sums, win and
+tied-first counts, and faulted-seat decision count. It contains no bot, game,
+seed, chart, player-count, action, horizon, objective, seat, or opponent
+dimension. The search report points to the diagnostic generation and stores
+the safe artifact digests.
+
+Historical `winner-decision-slices.csv` files that contain detailed,
+high-dimensional rows are withheld rather than republished. A cryptographic
+tombstone records the withheld path and SHA-256 digest, the reason for
+withholding it, and the path and SHA-256 digest of the safe phase-aggregate
+replacement. The replacement is a deterministic projection of the already
+recorded phase outcomes. This correction never reruns or overwrites the
+one-shot development diagnostics or held-out promotion games, and it does not
+rewrite which evidence the original run consumed.
+
+No published artifact may contain per-decision or high-dimensional slice rows
+that can be joined to reproducible game seeds. Reporting stays canonical,
+finite, deterministic, and transactional. All files are rendered and
+validated before the prior known generation is replaced; a replacement
+failure restores the previous generation and preserves unrelated files.
 
 ## Frozen v4 candidates
 
@@ -418,8 +442,12 @@ Unit tests cover:
 - explanation/action agreement and exactly one policy evaluation;
 - separate legacy `game_phase` and nullable `selected_expert_phase`
   dimensions;
-- winner-only diagnostic selection counts, phase-sliced outcomes, and full
-  reconciliation;
+- transient detailed-slice reconciliation, winner-only phase aggregates with
+  at least 30 contributing games per phase, and exact selection and outcome
+  totals;
+- withholding of historical detailed winner CSVs with cryptographic
+  tombstones and deterministic safe replacements, without rerunning either
+  diagnostics or held-out games;
 - complete, canonical, transactional search and diagnostic artifacts;
 - schema-v2 frozen catalog tamper detection and strict promotion provenance;
   and

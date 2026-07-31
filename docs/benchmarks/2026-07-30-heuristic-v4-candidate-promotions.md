@@ -179,3 +179,14 @@ The promotion reports also bind the candidate-evaluation, selection-log,
 development-game, and three winner-diagnostic digests from the development
 searches. Those nested bindings make each held-out decision traceable back to
 the exact one-shot frozen candidate.
+
+One of those three historical diagnostic digests names
+`winner-decision-slices.csv`. The detailed slice bytes were withheld after
+review because their high-dimensional grouping left most rows with a single
+contributing decision that could be linked to reproducible development-game
+seeds. The digest remains as a tombstone so the frozen and promotion records
+stay immutable. Each development search publishes the safe three-row
+`winner-phase-outcomes.csv` projection of its existing
+`winner-diagnostics.json` and a `privacy-redaction.json` mapping instead. No
+simulation was rerun. The redaction changed neither the development winner nor
+any held-out result reported above.

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import hashlib
 import json
 import math
@@ -61,6 +62,16 @@ _ALL_PHASE_ARTIFACTS = (
     WINNER_DECISION_SLICES_NAME,
     WINNER_DIAGNOSTICS_JSON_NAME,
     WINNER_DIAGNOSTICS_MARKDOWN_NAME,
+)
+_PHASE_OUTCOME_FIELDS = (
+    "selected_expert_phase",
+    "contributing_game_count",
+    "decision_count",
+    "eventual_final_money_sum",
+    "eventual_normalized_finish_sum",
+    "outright_win_decision_count",
+    "tied_first_decision_count",
+    "decisions_from_faulted_game_seat",
 )
 
 
@@ -163,6 +174,11 @@ def _phase_report(
             "_require_exact_winner_case_count",
             return_value=None,
         ),
+        patch.object(
+            diagnostics_module,
+            "_MIN_SAFE_CONTRIBUTING_GAMES",
+            1,
+        ),
     ):
         return build_search_report(
             run,
@@ -184,6 +200,11 @@ def _canonical_winner_diagnostics(run: SearchRun) -> WinnerDiagnostics:
             diagnostics_module,
             "_require_exact_winner_case_count",
             return_value=None,
+        ),
+        patch.object(
+            diagnostics_module,
+            "_MIN_SAFE_CONTRIBUTING_GAMES",
+            1,
         ),
     ):
         return run_winner_diagnostics(
@@ -1021,6 +1042,10 @@ def test_phase_winner_artifacts_retain_only_aggregate_diagnostics(
     assert artifacts.winner_decision_slices_csv is not None
     assert artifacts.winner_diagnostics_json is not None
     assert artifacts.winner_diagnostics_markdown is not None
+    with artifacts.winner_decision_slices_csv.open(newline="") as stream:
+        reader = csv.DictReader(stream)
+        phase_rows = list(reader)
+    diagnostics_payload = json.loads(artifacts.winner_diagnostics_json.read_text())
     retained = "\n".join(
         path.read_text()
         for path in (
@@ -1043,6 +1068,30 @@ def test_phase_winner_artifacts_retain_only_aggregate_diagnostics(
             "snapshot",
         )
     )
+    assert tuple(reader.fieldnames or ()) == _PHASE_OUTCOME_FIELDS
+    assert len(phase_rows) == 3
+    assert diagnostics_payload["schema_version"] == 3
+    assert diagnostics_payload["aggregation"] == {
+        "unit": "selected_expert_phase",
+        "minimum_contributing_games": 1,
+    }
+    json_by_phase = {
+        row["selected_expert_phase"]: row for row in diagnostics_payload["phase_outcomes"]
+    }
+    for row in phase_rows:
+        json_row = json_by_phase[row["selected_expert_phase"]]
+        assert int(row["contributing_game_count"]) == json_row["contributing_game_count"]
+        assert int(row["decision_count"]) == json_row["decision_count"]
+        assert int(row["eventual_final_money_sum"]) == json_row["eventual_final_money_sum"]
+        assert float(row["eventual_normalized_finish_sum"]) == pytest.approx(
+            json_row["eventual_normalized_finish_sum"]
+        )
+        assert int(row["outright_win_decision_count"]) == json_row["outright_win_decision_count"]
+        assert int(row["tied_first_decision_count"]) == json_row["tied_first_decision_count"]
+        assert (
+            int(row["decisions_from_faulted_game_seat"])
+            == json_row["decisions_from_faulted_game_seat"]
+        )
 
 
 def test_nonfinite_evidence_fails_before_creating_output(

@@ -99,6 +99,11 @@ def _stub_execution(
             "_require_exact_winner_case_count",
             lambda *args, **kwargs: None,
         )
+        monkeypatch.setattr(
+            diagnostics_module,
+            "_MIN_SAFE_CONTRIBUTING_GAMES",
+            1,
+        )
         if run.frozen_candidate is not None:
             monkeypatch.setattr(
                 cli,

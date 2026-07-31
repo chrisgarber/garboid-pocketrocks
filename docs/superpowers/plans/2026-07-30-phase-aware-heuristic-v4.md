@@ -454,10 +454,14 @@ pytest, mypy, and Ruff.
   final-money, normalized-finish, win, tie, and fault outcome sums grouped by
   phase. After search selection, the evolution command reruns only the winner
   on its exact 240 development cases with tracing enabled, reconciles that
-  result in temporary storage, then writes only privacy-safe aggregate
-  `winner-decision-slices.csv`, `winner-diagnostics.json`, and
-  `winner-diagnostics.md` artifacts. The frozen winner report links every
-  retained diagnostic artifact digest.
+  result in temporary storage, and keeps the high-dimensional decision slices
+  transient. For schema compatibility, it writes the three-row phase outcome
+  table under the legacy `winner-decision-slices.csv` filename, alongside
+  `winner-diagnostics.json` and `winner-diagnostics.md`. These artifacts are
+  grouped solely by selected expert phase. Every early, middle, and late
+  aggregate must contain decisions from at least 30 distinct contributing
+  games; the game identities are counted in memory and never published. The
+  frozen winner report links every retained diagnostic artifact digest.
 
 - [ ] **Step 1: Write failing reconciliation/reporting tests**
 
@@ -470,6 +474,11 @@ pytest, mypy, and Ruff.
   `selected_expert_phase` column. Ordinary bots, reveals, invalid-input
   passes, and fault fallbacks leave that column empty and remain included in
   ordinary reconciliation totals without increasing expert selection counts.
+  For retained winner artifacts, assert an exact three-row phase-aggregate
+  schema, reject fewer than 30 distinct contributing games for any phase, and
+  forbid bot, game, seed, chart, player-count, action, horizon, objective,
+  seat, opponent, or private-state fields. Assert the detailed generic slices
+  are used for reconciliation only and never enter retained contents.
 
 - [ ] **Step 2: Run tests and verify RED**
 
@@ -491,11 +500,20 @@ pytest, mypy, and Ruff.
   adds the expert-phase column and stable sort key. Add a winner-only evolution
   diagnostic runner that rebuilds the selected candidate's exact development
   plan, enables tracing for those jobs, constructs the ordinary statistics
-  needed for reconciliation, and transactionally writes only the aggregate
-  slice/summary artifacts. Raw per-decision and per-game rows stay temporary
-  and are removed from the retained generation. Add retained content digests
-  to the frozen-winner report. Do not enable diagnostics for the baseline or
-  any losing proposal.
+  needed for reconciliation, counts distinct contributing games by phase, and
+  transactionally writes only the three-row phase-outcome CSV and aggregate
+  summaries. Raw per-decision, detailed-slice, and per-game rows stay
+  temporary and are removed from the retained generation. Add retained
+  content digests to the frozen-winner report. Do not enable diagnostics for
+  the baseline or any losing proposal.
+
+  Withhold any historical detailed `winner-decision-slices.csv` rather than
+  publishing or silently replacing it. Commit a cryptographic tombstone that
+  binds its historical path and SHA-256 digest to the safe phase-outcome
+  replacement and explains the privacy correction. Derive the replacement
+  deterministically from the already recorded phase aggregates. Do not rerun
+  or overwrite the one-shot development searches, winner diagnostics, or
+  held-out promotions.
 
 - [ ] **Step 4: Run tests and verify GREEN**
 
@@ -579,11 +597,15 @@ pytest, mypy, and Ruff.
 - [ ] **Step 5: Validate the three winner-only diagnostic generations**
 
   Each search command must have created diagnostics only for its selected
-  winner. Commit canonical traces/slices plus a short boundary summary showing
-  the precommitted integer rule, expert coefficients, selection counts, and
-  phase-sliced outcomes. Verify exact development-case coverage across A-E and
-  3/4/5, zero illegal decisions/faults, and content digests bound into each
-  frozen record.
+  winner. Keep canonical traces and high-dimensional slices transient. Commit
+  only the safe three-row phase aggregates plus a short boundary summary
+  showing the precommitted integer rule, expert coefficients, selection
+  counts, and phase-sliced outcomes. Verify at least 30 distinct contributing
+  games for each phase, exact development-case coverage across A-E and 3/4/5,
+  zero illegal decisions/faults, and content digests bound into each frozen
+  record. For any historical detailed CSV, commit only its cryptographic
+  tombstone and the deterministic safe replacement; do not rerun any search,
+  diagnostic, or held-out game.
 
 - [ ] **Step 6: Install the three frozen records and verify GREEN**
 
