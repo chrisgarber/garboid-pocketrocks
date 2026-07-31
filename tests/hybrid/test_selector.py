@@ -1,0 +1,207 @@
+from __future__ import annotations
+
+from dataclasses import replace
+
+from pocketrocks import DecisionContext
+
+from garboid_pocketrocks.adapters.public_history import (
+    PublicEventKind,
+    PublicGameSetup,
+    PublicHistory,
+    PublicTurnOpened,
+)
+from garboid_pocketrocks.hybrid.experts import ExpertAvailability, load_promoted_experts
+from garboid_pocketrocks.hybrid.selector import (
+    LiveSelectorInput,
+    SelectorInputRejected,
+    choose_promoted_expert,
+)
+from garboid_pocketrocks.knowledge import knowledge_for_context
+
+
+def _context() -> DecisionContext:
+    return DecisionContext(
+        request_id="private-request-id",
+        deadline_at=123_456,
+        received_at=123_000,
+        decision_kind="submitBid",
+        player_count=3,
+        starting_cash=30,
+        value_chart=(0, 4, 8, 12, 16, 20),
+        objective_ids=(1, 10),
+        current_action_id=1,
+        current_resource_ids=(3, 0),
+        cash_by_seat=(22, 30, 18),
+        tiebreak_seat=1,
+        won_resource_counts_by_seat=((1, 0, 0, 0, 0), (0, 1, 0, 0, 0), (0, 0, 1, 0, 0)),
+        revealed_info_counts_by_seat=((0, 1, 0, 0, 0), (0, 0, 0, 0, 0), (1, 0, 0, 0, 0)),
+        owned_objective_ids_by_seat=((1,), (), ()),
+        bot_seat=0,
+        current_hand_suit_ids=(2, 5),
+        legal_max_amount=7,
+        revealable_count=2,
+        metadata={"engine_rng_state": "must not reach selector"},
+    )
+
+
+def _history() -> PublicHistory:
+    return (
+        PublicGameSetup(
+            kind=PublicEventKind.GAME_SETUP,
+            player_count=3,
+            starting_cash=30,
+            value_chart=(0, 4, 8, 12, 16, 20),
+            initial_tiebreak_seat=1,
+            objective_ids=(1, 10),
+        ),
+        PublicTurnOpened(
+            kind=PublicEventKind.TURN_OPENED,
+            action_id=1,
+            resource_ids=(3, 0),
+        ),
+    )
+
+
+def _selector_input() -> LiveSelectorInput:
+    context = _context()
+    return LiveSelectorInput.from_live_state(context, knowledge_for_context(context), _history())
+
+
+def _available(*names: str) -> dict[str, ExpertAvailability]:
+    return {
+        name: ExpertAvailability(expert_name=name, available=True, reason="available")
+        for name in names
+    }
+
+
+class _FixedSelector:
+    def __init__(self, name: str) -> None:
+        self.name = name
+
+    def choose_expert(
+        self, selector_input: LiveSelectorInput, eligible_expert_names: tuple[str, ...]
+    ) -> str:
+        del selector_input, eligible_expert_names
+        return self.name
+
+
+class _RejectingSelector:
+    def choose_expert(
+        self, selector_input: LiveSelectorInput, eligible_expert_names: tuple[str, ...]
+    ) -> str:
+        del selector_input, eligible_expert_names
+        raise SelectorInputRejected("unsupported public condition")
+
+
+def test_live_selector_input_copies_only_live_compatible_fields() -> None:
+    context = _context()
+    first = LiveSelectorInput.from_live_state(context, knowledge_for_context(context), _history())
+    private_transport_changed = replace(
+        context,
+        request_id="other-request",
+        deadline_at=999_999,
+        received_at=888_888,
+        metadata={"opponent_hands": ((5, 5),), "deck_order": (5, 4, 3)},
+    )
+    same = LiveSelectorInput.from_live_state(
+        private_transport_changed,
+        knowledge_for_context(private_transport_changed),
+        _history(),
+    )
+
+    assert same == first
+    assert first.own_hand_suit_ids == (2, 5)
+    assert not hasattr(first.context, "metadata")
+    assert not hasattr(first.context, "request_id")
+    assert not hasattr(first.context, "current_hand_suit_ids")
+    assert replace(first, own_hand_suit_ids=(1, 5)) != first
+
+
+def test_fixed_input_reproduces_the_same_expert_choice() -> None:
+    experts = load_promoted_experts()
+    availability = _available(*(expert.name for expert in experts))
+    selector = _FixedSelector("balanced-v3")
+
+    first = choose_promoted_expert(selector, _selector_input(), experts, availability)
+    second = choose_promoted_expert(selector, _selector_input(), experts, availability)
+
+    assert first == second
+    assert first.selected_expert_name == "balanced-v3"
+    assert first.used_fallback is False
+    assert first.fallback_reason == "none"
+
+
+def test_unavailable_choice_falls_back_in_catalog_order_with_diagnostics() -> None:
+    experts = load_promoted_experts()
+    availability = _available("balanced-v3", "passive-v3")
+    availability["vector_ppo_large_v1_g350k"] = ExpertAvailability(
+        expert_name="vector_ppo_large_v1_g350k",
+        available=False,
+        reason="runtime_dependency_missing",
+        detail="torch is not installed",
+    )
+
+    result = choose_promoted_expert(
+        _FixedSelector("vector_ppo_large_v1_g350k"),
+        _selector_input(),
+        experts,
+        availability,
+    )
+
+    assert result.requested_expert_name == "vector_ppo_large_v1_g350k"
+    assert result.selected_expert_name == "balanced-v3"
+    assert result.used_fallback is True
+    assert result.fallback_reason == "requested_expert_unavailable"
+    assert tuple(item.expert_name for item in result.unavailable_experts) == (
+        "aggressive-v3",
+        "vector_ppo_large_v1_g350k",
+    )
+
+
+def test_rejected_or_ineligible_choice_uses_the_same_deterministic_fallback() -> None:
+    experts = load_promoted_experts()
+    availability = _available("passive-v3")
+
+    rejected = choose_promoted_expert(
+        _RejectingSelector(), _selector_input(), experts, availability
+    )
+    ineligible = choose_promoted_expert(
+        _FixedSelector("aggressive"), _selector_input(), experts, availability
+    )
+
+    assert rejected.selected_expert_name == "passive-v3"
+    assert rejected.fallback_reason == "selector_rejected_input"
+    assert ineligible.selected_expert_name == "passive-v3"
+    assert ineligible.fallback_reason == "selector_returned_ineligible_expert"
+
+
+def test_no_available_expert_is_explicit_and_reproducible() -> None:
+    experts = load_promoted_experts()
+
+    first = choose_promoted_expert(_FixedSelector("aggressive-v3"), _selector_input(), experts, {})
+    second = choose_promoted_expert(_FixedSelector("aggressive-v3"), _selector_input(), experts, {})
+
+    assert first == second
+    assert first.selected_expert_name is None
+    assert first.used_fallback is True
+    assert first.fallback_reason == "no_available_expert"
+    assert tuple(item.expert_name for item in first.unavailable_experts) == tuple(
+        expert.name for expert in experts
+    )
+    assert all(item.reason == "availability_not_reported" for item in first.unavailable_experts)
+
+
+def test_unknown_availability_identity_is_rejected() -> None:
+    experts = load_promoted_experts()
+
+    try:
+        choose_promoted_expert(
+            _FixedSelector("aggressive-v3"),
+            _selector_input(),
+            experts,
+            _available("latest"),
+        )
+    except ValueError as error:
+        assert "unknown expert" in str(error)
+    else:
+        raise AssertionError("unknown availability identity was accepted")
