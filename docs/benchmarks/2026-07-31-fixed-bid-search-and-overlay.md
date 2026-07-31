@@ -109,11 +109,8 @@ UV_CACHE_DIR=/tmp/garboid-uv-cache \
   --output-dir /tmp/reproduced-fixed-family-default
 ```
 
-Machine-readable and interactive results are committed under
-[`docs/benchmarks/tournaments/2026-07-31-fixed-family-default/`](tournaments/2026-07-31-fixed-family-default/):
-
-- [`ratings.csv`](tournaments/2026-07-31-fixed-family-default/ratings.csv)
-- [`summary.json`](tournaments/2026-07-31-fixed-family-default/summary.json)
-- [`report.html`](tournaments/2026-07-31-fixed-family-default/report.html)
+The command writes machine-readable and interactive results to the specified
+local output directory. These generated tournament artifacts are intentionally
+excluded from version control.
 
 This is an exploratory tournament benchmark, not a held-out promotion gate.

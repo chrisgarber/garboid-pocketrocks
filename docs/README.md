@@ -39,9 +39,10 @@ architecture transcripts.
   [heuristic visualization runbook](analysis/heuristic-bot-visualizations.md)
   records its datasets, transformations, and provenance requirements.
 - [`docs/benchmarks`](benchmarks/) contains dated benchmark reports.
-- [`docs/benchmarks/tournaments`](benchmarks/tournaments/) contains the
-  machine-readable CSV, JSON, and HTML artifacts referenced by tournament
-  reports.
+- Tournament CSV, JSON, and HTML outputs are local analysis artifacts and are
+  excluded from version control. Dated reports under
+  [`docs/benchmarks`](benchmarks/) retain the summarized results and
+  reproduction commands.
 - [`docs/benchmarks/promotions`](benchmarks/promotions/) contains immutable
   promotion reports and paired game summaries referenced by dated promotion
   notes.

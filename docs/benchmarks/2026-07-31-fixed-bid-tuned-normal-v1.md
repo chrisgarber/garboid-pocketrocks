@@ -57,11 +57,8 @@ UV_CACHE_DIR=/tmp/garboid-uv-cache \
 
 ## Artifacts
 
-The reports are committed under
-[`docs/benchmarks/tournaments/2026-07-31-fixed-bid-tuned-normal-v1/`](tournaments/2026-07-31-fixed-bid-tuned-normal-v1/):
-
-- [`ratings.csv`](tournaments/2026-07-31-fixed-bid-tuned-normal-v1/ratings.csv)
-- [`summary.json`](tournaments/2026-07-31-fixed-bid-tuned-normal-v1/summary.json)
-- [`report.html`](tournaments/2026-07-31-fixed-bid-tuned-normal-v1/report.html)
+The command writes machine-readable and interactive reports to the specified
+local output directory. These generated tournament artifacts are intentionally
+excluded from version control.
 
 This is an exploratory tournament benchmark, not a held-out promotion gate.

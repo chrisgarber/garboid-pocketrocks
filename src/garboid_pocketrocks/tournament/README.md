@@ -104,9 +104,9 @@ Writes are atomic. A bootstrap failure still preserves primary ratings and
 reports the missing uncertainty explicitly.
 
 For recorded evidence, see the
-[benchmark reports](../../../docs/benchmarks/) and their
-[tournament artifacts](../../../docs/benchmarks/tournaments/). Do not rewrite
-a dated report; create a new dated result with its seed, configuration,
+[benchmark reports](../../../docs/benchmarks/). Generated tournament artifacts
+are local analysis outputs and are excluded from version control. Do not
+rewrite a dated report; create a new dated result with its seed, configuration,
 repository revision, and runtime.
 
 ## Extension points
