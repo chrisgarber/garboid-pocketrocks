@@ -541,6 +541,10 @@ def _validate_resource_carry(
     previous_action = state.previous_action_id
     if previous is None or previous_action is None:
         return
+    if previous_action == _AUCTION_TWO and previous[1] == 0:
+        raise HeuristicInputError(
+            "terminal one-card Auction2 cannot be followed by another public turn"
+        )
     if previous_action == _AUCTION_ONE and resources[0] != previous[1]:
         raise HeuristicInputError("public resources contradict the one-card auction carry")
     if previous_action not in (_AUCTION_ONE, _AUCTION_TWO) and resources != previous:

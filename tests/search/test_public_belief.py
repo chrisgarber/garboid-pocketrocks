@@ -575,6 +575,118 @@ def test_real_terminal_one_card_offer_has_no_hidden_future_resources() -> None:
     _assert_world_conserves(context, history, position, world)
 
 
+def _context_after_first_action(
+    target_action: ActionId,
+) -> tuple[DecisionContext, PublicHistory, int]:
+    for seed in range(128):
+        session = SdkGameSession.start(
+            player_count=3,
+            seed=f"historical-one-card-{target_action.name}-{seed}",
+            objectives_enabled=False,
+        )
+        initial_context = session.pending.contexts[0][1]
+        if initial_context.current_action_id != int(target_action):
+            continue
+        session.step({seat: BotDecision.pass_turn() for seat in session.pending.acting_seats})
+        if session.pending.decision_kind == "selectInfoToReveal":
+            reveal_seat = session.pending.acting_seats[0]
+            session.step({reveal_seat: BotDecision.select_info_to_reveal(0)})
+        assert session.pending.decision_kind == "submitBid"
+        context = session.pending.contexts[0][1]
+        return context, public_history_from_sdk_events(session.events), context.tiebreak_seat
+    raise AssertionError(f"could not find a first {target_action.name} action")
+
+
+def test_historical_one_card_auction_two_cannot_have_a_later_turn() -> None:
+    context, history, winner = _context_after_first_action(ActionId.AUCTION2)
+    first_turn = history[1]
+    assert isinstance(first_turn, PublicTurnOpened)
+    second_resource = first_turn.resource_ids[1]
+    assert second_resource != 0
+    changed_history = (
+        history[:1]
+        + (replace(first_turn, resource_ids=(first_turn.resource_ids[0], 0)),)
+        + history[2:]
+    )
+    changed_won = [list(row) for row in context.won_resource_counts_by_seat]
+    changed_won[winner][second_resource - 1] -= 1
+    assert changed_won[winner][second_resource - 1] >= 0
+    changed_context = replace(
+        context,
+        won_resource_counts_by_seat=tuple(tuple(row) for row in changed_won),
+    )
+
+    with pytest.raises(HeuristicInputError, match="terminal one-card Auction2"):
+        reconstruct_public_search_position(
+            changed_context,
+            knowledge_for_context(changed_context),
+            changed_history,
+        )
+
+
+def test_historical_one_card_auction_one_still_rejects_a_later_turn() -> None:
+    context, history, _winner = _context_after_first_action(ActionId.AUCTION1)
+    first_turn = history[1]
+    assert isinstance(first_turn, PublicTurnOpened)
+    assert first_turn.resource_ids[1] != 0
+    changed_history = (
+        history[:1]
+        + (replace(first_turn, resource_ids=(first_turn.resource_ids[0], 0)),)
+        + history[2:]
+    )
+
+    with pytest.raises(HeuristicInputError, match="one-card auction carry"):
+        reconstruct_public_search_position(
+            context,
+            knowledge_for_context(context),
+            changed_history,
+        )
+
+
+def test_real_non_resource_one_card_offer_can_carry_to_a_later_turn() -> None:
+    found = False
+    for seed in range(128):
+        session = SdkGameSession.start(
+            player_count=3,
+            seed=f"non-resource-one-card-carry-{seed}",
+            objectives_enabled=False,
+        )
+        pending_carried_resources: tuple[int, int] | None = None
+        while not session.terminated:
+            if session.pending.decision_kind == "submitBid":
+                context = session.pending.contexts[0][1]
+                history = public_history_from_sdk_events(session.events)
+                if pending_carried_resources is not None:
+                    assert context.current_resource_ids == pending_carried_resources
+                    position = _reconstruct(context, history)
+                    world = sample_compatible_worlds(
+                        position,
+                        candidate_identity=LATE_GAME_PUBLIC_BELIEF_V1_DEV_IDENTITY,
+                        sample_count=1,
+                    )[0]
+                    assert world.hidden_future_resource_suits == ()
+                    _assert_world_conserves(context, history, position, world)
+                    found = True
+                    break
+                assert context.current_action_id is not None
+                action = ActionId(context.current_action_id)
+                if (
+                    action not in (ActionId.AUCTION1, ActionId.AUCTION2)
+                    and context.current_resource_ids[0] != 0
+                    and context.current_resource_ids[1] == 0
+                ):
+                    pending_carried_resources = context.current_resource_ids
+                decisions = {seat: BotDecision.pass_turn() for seat in session.pending.acting_seats}
+            else:
+                reveal_seat = session.pending.acting_seats[0]
+                decisions = {reveal_seat: BotDecision.select_info_to_reveal(0)}
+            session.step(decisions)
+        if found:
+            break
+
+    assert found
+
+
 @pytest.mark.parametrize(
     "forged_position",
     (
