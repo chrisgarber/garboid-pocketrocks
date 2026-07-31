@@ -92,6 +92,7 @@ Search fixed heuristic coefficient grids on development games:
 ```bash
 uv run garboid-evolve-heuristic \
   --manifest configs/evolution/balanced-v3-search-v1.json \
+  --development-corpus configs/promotion/development-balanced-v3-broad-v1.json \
   --output-dir artifacts/evolution/balanced-v3-search-v1
 ```
 

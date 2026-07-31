@@ -14,6 +14,7 @@ from garboid_pocketrocks.evolution.evaluation import CandidateEvaluation
 class CandidateRankingKey:
     """The exact ascending key implementing the documented fitness order."""
 
+    negative_worst_challenger_finish_delta: float
     negative_rating_delta: float
     negative_normalized_finish_delta: float
     negative_final_money_delta: int
@@ -25,6 +26,7 @@ class CandidateRankingKey:
     ) -> tuple[
         float,
         float,
+        float,
         int,
         tuple[Decimal, Decimal, Decimal, Decimal],
         str,
@@ -32,6 +34,7 @@ class CandidateRankingKey:
         """Return the canonical ranking fields in comparison order."""
 
         return (
+            self.negative_worst_challenger_finish_delta,
             self.negative_rating_delta,
             self.negative_normalized_finish_delta,
             self.negative_final_money_delta,
@@ -92,9 +95,11 @@ def candidate_ranking_key(item: EvaluatedCandidate) -> CandidateRankingKey:
     evaluation = item.evaluation
     if (
         not evaluation.valid
+        or evaluation.worst_challenger_finish_delta is None
         or evaluation.rating_delta is None
         or evaluation.normalized_finish_delta is None
         or evaluation.final_money_delta is None
+        or not math.isfinite(evaluation.worst_challenger_finish_delta)
         or not math.isfinite(evaluation.rating_delta)
         or not math.isfinite(evaluation.normalized_finish_delta)
     ):
@@ -103,6 +108,7 @@ def candidate_ranking_key(item: EvaluatedCandidate) -> CandidateRankingKey:
             f"Candidate {item.candidate.identity!r} does not have complete finite evidence.",
         )
     return CandidateRankingKey(
+        negative_worst_challenger_finish_delta=-evaluation.worst_challenger_finish_delta,
         negative_rating_delta=-evaluation.rating_delta,
         negative_normalized_finish_delta=-evaluation.normalized_finish_delta,
         negative_final_money_delta=-evaluation.final_money_delta,
@@ -202,6 +208,9 @@ def freeze_candidate(item: EvaluatedCandidate) -> HeuristicCandidate | None:
     if (
         not evaluation.valid
         or not evaluation.eligible
+        or evaluation.worst_challenger_finish_delta is None
+        or evaluation.worst_challenger_finish_delta <= 0.0
+        or not math.isfinite(evaluation.worst_challenger_finish_delta)
         or evaluation.rating_delta is None
         or evaluation.rating_delta <= 0.0
         or not math.isfinite(evaluation.rating_delta)

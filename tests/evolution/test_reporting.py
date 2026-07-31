@@ -115,6 +115,11 @@ def test_report_payload_owns_complete_normalized_search_evidence(
         "candidate_identity": report.run.selected_candidate.identity,
         "generation": report.run.selected_candidate.generation,
         "slot": report.run.selected_candidate.slot,
+        "worst_challenger_finish_delta": next(
+            item.evaluation.worst_challenger_finish_delta
+            for item in report.run.candidate_runs
+            if item.candidate == report.run.selected_candidate
+        ),
         "rating_delta": next(
             item.evaluation.rating_delta
             for item in report.run.candidate_runs
@@ -168,6 +173,7 @@ def test_writes_byte_identical_complete_artifact_generations(
         item.candidate.identity for item in report.run.candidate_runs
     ]
     assert evaluations[0]["ranking_key"]["fields"] == [
+        "negative_worst_challenger_finish_delta",
         "negative_rating_delta",
         "negative_normalized_finish_delta",
         "negative_final_money_delta",
@@ -190,6 +196,7 @@ def test_writes_byte_identical_complete_artifact_generations(
 
     assert first.frozen_candidate_json is not None
     frozen = json.loads(first.frozen_candidate_json.read_text())
+    assert frozen["schema_version"] == 2
     assert frozen["identity"] == report.run.frozen_candidate.identity
     assert frozen["repository_commit"] == report.repository_commit
     assert frozen["source_evidence"]["search_report_sha256"]

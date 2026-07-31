@@ -40,7 +40,8 @@ REPOSITORY_ROOT = Path(__file__).parents[2]
 @pytest.fixture(scope="module")
 def balanced_manifest() -> SearchManifest:
     corpus = load_promotion_corpus(
-        REPOSITORY_ROOT / "configs/promotion/development-v1.json",
+        REPOSITORY_ROOT
+        / "configs/promotion/development-balanced-v3-broad-v1.json",
         registry=BOT_SPECS_BY_NAME,
     )
     return load_search_manifest(
@@ -55,7 +56,8 @@ def _decimal_tuple(*values: str) -> tuple[Decimal, ...]:
 
 def _load_large_grid_manifest(tmp_path: Path) -> SearchManifest:
     corpus = load_promotion_corpus(
-        REPOSITORY_ROOT / "configs/promotion/development-v1.json",
+        REPOSITORY_ROOT
+        / "configs/promotion/development-balanced-v3-broad-v1.json",
         registry=BOT_SPECS_BY_NAME,
     )
     payload = json.loads(
@@ -152,24 +154,24 @@ def test_generation_zero_is_the_incumbent_followed_by_golden_grid_samples(
 
     assert tuple(candidate.genome.coefficients.as_tuple() for candidate in population) == (
         _decimal_tuple("0.4", "0.75", "0.2", "0.25"),
-        _decimal_tuple("0.55", "1.75", "0.65", "0"),
-        _decimal_tuple("0.15", "0.05", "0", "0.1"),
-        _decimal_tuple("0.75", "1.35", "0.5", "0.1"),
-        _decimal_tuple("1.15", "1.55", "0.2", "0.1"),
-        _decimal_tuple("0.3", "0.95", "1", "0.3"),
-        _decimal_tuple("0.85", "0.8", "0.55", "0.9"),
-        _decimal_tuple("1.05", "0.2", "0", "0.7"),
-        _decimal_tuple("0.15", "0.8", "0", "0.1"),
-        _decimal_tuple("0.35", "0.45", "0.75", "0.35"),
-        _decimal_tuple("0.2", "1.15", "0.3", "0.25"),
-        _decimal_tuple("0.9", "0.65", "0.7", "0.95"),
+        _decimal_tuple("0.5", "0.95", "0", "0.25"),
+        _decimal_tuple("1.35", "0.5", "0.9", "0.7"),
+        _decimal_tuple("1.15", "1.25", "0.75", "0.7"),
+        _decimal_tuple("1", "1.6", "0.35", "0.7"),
+        _decimal_tuple("1.05", "0.85", "0.8", "0.65"),
+        _decimal_tuple("1.25", "1.8", "0.1", "0.05"),
+        _decimal_tuple("1.25", "1.55", "0.15", "0.4"),
+        _decimal_tuple("0.75", "1.55", "0", "0.25"),
+        _decimal_tuple("0.35", "0.5", "0.8", "0.15"),
+        _decimal_tuple("0.6", "2", "0.1", "0.35"),
+        _decimal_tuple("0.5", "0.3", "0.55", "0.35"),
     )
     assert population[0].genome.coefficients == balanced_manifest.initial_coefficients
     assert tuple(candidate.generation for candidate in population) == (0,) * 12
     assert tuple(candidate.slot for candidate in population) == tuple(range(12))
     assert all(candidate.parent_identity is None for candidate in population)
     assert population[0].identity == "balanced-v3-candidate-g000-s000-429d9a62e92f"
-    assert population[-1].identity == "balanced-v3-candidate-g000-s011-91dfa54516cb"
+    assert population[-1].identity == "balanced-v3-candidate-g000-s011-6918592759cd"
     assert build_initial_population(balanced_manifest) == population
 
 
@@ -245,24 +247,24 @@ def test_later_generation_has_golden_one_field_mutations_and_cycles_parents(
     )
 
     assert tuple(child.genome.coefficients.as_tuple() for child in children) == (
-        _decimal_tuple("0.4", "0.75", "0.2", "0.2"),
-        _decimal_tuple("0.55", "1.75", "0.65", "0.05"),
-        _decimal_tuple("0.15", "0", "0", "0.1"),
-        _decimal_tuple("0.75", "1.35", "0.65", "0.1"),
-        _decimal_tuple("0.25", "0.75", "0.2", "0.25"),
-        _decimal_tuple("0.55", "1.95", "0.65", "0"),
-        _decimal_tuple("0", "0.05", "0", "0.1"),
-        _decimal_tuple("0.6", "1.35", "0.5", "0.1"),
+        _decimal_tuple("0.2", "0.75", "0.2", "0.25"),
+        _decimal_tuple("0.5", "1.1", "0", "0.25"),
+        _decimal_tuple("1.35", "0.55", "0.9", "0.7"),
+        _decimal_tuple("1.2", "1.25", "0.75", "0.7"),
+        _decimal_tuple("0.4", "0.75", "0.35", "0.25"),
+        _decimal_tuple("0.7", "0.95", "0", "0.25"),
+        _decimal_tuple("1.35", "0.5", "0.9", "0.8"),
+        _decimal_tuple("1.15", "1.25", "0.95", "0.7"),
         _decimal_tuple("0.45", "0.75", "0.2", "0.25"),
-        _decimal_tuple("0.4", "1.75", "0.65", "0"),
-        _decimal_tuple("0.15", "0.25", "0", "0.1"),
-        _decimal_tuple("0.65", "1.35", "0.5", "0.1"),
+        _decimal_tuple("0.5", "0.95", "0", "0.4"),
+        _decimal_tuple("1.35", "0.5", "0.8", "0.7"),
+        _decimal_tuple("1.15", "1.25", "0.8", "0.7"),
     )
     assert tuple(child.parent_identity for child in children) == tuple(
         elites[slot % len(elites)].identity for slot in range(12)
     )
-    assert children[0].identity == "balanced-v3-candidate-g001-s000-f5776948fa1b"
-    assert children[-1].identity == "balanced-v3-candidate-g001-s011-134a2e38ff20"
+    assert children[0].identity == "balanced-v3-candidate-g001-s000-7af3aa91006b"
+    assert children[-1].identity == "balanced-v3-candidate-g001-s011-4a47e09e3847"
 
     for slot, child in enumerate(children):
         parent = elites[slot % len(elites)]
@@ -354,7 +356,7 @@ def test_candidate_spec_is_local_picklable_and_matches_a_direct_brain(
         profile.future_cash_weight,
         profile.objective_progress_weight,
         profile.bid_shading,
-    ) == (1.15, 1.55, 0.2, 0.1)
+    ) == (1.0, 1.6, 0.35, 0.7)
     assert spec.name == candidate.identity
     assert spec.bot_id == candidate.identity
     assert candidate.identity not in BOT_SPECS_BY_NAME

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "name": "held-out-aggressive-v3-broad-v1",
+  "purpose": "held_out",
+  "root_seed": 120001,
+  "repetitions_per_seat_cell": 8,
+  "charts": ["A", "B", "C", "D", "E"],
+  "player_counts": [3, 4, 5],
+  "opponent_names": [
+    "random",
+    "fixed-bid",
+    "sdk-greedy-value-v1",
+    "balanced-v2",
+    "passive-v2",
+    "vector_ppo_small_v1_g1500",
+    "vector_ppo_large_v1_g350k"
+  ]
+}

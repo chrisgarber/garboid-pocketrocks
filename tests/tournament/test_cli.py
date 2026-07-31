@@ -102,6 +102,7 @@ def test_bot_filters_use_curated_defaults_when_include_is_omitted() -> None:
 
     assert tuple(spec.name for spec in selected) == (
         "random",
+        "fixed-bid",
         "aggressive-v1",
         "balanced-v1",
         "passive-v1",
@@ -111,6 +112,7 @@ def test_bot_filters_use_curated_defaults_when_include_is_omitted() -> None:
         "aggressive-v3",
         "balanced-v3",
         "passive-v3",
+        "sdk-greedy-value-v1",
         "vector_ppo_small_v1_g1500",
         "vector_ppo_large_v1_g350k",
     )

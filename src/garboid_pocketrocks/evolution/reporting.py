@@ -259,6 +259,7 @@ def _best_result_payload(run: SearchRun) -> dict[str, object] | None:
         "rating_delta": evaluation.rating_delta,
         "normalized_finish_delta": evaluation.normalized_finish_delta,
         "final_money_delta": evaluation.final_money_delta,
+        "worst_challenger_finish_delta": evaluation.worst_challenger_finish_delta,
     }
 
 
@@ -313,6 +314,15 @@ def _candidate_evaluation_payload(candidate_run: CandidateRun) -> dict[str, obje
             "completed_candidate_games": evaluation.completed_candidate_games,
         },
         "scores": {
+            "worst_challenger_finish_delta": evaluation.worst_challenger_finish_delta,
+            "challenger_finish_deltas": [
+                {
+                    "opponent_identity": item.opponent_identity,
+                    "shared_cases": item.shared_cases,
+                    "normalized_finish_delta": item.normalized_finish_delta,
+                }
+                for item in evaluation.challenger_finish_deltas
+            ],
             "rating_delta": evaluation.rating_delta,
             "normalized_finish_delta": evaluation.normalized_finish_delta,
             "final_money_delta": evaluation.final_money_delta,
@@ -362,6 +372,7 @@ def _candidate_payload(candidate: HeuristicCandidate) -> dict[str, object]:
 def _ranking_key_payload(key: CandidateRankingKey) -> dict[str, object]:
     return {
         "fields": [
+            "negative_worst_challenger_finish_delta",
             "negative_rating_delta",
             "negative_normalized_finish_delta",
             "negative_final_money_delta",
@@ -369,6 +380,7 @@ def _ranking_key_payload(key: CandidateRankingKey) -> dict[str, object]:
             "candidate_identity",
         ],
         "values": [
+            key.negative_worst_challenger_finish_delta,
             key.negative_rating_delta,
             key.negative_normalized_finish_delta,
             key.negative_final_money_delta,
@@ -482,7 +494,7 @@ def _frozen_candidate_payload(
     assert candidate is not None
     evaluation = _evaluation_for_identity(run, candidate.identity)
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         **_candidate_payload(candidate),
         "predecessor_name": run.manifest.predecessor_name,
         "search": {
@@ -494,6 +506,7 @@ def _frozen_candidate_payload(
             "digest": run.development_corpus.digest,
         },
         "development_scores": {
+            "worst_challenger_finish_delta": evaluation.worst_challenger_finish_delta,
             "rating_delta": evaluation.rating_delta,
             "normalized_finish_delta": evaluation.normalized_finish_delta,
             "final_money_delta": evaluation.final_money_delta,

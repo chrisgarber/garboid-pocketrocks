@@ -10,6 +10,7 @@ Run a search from the repository root:
 ```bash
 uv run garboid-evolve-heuristic \
   --manifest configs/evolution/balanced-v3-search-v1.json \
+  --development-corpus configs/promotion/development-balanced-v3-broad-v1.json \
   --output-dir artifacts/evolution/balanced-v3-search-v1
 ```
 
@@ -19,6 +20,15 @@ development-corpus binding. The CLI exposes only execution controls:
 `--development-corpus`, `--workers`, `--batch-size`, `--output-dir`, and
 `--overwrite`. There is no resume mode, held-out input, or promotion switch.
 Rerun the same immutable manifest from the beginning to reproduce a search.
+
+The v3 manifests use personality-specific broad fields. Each development
+field contains random and fixed-bid baselines, the SDK greedy sample, all
+three v1 heuristics, and both non-focal v2 personalities. Candidate selection
+first maximizes its worst matched normalized-finish improvement across those
+challengers, then uses overall rating, finish, and money as tie-breakers. A
+candidate freezes only if both its overall rating and every challenger slice
+improve on its v2 predecessor. Separate held-out corpora add both PPO policies
+without exposing those games to search.
 
 ## Exit codes
 

@@ -12,6 +12,7 @@ def test_registered_bot_specs_have_unique_names_and_ids() -> None:
 
     assert tuple(spec.name for spec in specs) == (
         "random",
+        "fixed-bid",
         "aggressive",
         "balanced",
         "passive",
@@ -24,6 +25,7 @@ def test_registered_bot_specs_have_unique_names_and_ids() -> None:
         "aggressive-v3",
         "balanced-v3",
         "passive-v3",
+        "sdk-greedy-value-v1",
         "vector_ppo_small_v1_g1500",
         "vector_ppo_large_v1_g350k",
     )
@@ -38,6 +40,7 @@ def test_default_tournament_specs_include_baseline_and_versioned_bots_only() -> 
 
     assert tuple(spec.name for spec in specs) == (
         "random",
+        "fixed-bid",
         "aggressive-v1",
         "balanced-v1",
         "passive-v1",
@@ -47,6 +50,14 @@ def test_default_tournament_specs_include_baseline_and_versioned_bots_only() -> 
         "aggressive-v3",
         "balanced-v3",
         "passive-v3",
+        "sdk-greedy-value-v1",
         "vector_ppo_small_v1_g1500",
         "vector_ppo_large_v1_g350k",
     )
+
+
+def test_fixed_bid_brain_is_exported_from_bots_package() -> None:
+    from garboid_pocketrocks.bots import FixedBidBotBrain
+    from garboid_pocketrocks.bots.fixed_bid import FixedBidBotBrain as DefinedBrain
+
+    assert FixedBidBotBrain is DefinedBrain

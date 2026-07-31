@@ -674,7 +674,6 @@ def test_malformed_nonfinite_or_nonobject_json_is_rejected(
 
 
 def test_committed_manifests_bind_v2_and_the_fixed_design(
-    development_corpus: PromotionCorpus,
 ) -> None:
     expected_initial = {
         "aggressive": ("0.75", "1.5", "0.25", "0.05"),
@@ -684,10 +683,18 @@ def test_committed_manifests_bind_v2_and_the_fixed_design(
 
     for seed_offset, personality in enumerate(("aggressive", "balanced", "passive"), start=1):
         path = EVOLUTION_CONFIG_DIRECTORY / f"{personality}-v3-search-v1.json"
+        development_corpus = load_promotion_corpus(
+            REPOSITORY_ROOT
+            / f"configs/promotion/development-{personality}-v3-broad-v1.json",
+            registry=BOT_SPECS_BY_NAME,
+        )
         manifest = load_search_manifest(path, development_corpus=development_corpus)
 
         assert manifest.name == f"{personality}-v3-search-v1"
         assert manifest.predecessor_name == f"{personality}-v2"
+        assert manifest.development_corpus.name == (
+            f"development-{personality}-v3-broad-v1"
+        )
         assert manifest.search_seed == 11000 + seed_offset
         assert manifest.algorithm.generation_count == 8
         assert manifest.algorithm.population_size == 12

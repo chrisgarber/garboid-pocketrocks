@@ -160,17 +160,21 @@ Every simulation uses `FaultMode.RECORD_AND_PASS`. Candidate faults make that
 candidate ineligible. Missing games, mismatched identities or cases, and any
 opponent/incumbent fault invalidate the generation and fail the run.
 
-Fitness is:
+The broad-field v3 revision uses personality-specific corpora with random,
+fixed-bid, SDK greedy, all three v1 profiles, and the two non-focal v2
+profiles. Fitness is:
 
-1. descending candidate-minus-incumbent Plackett-Luce rating;
-2. descending candidate-minus-incumbent normalized-finish sum;
-3. descending candidate-minus-incumbent final-money sum;
-4. ascending canonical coefficient tuple;
-5. ascending candidate identity.
+1. descending worst challenger-specific matched normalized-finish delta;
+2. descending candidate-minus-incumbent Plackett-Luce rating;
+3. descending candidate-minus-incumbent normalized-finish sum;
+4. descending candidate-minus-incumbent final-money sum;
+5. ascending canonical coefficient tuple;
+6. ascending candidate identity.
 
 The exact ranking key is recorded. The final candidate freezes only when it is
-eligible, fault-free, and has a strictly positive development rating
-difference. This is selection evidence, not promotion evidence.
+eligible, fault-free, has a strictly positive development rating difference,
+and improves the incumbent's normalized finish in every challenger slice.
+This is selection evidence, not promotion evidence.
 
 ## Frozen candidates
 
@@ -260,4 +264,3 @@ Use strict test-driven development:
   games with no illegal actions or faults;
 - held-out promotion remains the only code path that can justify v3/latest
   alias movement.
-
