@@ -6,8 +6,13 @@ import math
 from dataclasses import dataclass
 from decimal import Decimal
 
-from garboid_pocketrocks.evolution.candidates import HeuristicCandidate
+from garboid_pocketrocks.evolution.candidates import (
+    HeuristicCandidate,
+    PhaseAwareHeuristicCandidate,
+    SearchCandidate,
+)
 from garboid_pocketrocks.evolution.evaluation import CandidateEvaluation
+from garboid_pocketrocks.heuristics.phases import PHASE_SELECTOR_NAME
 
 
 @dataclass(frozen=True, slots=True, order=True)
@@ -17,7 +22,7 @@ class CandidateRankingKey:
     negative_rating_delta: float
     negative_normalized_finish_delta: float
     negative_final_money_delta: int
-    coefficient_values: tuple[Decimal, Decimal, Decimal, Decimal]
+    coefficient_values: tuple[Decimal, ...]
     candidate_identity: str
 
     def as_tuple(
@@ -26,7 +31,7 @@ class CandidateRankingKey:
         float,
         float,
         int,
-        tuple[Decimal, Decimal, Decimal, Decimal],
+        tuple[Decimal, ...],
         str,
     ]:
         """Return the canonical ranking fields in comparison order."""
@@ -44,7 +49,7 @@ class CandidateRankingKey:
 class EvaluatedCandidate:
     """One proposal paired with its complete development evidence."""
 
-    candidate: HeuristicCandidate
+    candidate: SearchCandidate
     evaluation: CandidateEvaluation
 
     @property
@@ -88,6 +93,7 @@ class SearchSelectionError(ValueError):
 def candidate_ranking_key(item: EvaluatedCandidate) -> CandidateRankingKey:
     """Build the exact ascending key for one valid scored candidate."""
 
+    _require_candidate_invariants(item.candidate)
     _require_matching_identity(item)
     evaluation = item.evaluation
     if (
@@ -106,7 +112,7 @@ def candidate_ranking_key(item: EvaluatedCandidate) -> CandidateRankingKey:
         negative_rating_delta=-evaluation.rating_delta,
         negative_normalized_finish_delta=-evaluation.normalized_finish_delta,
         negative_final_money_delta=-evaluation.final_money_delta,
-        coefficient_values=item.candidate.genome.coefficients.as_tuple(),
+        coefficient_values=_candidate_coefficient_values(item.candidate),
         candidate_identity=item.candidate.identity,
     )
 
@@ -121,6 +127,7 @@ def rank_candidate_pool(
             "empty_candidate_pool",
             "A generation candidate pool must not be empty.",
         )
+    _require_compatible_candidate_pool(pool)
     identities = tuple(item.candidate.identity for item in pool)
     if len(set(identities)) != len(identities):
         raise SearchSelectionError(
@@ -194,9 +201,10 @@ def select_generation(
     )
 
 
-def freeze_candidate(item: EvaluatedCandidate) -> HeuristicCandidate | None:
+def freeze_candidate(item: EvaluatedCandidate) -> SearchCandidate | None:
     """Return the winner only when development evidence permits a freeze."""
 
+    _require_candidate_invariants(item.candidate)
     _require_matching_identity(item)
     evaluation = item.evaluation
     if (
@@ -228,3 +236,63 @@ def _require_matching_identity(item: EvaluatedCandidate) -> None:
             f"Evaluation identity {item.evaluation.candidate_identity!r} does not "
             f"match proposal {item.candidate.identity!r}.",
         )
+
+
+def _require_compatible_candidate_pool(
+    pool: tuple[EvaluatedCandidate, ...],
+) -> None:
+    candidates = tuple(item.candidate for item in pool)
+    candidate_families = {type(candidate) for candidate in candidates}
+    if len(candidate_families) != 1:
+        raise SearchSelectionError(
+            "mixed_candidate_family",
+            "A candidate pool cannot mix scalar and phase-aware policies.",
+        )
+
+    personalities = {candidate.personality for candidate in candidates}
+    if len(personalities) != 1:
+        raise SearchSelectionError(
+            "mixed_candidate_personality",
+            "Every candidate in one pool must use the same personality.",
+        )
+
+    if isinstance(candidates[0], PhaseAwareHeuristicCandidate):
+        selectors = {
+            candidate.genome.phase_selector
+            for candidate in candidates
+            if isinstance(candidate, PhaseAwareHeuristicCandidate)
+        }
+        if len(selectors) != 1:
+            raise SearchSelectionError(
+                "mixed_candidate_phase_selector",
+                "Every phase-aware candidate in one pool must use the same selector.",
+            )
+
+    for candidate in candidates:
+        _require_candidate_invariants(candidate)
+
+
+def _require_candidate_invariants(candidate: SearchCandidate) -> None:
+    if candidate.personality not in ("aggressive", "balanced", "passive"):
+        raise SearchSelectionError(
+            "invalid_candidate_personality",
+            f"Candidate {candidate.identity!r} has an unknown personality.",
+        )
+    if (
+        isinstance(candidate, PhaseAwareHeuristicCandidate)
+        and candidate.genome.phase_selector != PHASE_SELECTOR_NAME
+    ):
+        raise SearchSelectionError(
+            "invalid_candidate_phase_selector",
+            f"Candidate {candidate.identity!r} does not use the fixed phase selector.",
+        )
+
+
+def _candidate_coefficient_values(candidate: SearchCandidate) -> tuple[Decimal, ...]:
+    """Return every policy value in the candidate's canonical genome order."""
+
+    if isinstance(candidate, PhaseAwareHeuristicCandidate):
+        return candidate.genome.experts.as_loci()
+    if isinstance(candidate, HeuristicCandidate):
+        return candidate.genome.coefficients.as_tuple()
+    raise TypeError(f"unsupported candidate type {type(candidate).__name__}")
