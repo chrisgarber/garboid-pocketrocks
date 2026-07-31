@@ -29,40 +29,42 @@ from garboid_pocketrocks.simulator.monte_carlo import MonteCarloRunner
 REPOSITORY_ROOT = Path(__file__).parents[2]
 CATALOG_DIR = REPOSITORY_ROOT / "src" / "garboid_pocketrocks" / "heuristics" / "frozen_candidates"
 EXPECTED_IDENTITIES = (
-    "aggressive-v3-candidate-g007-s008-c70e11540db9",
-    "balanced-v3-candidate-g006-s010-e3971899626c",
-    "passive-v3-candidate-g006-s001-812832214cd5",
+    "aggressive-v3-candidate-g007-s009-9c43f610b2f0",
+    "balanced-v3-candidate-g005-s005-90544d0f26d2",
+    "passive-v3-candidate-g006-s000-739e30e8d844",
 )
 EXPECTED_PROVENANCE = {
     EXPECTED_IDENTITIES[0]: {
         "predecessor": "aggressive-v2",
         "search_name": "aggressive-v3-search-v1",
-        "profile": "c70e11540db92d0c77ce5085670ff48105c91aede1ed52c4abb7874a64687b58",
-        "manifest": "627eb77836f8dceace745a8fb7f60573e2dad05aa47a423d902850c32a98f5e0",
-        "report": "01ca66301d633be7228c3bc535fa2d84b0c5ee3898b92f9d06e98c0fdf13b902",
-        "evaluations": "4140270b3fe1d744aef103b012ca85970aa561c3f36cb28d70e4e4aa39f9c7a5",
-        "freeze": "218e9682d8d174125d4b9e7550fec9afda01ddb4433084143968b6d525d335da",
+        "profile": "9c43f610b2f03b2e5d3cb71c2a3ce7a62f456f3fdce73d3a52c501bab9a81042",
+        "manifest": "b4e21379ebdcf9462330a1e55412993cf69273a257afc7bb9197cb2e7d89532f",
+        "report": "db53ccbe258e2a08969d43710f7979d2e3b16f18415c4c11b81654a6301abea2",
+        "evaluations": "47b82f973f36b3a21d7aa30d2872b542c23a55bfaf5666c715cc446fdb509139",
+        "freeze": "89b61c17485da34b0c496cd353f0ccd1c533ba843175e967e3af939528bf5735",
+        "development": "6531e85f69f4e085b8ac789348be6c21614455dd77ba7ac791f5390479e17638",
     },
     EXPECTED_IDENTITIES[1]: {
         "predecessor": "balanced-v2",
         "search_name": "balanced-v3-search-v1",
-        "profile": "e3971899626ca3f651b2992d0cc429dc3ffd57fcdbb7cfac8249e6f0f9d9b03e",
-        "manifest": "da9e2162eec9dd934dc80e59d9950b49c74a3a4cd4d72e6273134b502e705152",
-        "report": "95fd24f688ed2bb18cd08d00483fbef2a42b2b66809afa26860f71deba2d3f87",
-        "evaluations": "fcf8985f40beddac274f5aa31523ec93b1cfecf0657047e30144ba97140b15e6",
-        "freeze": "05bcd898e7fc79062585cb989b67cb2e5641eed6cc59b1a60255de84c8ee2988",
+        "profile": "90544d0f26d20a9fc3b51013fd244908be1071a13eeef12fb0d4b2c4aef251de",
+        "manifest": "9333619e4d573f12736162065f02901d25fa5e267ea6fd1838371de4b9f04c07",
+        "report": "98056eda744f19d9f67dd763c64e5d5e2e97a3e0538534e933058d3a34227dfb",
+        "evaluations": "4b8c1ea06575971914d183cfcba99964b50b37d60c740b52fe417b8f80a85eb7",
+        "freeze": "2da90c344b4f573f83718faad717a9accea2768b21f1982d8f543a5f2bb25fa8",
+        "development": "d556cc940c92ebf3633fde83485d4ba776b6e582f34cf8d445a5c190824b3228",
     },
     EXPECTED_IDENTITIES[2]: {
         "predecessor": "passive-v2",
         "search_name": "passive-v3-search-v1",
-        "profile": "812832214cd5a16115104c50d33e94cba9929a3cc355b4779d6002b52b25e734",
-        "manifest": "bf533a434a4208e7b018606c53488fcc3a09499b6da2fcb4b1d020346001a9c1",
-        "report": "46a1d7de4fed02520b384d119464ed7c0af239e1e8300fdb7485956ebc7203a2",
-        "evaluations": "582836d5beb184da26f8b5c27c9d96cea728a867017a9081e1bd137ce57f2b25",
-        "freeze": "0617870c8641e9d25237354b5fe5a1df4f15637af0e46e8c11b1c13e7054adee",
+        "profile": "739e30e8d84482d3e165c230a8bb9f518eccb822adb55337e1f8abae82399dd7",
+        "manifest": "53a2927888b43aa17cbbc9fe7cd15a48b071054044aef557778dfc860fd1d8cd",
+        "report": "ba48cc835a6918f27cdba453fac9c2672c3b59b6ed53dc58a43519b01ddeb4d3",
+        "evaluations": "12c80080fec844c13f11bf310ba4c0df6e24f3c5ba09d34e8adb733b2b359492",
+        "freeze": "dc64f303def70e1ef17d3ebddc8837c645941078bbb7b14bbfa211d0e7571fad",
+        "development": "64124822038895aa4048469244c99177c877271368cc246d2250b737a14bf658",
     },
 }
-DEVELOPMENT_DIGEST = "17c016350dbe717641b8cd499b0908e3bc0faa811a3b4f5e574f8713a5bf2b3d"
 
 
 def test_catalog_exposes_exact_frozen_records_and_provenance() -> None:
@@ -75,8 +77,12 @@ def test_catalog_exposes_exact_frozen_records_and_provenance() -> None:
         assert candidate.bot_spec.bot_id == candidate.identity
         assert candidate.predecessor_name == expected["predecessor"]
         assert candidate.search_name == expected["search_name"]
-        assert candidate.development_corpus_name == "development-v1"
-        assert candidate.development_corpus_digest == DEVELOPMENT_DIGEST
+        assert candidate.development_corpus_name == (
+            f"development-{candidate.personality}-v3-broad-v1"
+        )
+        assert candidate.development_corpus_digest == expected["development"]
+        assert candidate.worst_challenger_finish_delta is not None
+        assert candidate.worst_challenger_finish_delta > 0.0
         assert candidate.freeze_digest == expected["freeze"]
         assert candidate.profile_digest == expected["profile"]
         assert candidate.manifest_digest == expected["manifest"]
@@ -227,13 +233,16 @@ def test_catalog_rejects_tampered_frozen_payload(
 
 
 def test_frozen_candidates_complete_development_matrix_without_faults() -> None:
-    corpus = load_promotion_corpus(
-        REPOSITORY_ROOT / "configs" / "promotion" / "development-v1.json",
-        registry=BOT_SPECS_BY_NAME,
-    )
     expected_matrix = set(product(tuple("ABCDE"), (3, 4, 5)))
 
     for candidate in FROZEN_CANDIDATES:
+        corpus = load_promotion_corpus(
+            REPOSITORY_ROOT
+            / "configs"
+            / "promotion"
+            / f"development-{candidate.personality}-v3-broad-v1.json",
+            registry=BOT_SPECS_BY_NAME,
+        )
         plan = plan_development_games(
             corpus,
             candidate=candidate.bot_spec,
