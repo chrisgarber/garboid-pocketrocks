@@ -375,11 +375,15 @@ def _validate_trace_only_plan(
 
 
 def _build_winner_decision_report(result: MonteCarloResult) -> DecisionReport:
-    bot_ids = tuple(statistic.bot_id for statistic in result.bot_statistics)
-    if not bot_ids:
-        bot_ids = tuple(
-            dict.fromkeys(bot_id for summary in result.game_summaries for bot_id in summary.bot_ids)
-        )
+    bot_ids = tuple(
+        dict.fromkeys(bot_id for summary in result.game_summaries for bot_id in summary.bot_ids)
+    )
+    observed_bot_ids = set(bot_ids)
+    bot_statistics = tuple(
+        statistic
+        for statistic in result.bot_statistics
+        if statistic.bot_id in observed_bot_ids
+    )
     fit = fit_plackett_luce(
         observations_from_games(result.game_summaries),
         bot_ids,
@@ -388,7 +392,7 @@ def _build_winner_decision_report(result: MonteCarloResult) -> DecisionReport:
     return build_decision_report(
         result.decision_traces,
         game_summaries=result.game_summaries,
-        bot_statistics=result.bot_statistics,
+        bot_statistics=bot_statistics,
         tournament_analysis=analysis,
     )
 

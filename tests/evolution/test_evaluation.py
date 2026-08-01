@@ -297,11 +297,7 @@ def test_malformed_rating_observation_is_invalid_evidence(
 def test_real_development_jobs_match_across_serial_batch_and_workers(
     manifest_name: str,
 ) -> None:
-    corpus_name = (
-        "development-heuristic-v4-v1.json"
-        if manifest_name.endswith("v4-search-v2.json")
-        else "development-balanced-v3-broad-v1.json"
-    )
+    corpus_name = "development-balanced-v3-broad-v1.json"
     corpus = load_promotion_corpus(
         REPOSITORY_ROOT / "configs" / "promotion" / corpus_name,
         registry=BOT_SPECS_BY_NAME,

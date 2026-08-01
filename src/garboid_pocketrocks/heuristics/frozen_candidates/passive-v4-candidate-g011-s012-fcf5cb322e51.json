@@ -1,0 +1,67 @@
+{
+  "boundary_evidence": {
+    "report_digest": "9961f26f32270dcebc98df443588e96cbde2f953858cd131c66a37aeecaa9b01",
+    "report_path": "docs/benchmarks/2026-07-30-heuristic-v4-phase-boundaries.md",
+    "slices_digest": "4f8aa60edf31b28c746cb8004a4dd5468ee8ab1b26462550c914b2e3fa50d7ae",
+    "slices_path": "docs/benchmarks/tournaments/2026-07-30-heuristic-v3-phase-boundaries-development/phase-boundary-slices.csv"
+  },
+  "development_corpus": {
+    "digest": "64124822038895aa4048469244c99177c877271368cc246d2250b737a14bf658",
+    "name": "development-passive-v3-broad-v1"
+  },
+  "development_scores": {
+    "final_money_delta": 721,
+    "normalized_finish_delta": 15.583333333333343,
+    "rating_delta": 71.59108456759373
+  },
+  "experts": {
+    "early": {
+      "bid_shading": "0.1",
+      "future_cash_weight": "1.75",
+      "liquidity_strength": "1.4",
+      "objective_progress_weight": "0.6"
+    },
+    "late": {
+      "bid_shading": "0.5",
+      "future_cash_weight": "2",
+      "liquidity_strength": "0.25",
+      "objective_progress_weight": "0.1"
+    },
+    "middle": {
+      "bid_shading": "0.45",
+      "future_cash_weight": "1.9",
+      "liquidity_strength": "0.45",
+      "objective_progress_weight": "0.1"
+    }
+  },
+  "generation": 11,
+  "identity": "passive-v4-candidate-g011-s012-fcf5cb322e51",
+  "parent_identity": "passive-v4-candidate-g010-s001-1aacca421c03",
+  "personality": "passive",
+  "phase_selector": {
+    "early": "3*future>=2*total",
+    "kind": "public-resource-horizon-v1",
+    "late": "otherwise",
+    "middle": "3*future>=total"
+  },
+  "predecessor_name": "passive-v3",
+  "profile_digest": "fcf5cb322e5170da2df14a6b7e77be502d9e5456ba4e881fb5c303c76c581bca",
+  "repository_commit": "b306d77de634efba21542b18589946a3fd8fc703",
+  "schema_version": 2,
+  "search": {
+    "manifest_digest": "11f7a8e38b89e9eea9b4f670632f9acd950a74ed48414b1a4e263ba27e90b048",
+    "name": "passive-v4-search-v2"
+  },
+  "slot": 12,
+  "source_evidence": {
+    "candidate_evaluations_sha256": "a35a8627d7417d9af61e03706fcbc6c747a9fc25a630cd188b9770953e7ebcf2",
+    "development_games_sha256": "49834d9e0b4a46505e25d4e2d16b2ed4576727ccac8d1ca1a37e5db02f1a3ae2",
+    "search_report_sha256": "ba01bae0b3c574b1687f57c55cfd3facc8ddb8d62db060e1cf81156b82894a9e",
+    "selection_log_sha256": "97e7004eb1d212d68435363d036fe034a23af3bb943c3ea5c43e3165c2dcbc60",
+    "winner_diagnostics": {
+      "winner-decision-slices.csv": "3abc8b43c82b2ef1cfe82b2a206a459d877d655a36bcd04dcac7801b3ffc00b1",
+      "winner-diagnostics.json": "b5e23fba5090e4d5ea70ce90722929915da62e3a0b2ca1c560ffab9737c02e22",
+      "winner-diagnostics.md": "2a2e546a248f7e44107c34397a993fde9a9f93bdc16e0bed6e7885d6daa24005"
+    }
+  }
+}

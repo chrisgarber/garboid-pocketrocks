@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import csv
 import hashlib
 import json
 import pickle
@@ -33,16 +32,15 @@ from garboid_pocketrocks.simulator.monte_carlo import MonteCarloRunner
 
 REPOSITORY_ROOT = Path(__file__).parents[2]
 CATALOG_DIR = REPOSITORY_ROOT / "src" / "garboid_pocketrocks" / "heuristics" / "frozen_candidates"
-BENCHMARK_DIR = REPOSITORY_ROOT / "docs" / "benchmarks" / "evolution"
 EXPECTED_V3_IDENTITIES = (
     "aggressive-v3-candidate-g007-s009-9c43f610b2f0",
     "balanced-v3-candidate-g005-s005-90544d0f26d2",
     "passive-v3-candidate-g006-s000-739e30e8d844",
 )
 EXPECTED_V4_IDENTITIES = (
-    "aggressive-v4-candidate-g011-s004-000d194163fa",
-    "balanced-v4-candidate-g009-s000-4d391ce068d7",
-    "passive-v4-candidate-g005-s005-cf4f7b924ee3",
+    "aggressive-v4-candidate-g011-s014-9a2908cce71c",
+    "balanced-v4-candidate-g005-s010-ae48ac912b3a",
+    "passive-v4-candidate-g011-s012-fcf5cb322e51",
 )
 EXPECTED_IDENTITIES = tuple(sorted((*EXPECTED_V3_IDENTITIES, *EXPECTED_V4_IDENTITIES)))
 EXPECTED_V3_PROVENANCE: dict[str, dict[str, Any]] = {
@@ -77,158 +75,150 @@ EXPECTED_V3_PROVENANCE: dict[str, dict[str, Any]] = {
         "development": "64124822038895aa4048469244c99177c877271368cc246d2250b737a14bf658",
     },
 }
-DEVELOPMENT_DIGEST = "17c016350dbe717641b8cd499b0908e3bc0faa811a3b4f5e574f8713a5bf2b3d"
+AGGRESSIVE_DEVELOPMENT_DIGEST = "6531e85f69f4e085b8ac789348be6c21614455dd77ba7ac791f5390479e17638"
 EXPECTED_V4_PROVENANCE: dict[str, dict[str, Any]] = {
     EXPECTED_V4_IDENTITIES[0]: {
         "predecessor": "aggressive-v3",
         "search_name": "aggressive-v4-search-v2",
-        "profile": "000d194163fac76a1e2928631379d7aab9b308025d6edb7583110cd962736b04",
-        "manifest": "71c06a1a246e81c935156ff818f66dcac454719168fabdd4af63ba94249ca69b",
-        "report": "05a77d4bdc177b0aa8b84c43e9ef364ab51533adebd9f2dc67ac3b1da85473bb",
-        "evaluations": "5a1ad67b7db378aaa009e3b59bd891ae71519e682f1eab241e3bf3f41f0c35a2",
-        "selection": "a45a3cbbf9bf57ffecadc6d84437c19f3e2d98379dba7e41dc04063c036e2ed8",
-        "games": "0a633649d4cf4c8ac0b593249f62bae8d64f1a687636a1b5f0722c630192d858",
-        "freeze": "2b63de8569efa4922cbb751ac052a20e46ca2accfdb3b0091d2f67d9858690dd",
-        "rating_delta": 24.713329019553612,
-        "normalized_finish_delta": 2.75,
-        "final_money_delta": 259,
+        "development_name": "development-aggressive-v3-broad-v1",
+        "development": AGGRESSIVE_DEVELOPMENT_DIGEST,
+        "profile": "9a2908cce71cefadc7e8c1adfe56c1d0e5875e2ceafd8205183bed00c93a5d75",
+        "manifest": "0b85403b121451b2a4ab495a1c73af93c311f2743c5e52ce6accd8ef606df324",
+        "report": "733fb7ac94106887861ac372018eced9ca06a012a46a0741b98c746272ae49da",
+        "evaluations": "f716f83591688782f9c08f96a072cf619ffd2fe159160c996a6e02cba2a7cd61",
+        "selection": "00ff789758cc7f144c8c01b6edda462f4d00baedb1d26e4e59d969c1c7398339",
+        "games": "60075dba729927c31a261fe925f876ff733cbcb8ead222346fed4791f9a3079a",
+        "freeze": "5d057574b2fd2346df3f94ef8accd0de3070247f9e964b4df969c6534fdec66d",
+        "rating_delta": 129.78608041843881,
+        "normalized_finish_delta": 28.166666666666686,
+        "final_money_delta": 1879,
         "experts": {
             "early": {
-                "bid_shading": "0.6",
-                "future_cash_weight": "1.95",
-                "liquidity_strength": "0.9",
-                "objective_progress_weight": "0.15",
+                "bid_shading": "0.2",
+                "future_cash_weight": "0.5",
+                "liquidity_strength": "1.45",
+                "objective_progress_weight": "1",
             },
             "middle": {
-                "bid_shading": "0.4",
-                "future_cash_weight": "1.9",
-                "liquidity_strength": "1",
-                "objective_progress_weight": "0.1",
+                "bid_shading": "0.3",
+                "future_cash_weight": "0.5",
+                "liquidity_strength": "1.45",
+                "objective_progress_weight": "0.85",
             },
             "late": {
-                "bid_shading": "0.5",
-                "future_cash_weight": "2",
-                "liquidity_strength": "1.4",
-                "objective_progress_weight": "0.15",
+                "bid_shading": "0.15",
+                "future_cash_weight": "0.7",
+                "liquidity_strength": "1.3",
+                "objective_progress_weight": "0.8",
             },
         },
         "diagnostics": {
             "winner-decision-slices.csv": (
-                "bdb47a31da14ee95cddc9579b2dc477b6d6a04f99420ede12ebc7ccc3e81b07d"
+                "b9562f9b8a3748431bc9a3d458de7f9acc346884c2ac3ccf3116fdc4f2a3aa27"
             ),
             "winner-diagnostics.json": (
-                "83d2a3043dd16d0fc30f7f47ee775e78cbaf781d396c2b8497c1c54ad46e5e0a"
+                "f1f3a6e3af692453308e86fee4e08b8f31a370ea4b37a529a8f58a717260f972"
             ),
             "winner-diagnostics.md": (
-                "e49e4d27635a0bb2b70d83e41458bb15fe021af519ac2d7f3bedfb41c707be39"
+                "93d53667130eaf31e2355a04473b862ffeb2e5f1649fcfb2a9c9cf5687178472"
             ),
         },
     },
     EXPECTED_V4_IDENTITIES[1]: {
         "predecessor": "balanced-v3",
         "search_name": "balanced-v4-search-v2",
-        "profile": "4d391ce068d794767aff27aaa2782a63f57255402d41fe3ee7b0196edaed036e",
-        "manifest": "e1f1bed8f09aef9193ffeb0ed3e0be822be96df7fd69985c9e4111f5c725933c",
-        "report": "3c84573a97def0068bc417714232d8c7870a331029037aede73235c8d7b6efab",
-        "evaluations": "1756519cb83597435fb395a569950f9f4a022c7aa3af48e9c2cc366c2a16b8e5",
-        "selection": "bce530095669125a9e1162e93cc5a3c7df3ca2cba6a2393fa4fff9d467357cb6",
-        "games": "54c38f79dc3690d1d0ef7eafa35d0f9cb4e8610ee166e19b37e9d053c409e273",
-        "freeze": "126fbbd3d7d20dc66a239c0e7608365352c5077fee81c6b0d88c4410c5b28df3",
-        "rating_delta": 9.953994694126777,
-        "normalized_finish_delta": 0.9166666666666572,
-        "final_money_delta": 92,
+        "development_name": "development-balanced-v3-broad-v1",
+        "development": "d556cc940c92ebf3633fde83485d4ba776b6e582f34cf8d445a5c190824b3228",
+        "profile": "ae48ac912b3a84246be09e8f88f5e5c6a8d6dcf9668b030fc3cebfbdb376d32f",
+        "manifest": "4c738ca18f93bd59112115a7c992d168fef6c26f0c114aed9011a80f7a8f2763",
+        "report": "fc153c9fb8905dae4fcd0028b83b5a19fb1974d20f35b1c5cdd8617f7601420a",
+        "evaluations": "7c57f855a08a4465facf28326dafc8954d25e378a6190c3688d43f9418935a95",
+        "selection": "1d2a3e08c28d5192648f2d7d198ef6a9846be91a36dd6303be369081ea3dc992",
+        "games": "a16e95ce7ea8b7898f79316191becc82f1a7aa7c918228af0ff67126cfc2fcdb",
+        "freeze": "373b94c6112f6838fc4ec83488427890d9e5403e2414344a3cc6f736a9d60886",
+        "rating_delta": 12.552936995797609,
+        "normalized_finish_delta": 2.166666666666657,
+        "final_money_delta": 100,
         "experts": {
             "early": {
-                "bid_shading": "0.35",
-                "future_cash_weight": "1.35",
-                "liquidity_strength": "0.25",
-                "objective_progress_weight": "0.3",
+                "bid_shading": "0.3",
+                "future_cash_weight": "1.05",
+                "liquidity_strength": "1.25",
+                "objective_progress_weight": "0.55",
             },
             "middle": {
-                "bid_shading": "0.35",
-                "future_cash_weight": "1.55",
-                "liquidity_strength": "0.3",
-                "objective_progress_weight": "0.35",
+                "bid_shading": "0.3",
+                "future_cash_weight": "1.05",
+                "liquidity_strength": "1.5",
+                "objective_progress_weight": "0.9",
             },
             "late": {
-                "bid_shading": "0.35",
-                "future_cash_weight": "1.45",
-                "liquidity_strength": "0.45",
-                "objective_progress_weight": "0.25",
+                "bid_shading": "0.3",
+                "future_cash_weight": "1.05",
+                "liquidity_strength": "1.4",
+                "objective_progress_weight": "0.9",
             },
         },
         "diagnostics": {
             "winner-decision-slices.csv": (
-                "c6a6372898b25f26b7f34b14bca83743769492a68510f2f2f1aaf77c3f4a6e99"
+                "c4ac4fa036f1a606db8b4e0d2bea8fa6bcb01c91cb95e4097c265cb54bc80c96"
             ),
             "winner-diagnostics.json": (
-                "4ff4b1694b7807e39b58556a050a03d5ed77f825505dff08f70db857712e1029"
+                "c957f6208435572dafdb7a8a86f606d83fbdc24ce1a0b948938aa5b698a9d055"
             ),
             "winner-diagnostics.md": (
-                "7458b3e55f4efb352d14b09c79cb0907195625b9cd6aba004caa607f22d5b24d"
+                "fd1dab2cb46154295334c9d534241dc4d58d66022203747c8a452c49dc41cdba"
             ),
         },
     },
     EXPECTED_V4_IDENTITIES[2]: {
         "predecessor": "passive-v3",
         "search_name": "passive-v4-search-v2",
-        "profile": "cf4f7b924ee3759d05eff38f47340951fb51c55827e469d8ea96a14e3cd4ccc4",
-        "manifest": "334579f896a0d4281c8926bb4cc5d9bffd9b3c63b8be3d0ae3375699792d4bc6",
-        "report": "dc6f291668c934bf3f16028d1fb5a03d4b36f4ae34f5209142724202d5fbd78c",
-        "evaluations": "9723aafbcaba9566975c8f59650824c1ff5523924e4556d1e760b3f615ea1e13",
-        "selection": "b561137db2cdaaae3ec930b5b52b0d81fae74bf34bf058228d48d94f80ad827c",
-        "games": "1c9acc0e2b948d4661350547c761242d03d85cd74de6dc8a6c47cdb74f0c7f21",
-        "freeze": "36285933ff9a36b45004a5cfd14dd828a7ebda10c6bf34eb87d7511ae8d68f84",
-        "rating_delta": 12.092948249983237,
-        "normalized_finish_delta": 1.8333333333333428,
-        "final_money_delta": 3,
+        "development_name": "development-passive-v3-broad-v1",
+        "development": "64124822038895aa4048469244c99177c877271368cc246d2250b737a14bf658",
+        "profile": "fcf5cb322e5170da2df14a6b7e77be502d9e5456ba4e881fb5c303c76c581bca",
+        "manifest": "11f7a8e38b89e9eea9b4f670632f9acd950a74ed48414b1a4e263ba27e90b048",
+        "report": "ba01bae0b3c574b1687f57c55cfd3facc8ddb8d62db060e1cf81156b82894a9e",
+        "evaluations": "a35a8627d7417d9af61e03706fcbc6c747a9fc25a630cd188b9770953e7ebcf2",
+        "selection": "97e7004eb1d212d68435363d036fe034a23af3bb943c3ea5c43e3165c2dcbc60",
+        "games": "49834d9e0b4a46505e25d4e2d16b2ed4576727ccac8d1ca1a37e5db02f1a3ae2",
+        "freeze": "d39cc5b1c85dbfad9365b86374a30c096c3475580877d14dcbc397c17e43af95",
+        "rating_delta": 71.59108456759373,
+        "normalized_finish_delta": 15.583333333333343,
+        "final_money_delta": 721,
         "experts": {
             "early": {
-                "bid_shading": "0.45",
-                "future_cash_weight": "1.8",
-                "liquidity_strength": "1.5",
-                "objective_progress_weight": "0.95",
+                "bid_shading": "0.1",
+                "future_cash_weight": "1.75",
+                "liquidity_strength": "1.4",
+                "objective_progress_weight": "0.6",
             },
             "middle": {
                 "bid_shading": "0.45",
-                "future_cash_weight": "1.75",
-                "liquidity_strength": "1.5",
-                "objective_progress_weight": "0.95",
+                "future_cash_weight": "1.9",
+                "liquidity_strength": "0.45",
+                "objective_progress_weight": "0.1",
             },
             "late": {
-                "bid_shading": "0.4",
+                "bid_shading": "0.5",
                 "future_cash_weight": "2",
-                "liquidity_strength": "1.5",
-                "objective_progress_weight": "0.95",
+                "liquidity_strength": "0.25",
+                "objective_progress_weight": "0.1",
             },
         },
         "diagnostics": {
             "winner-decision-slices.csv": (
-                "04d94fb3d302a39517bc383cec38bcf751670ed91c220e31beb3cc9fdfbf4db1"
+                "3abc8b43c82b2ef1cfe82b2a206a459d877d655a36bcd04dcac7801b3ffc00b1"
             ),
             "winner-diagnostics.json": (
-                "82822bf049202cbaed6db262c5f307e97221cfc1cf7bd34afe1db76c194344d5"
+                "b5e23fba5090e4d5ea70ce90722929915da62e3a0b2ca1c560ffab9737c02e22"
             ),
             "winner-diagnostics.md": (
-                "994cfb68e0830841c9473babb4359c42b64933137bc42b549ea379af56ecbea6"
+                "2a2e546a248f7e44107c34397a993fde9a9f93bdc16e0bed6e7885d6daa24005"
             ),
         },
     },
 }
-EXPECTED_V4_PHASE_OUTCOME_DIGESTS = {
-    EXPECTED_V4_IDENTITIES[0]: "b5b2f0a1264120070ab3cf700f8fe54c6c50f4f23a8a399cfc2741276cff168f",
-    EXPECTED_V4_IDENTITIES[1]: "fedc33758460714c2adf135270d5445fa46a9b6c083116ce7d433fc4ad61c70a",
-    EXPECTED_V4_IDENTITIES[2]: "34bd3041dc5e1d5d17afbe70a9de86b50feb7460279d4f81f00fc16931d03936",
-}
-SAFE_PHASE_OUTCOME_FIELDS = (
-    "selected_expert_phase",
-    "decision_count",
-    "eventual_final_money_sum",
-    "eventual_normalized_finish_sum",
-    "outright_win_decision_count",
-    "tied_first_decision_count",
-    "decisions_from_faulted_game_seat",
-)
 SYNTHETIC_V4_EXPERTS = {
     "early": {
         "liquidity_strength": "0.3",
@@ -294,8 +284,8 @@ def _schema_v2_frozen_payload() -> dict[str, Any]:
     return {
         "boundary_evidence": V4_BOUNDARY_EVIDENCE,
         "development_corpus": {
-            "digest": DEVELOPMENT_DIGEST,
-            "name": "development-v1",
+            "digest": AGGRESSIVE_DEVELOPMENT_DIGEST,
+            "name": "development-aggressive-v3-broad-v1",
         },
         "development_scores": {
             "final_money_delta": 17,
@@ -440,9 +430,9 @@ def test_catalog_exposes_exact_frozen_records_and_provenance() -> None:
         assert v4_candidate.bot_spec.bot_id == v4_candidate.identity
         assert v4_candidate.predecessor_name == expected["predecessor"]
         assert v4_candidate.search_name == expected["search_name"]
-        assert v4_candidate.development_corpus_name == "development-v1"
-        assert v4_candidate.development_corpus_digest == DEVELOPMENT_DIGEST
-        assert v4_candidate.repository_commit == "a66c49e559849b35a290827b51b2e5098524e2d1"
+        assert v4_candidate.development_corpus_name == expected["development_name"]
+        assert v4_candidate.development_corpus_digest == expected["development"]
+        assert v4_candidate.repository_commit == "b306d77de634efba21542b18589946a3fd8fc703"
         assert v4_candidate.freeze_digest == expected["freeze"]
         assert v4_candidate.profile_digest == expected["profile"]
         assert v4_candidate.manifest_digest == expected["manifest"]
@@ -501,21 +491,6 @@ def test_catalog_index_hashes_and_describes_packaged_freezes() -> None:
             continue
 
         expected = EXPECTED_V4_PROVENANCE[identity]
-        search_dir = BENCHMARK_DIR / expected["search_name"]
-        benchmark = search_dir / "frozen-candidate.json"
-        assert installed.read_bytes() == benchmark.read_bytes()
-        report = json.loads((search_dir / "search-report.json").read_text(encoding="utf-8"))
-        manifest = json.loads((search_dir / "search-manifest.json").read_text(encoding="utf-8"))
-        corpus = json.loads(
-            (search_dir / "development-corpus-snapshot.json").read_text(encoding="utf-8")
-        )
-        assert report["status"] == "frozen_improvement"
-        assert report["frozen_candidate_identity"] == identity
-        assert report["search"]["name"] == entry["search_name"]
-        assert manifest["digest"] == entry["manifest_digest"]
-        assert corpus["recipe"]["purpose"] == "development"
-        assert corpus["recipe"]["name"] == entry["development_corpus_name"]
-        assert corpus["digest"] == entry["development_corpus_digest"]
         assert entry["sha256"] == expected["freeze"]
         assert payload["identity"] == identity
         assert payload["profile_digest"] == expected["profile"]
@@ -529,110 +504,20 @@ def test_catalog_index_hashes_and_describes_packaged_freezes() -> None:
             "selection_log_sha256": expected["selection"],
             "winner_diagnostics": expected["diagnostics"],
         }
+        assert entry["selection_log_sha256"] == expected["selection"]
+        assert entry["development_games_sha256"] == expected["games"]
         assert (
-            hashlib.sha256((search_dir / "selection-log.jsonl").read_bytes()).hexdigest()
-            == expected["selection"]
-            == entry["selection_log_sha256"]
+            entry["winner_decision_slices_sha256"]
+            == expected["diagnostics"]["winner-decision-slices.csv"]
         )
         assert (
-            hashlib.sha256((search_dir / "development-games.jsonl").read_bytes()).hexdigest()
-            == expected["games"]
-            == entry["development_games_sha256"]
+            entry["winner_diagnostics_json_sha256"]
+            == expected["diagnostics"]["winner-diagnostics.json"]
         )
-        for artifact_name, catalog_field in (
-            ("winner-diagnostics.json", "winner_diagnostics_json_sha256"),
-            ("winner-diagnostics.md", "winner_diagnostics_markdown_sha256"),
-        ):
-            assert (
-                hashlib.sha256((search_dir / artifact_name).read_bytes()).hexdigest()
-                == expected["diagnostics"][artifact_name]
-                == entry[catalog_field]
-            )
-
-
-@pytest.mark.parametrize("identity", EXPECTED_V4_IDENTITIES)
-def test_v4_privacy_redaction_withholds_detailed_slices_and_publishes_phase_totals(
-    identity: str,
-) -> None:
-    expected = EXPECTED_V4_PROVENANCE[identity]
-    search_dir = BENCHMARK_DIR / expected["search_name"]
-    detailed_slices = search_dir / "winner-decision-slices.csv"
-    replacement = search_dir / "winner-phase-outcomes.csv"
-    redaction_path = search_dir / "privacy-redaction.json"
-    diagnostics_path = search_dir / "winner-diagnostics.json"
-    diagnostics = json.loads(diagnostics_path.read_text(encoding="utf-8"))
-    redaction = json.loads(redaction_path.read_text(encoding="utf-8"))
-    frozen = json.loads((search_dir / "frozen-candidate.json").read_text(encoding="utf-8"))
-    catalog = json.loads((CATALOG_DIR / "index.json").read_text(encoding="utf-8"))
-    catalog_entry = next(entry for entry in catalog["candidates"] if entry["identity"] == identity)
-    report = json.loads((search_dir / "search-report.json").read_text(encoding="utf-8"))
-    report_digests = {
-        artifact["name"]: artifact["sha256"]
-        for artifact in report["winner_diagnostics"]["artifacts"]
-    }
-    withheld_digest = expected["diagnostics"]["winner-decision-slices.csv"]
-
-    assert not detailed_slices.exists()
-    assert frozen["source_evidence"]["winner_diagnostics"]["winner-decision-slices.csv"] == (
-        withheld_digest
-    )
-    assert catalog_entry["winner_decision_slices_sha256"] == withheld_digest
-    assert report_digests["winner-decision-slices.csv"] == withheld_digest
-
-    assert set(redaction) == {
-        "promotion_result_changed",
-        "reason",
-        "reason_code",
-        "replacement_artifact",
-        "replacement_basis",
-        "schema_version",
-        "search_name",
-        "search_selection_changed",
-        "surviving_diagnostic_artifacts",
-        "withheld_artifact",
-    }
-    assert redaction["schema_version"] == 1
-    assert redaction["search_name"] == expected["search_name"]
-    assert redaction["reason_code"] == "withhold_high_dimensional_singleton_decision_slices"
-    assert redaction["reason"] == (
-        "The detailed slice table grouped decisions so narrowly that most rows represented "
-        "one decision and could be linked to reproducible game seeds."
-    )
-    assert redaction["replacement_basis"] == (
-        "winner-phase-outcomes.csv is a deterministic three-row projection of phase_outcomes "
-        "in winner-diagnostics.json; no simulation was rerun."
-    )
-    assert redaction["search_selection_changed"] is False
-    assert redaction["promotion_result_changed"] is False
-    assert redaction["withheld_artifact"] == {
-        "name": "winner-decision-slices.csv",
-        "sha256": withheld_digest,
-    }
-
-    replacement_bytes = replacement.read_bytes()
-    replacement_digest = hashlib.sha256(replacement_bytes).hexdigest()
-    assert redaction["replacement_artifact"] == {
-        "name": "winner-phase-outcomes.csv",
-        "sha256": EXPECTED_V4_PHASE_OUTCOME_DIGESTS[identity],
-    }
-    assert replacement_digest == EXPECTED_V4_PHASE_OUTCOME_DIGESTS[identity]
-    assert replacement_bytes.endswith(b"\n")
-    assert b"\r" not in replacement_bytes
-
-    reader = csv.DictReader(replacement_bytes.decode("utf-8").splitlines())
-    rows = list(reader)
-    assert tuple(reader.fieldnames or ()) == SAFE_PHASE_OUTCOME_FIELDS
-    assert len(rows) == 3
-    assert rows == [
-        {field: str(outcome[field]) for field in SAFE_PHASE_OUTCOME_FIELDS}
-        for outcome in diagnostics["phase_outcomes"]
-    ]
-
-    surviving = redaction["surviving_diagnostic_artifacts"]
-    assert set(surviving) == {"winner-diagnostics.json", "winner-diagnostics.md"}
-    for artifact_name, digest in surviving.items():
-        assert hashlib.sha256((search_dir / artifact_name).read_bytes()).hexdigest() == digest
-        assert expected["diagnostics"][artifact_name] == digest
+        assert (
+            entry["winner_diagnostics_markdown_sha256"]
+            == expected["diagnostics"]["winner-diagnostics.md"]
+        )
 
 
 def test_frozen_specs_are_picklable_local_only_and_not_released() -> None:

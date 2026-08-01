@@ -41,7 +41,7 @@ from garboid_pocketrocks.promotion.corpus import (
     load_promotion_corpus,
     recompute_promotion_corpus_digest,
 )
-from garboid_pocketrocks.simulator.monte_carlo import GameJob, MonteCarloRunner
+from garboid_pocketrocks.simulator.monte_carlo import GameJob, GameSummary, MonteCarloRunner
 
 REPOSITORY_ROOT = Path(__file__).parents[2]
 
@@ -666,28 +666,35 @@ def _phase_run_with_recomputed_positive_evidence(
 ) -> runner_module.SearchRun:
     """Create a frozen fixture whose recorded results independently score positive."""
 
-    baseline_summary = run.baseline_result.game_summaries[0]
-    focal_seat = run.development_corpus.cases[0].focal_seat
-    other_seats = tuple(seat for seat in range(baseline_summary.player_count) if seat != focal_seat)
-    ranks = {
-        focal_seat: baseline_summary.player_count,
-        **{seat: index + 1 for index, seat in enumerate(other_seats)},
-    }
+    def losing_incumbent_summary(summary: GameSummary) -> GameSummary:
+        focal_seat = summary.bot_ids.index(run.manifest.predecessor_name)
+        focal_money = min(score.final_money for score in summary.scores) - 100
+        money_by_seat = {
+            score.seat: focal_money if score.seat == focal_seat else score.final_money
+            for score in summary.scores
+        }
+        return replace(
+            summary,
+            scores=tuple(
+                replace(
+                    score,
+                    final_money=money_by_seat[score.seat],
+                    rank=1
+                    + sum(
+                        other_money > money_by_seat[score.seat]
+                        for other_seat, other_money in money_by_seat.items()
+                        if other_seat != score.seat
+                    ),
+                )
+                for score in summary.scores
+            ),
+        )
+
     positive_baseline = replace(
         run.baseline_result,
-        game_summaries=(
-            replace(
-                baseline_summary,
-                scores=tuple(
-                    replace(
-                        score,
-                        final_money=-100 if score.seat == focal_seat else score.final_money,
-                        rank=ranks[score.seat],
-                    )
-                    for score in baseline_summary.scores
-                ),
-            ),
-            *run.baseline_result.game_summaries[1:],
+        game_summaries=tuple(
+            losing_incumbent_summary(summary)
+            for summary in run.baseline_result.game_summaries
         ),
     )
     candidate_runs = tuple(

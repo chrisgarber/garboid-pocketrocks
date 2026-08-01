@@ -30,8 +30,8 @@ from garboid_pocketrocks.promotion.runner import PromotionRun, PromotionRunConfi
 from .test_runner import _run_inputs
 
 _DEVELOPMENT_CORPUS_DIGEST = "3baf37660bb33ac2571ba62a09873a74cccbe6d7491f063e5d4a3e641fd24f4c"
-_BALANCED_V4_IDENTITY = "balanced-v4-candidate-g009-s000-4d391ce068d7"
-_V4_DEVELOPMENT_CORPUS = Path("configs/promotion/development-heuristic-v4-v1.json")
+_BALANCED_V4_IDENTITY = "balanced-v4-candidate-g005-s010-ae48ac912b3a"
+_V4_DEVELOPMENT_CORPUS = Path("configs/promotion/development-balanced-v3-broad-v1.json")
 
 
 @dataclass(frozen=True, slots=True)

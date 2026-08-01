@@ -436,28 +436,28 @@ def test_phase_report_normalizes_selector_evidence_and_all_twelve_coefficients(
     ]
     expected_artifacts = {
         "search-manifest.json": (
-            3057,
-            "a6ac63169b4c8dcdb8f5e9a6bdf08ba9524987897d6141e3a10f55fbd9e4428b",
+            3069,
+            "ecebdc74b9ccac2e88d6dbcc1258ad488f4628186e80c575230bc4b59b1ae4d1",
         ),
         "search-report.json": (
-            3106,
-            "25d26c062bd3e2955234a8c34f563cd6de4268540af91b1be4585cb4d735f1e7",
+            3120,
+            "9e76525135ef1796427d0440527b6d111f330aff92f39ac729c8b13a2b8b6ebd",
         ),
         "candidate-evaluations.jsonl": (
-            21596,
-            "9f98e6974d8e93e9a5afa6c3ac71e17091a5aefd4bad5deafb24306c917605e1",
+            21427,
+            "ea6214f7b8702044653c9db93137fd35aea6c07771bea9df5c1c52427401fe8f",
         ),
         "selection-log.jsonl": (
-            8537,
-            "1c8215835558d9ab9f5edf051d11d59db19cf4dbe03b4804b65cd8866979dfbd",
+            8449,
+            "844da25d28b4666761e8bee4ccc0e65e019b8d8972905d874270fbf291e5ca4a",
         ),
         "development-games.jsonl": (
-            11479,
-            "32a1f0be56c51efc5e684b10f584518de4f09e3e6207ec026354bac7acb84445",
+            11496,
+            "2fe8fa203a271424db675b0143e2a79ac281e1444c1524e9a190a543f98077bc",
         ),
         "development-corpus-snapshot.json": (
-            778,
-            "0460d0975a6286bdc9676054df911bd21cf24f02a483d63fdef916793bebcf38",
+            914,
+            "6b37caa501838f48624670cb375053203c224aef6121f25074e3b8489c701335",
         ),
     }
     assert {path.name for path in first.paths} == set(expected_artifacts)
@@ -486,7 +486,7 @@ def test_phase_report_normalizes_selector_evidence_and_all_twelve_coefficients(
     assert phase_search_run.selected_candidate is not None
     assert (
         phase_search_run.selected_candidate.identity
-        == "balanced-v4-candidate-g000-s008-d4f1f74b21cf"
+        == "balanced-v4-candidate-g000-s004-272446b32fc7"
     )
     selected_evaluation = next(
         item
@@ -494,22 +494,22 @@ def test_phase_report_normalizes_selector_evidence_and_all_twelve_coefficients(
         if item["candidate"]["identity"] == phase_search_run.selected_candidate.identity
     )
     assert selected_evaluation["candidate"]["profile_digest"] == (
-        "d4f1f74b21cf64da670e62c9482d45cc9df9b9630f4589a21b209da862618a83"
+        "272446b32fc765741e6d9a6352df37079b33c4a27abe30e7994c07dfcce0ae2b"
     )
     assert selected_evaluation["scores"] == {
         "rating_delta": 0.0,
         "normalized_finish_delta": 0.0,
-        "final_money_delta": 5,
+        "final_money_delta": 26,
     }
     first_candidate = evaluations[0]["candidate"]
     assert first_candidate["phase_selector"] == search_payload["search"]["phase_selector"]
     assert tuple(first_candidate["experts"]) == ("early", "late", "middle")
     assert sum(len(values) for values in first_candidate["experts"].values()) == 12
     expected_expert = {
-        "liquidity_strength": "0.25",
-        "future_cash_weight": "1.55",
-        "objective_progress_weight": "0.3",
-        "bid_shading": "0.35",
+        "liquidity_strength": "1.4",
+        "future_cash_weight": "1.05",
+        "objective_progress_weight": "0.7",
+        "bid_shading": "0.3",
     }
     assert first_candidate["experts"] == {
         "early": expected_expert,

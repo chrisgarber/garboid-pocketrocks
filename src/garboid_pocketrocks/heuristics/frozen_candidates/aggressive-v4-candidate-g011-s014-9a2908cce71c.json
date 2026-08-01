@@ -1,0 +1,67 @@
+{
+  "boundary_evidence": {
+    "report_digest": "9961f26f32270dcebc98df443588e96cbde2f953858cd131c66a37aeecaa9b01",
+    "report_path": "docs/benchmarks/2026-07-30-heuristic-v4-phase-boundaries.md",
+    "slices_digest": "4f8aa60edf31b28c746cb8004a4dd5468ee8ab1b26462550c914b2e3fa50d7ae",
+    "slices_path": "docs/benchmarks/tournaments/2026-07-30-heuristic-v3-phase-boundaries-development/phase-boundary-slices.csv"
+  },
+  "development_corpus": {
+    "digest": "6531e85f69f4e085b8ac789348be6c21614455dd77ba7ac791f5390479e17638",
+    "name": "development-aggressive-v3-broad-v1"
+  },
+  "development_scores": {
+    "final_money_delta": 1879,
+    "normalized_finish_delta": 28.166666666666686,
+    "rating_delta": 129.78608041843881
+  },
+  "experts": {
+    "early": {
+      "bid_shading": "0.2",
+      "future_cash_weight": "0.5",
+      "liquidity_strength": "1.45",
+      "objective_progress_weight": "1"
+    },
+    "late": {
+      "bid_shading": "0.15",
+      "future_cash_weight": "0.7",
+      "liquidity_strength": "1.3",
+      "objective_progress_weight": "0.8"
+    },
+    "middle": {
+      "bid_shading": "0.3",
+      "future_cash_weight": "0.5",
+      "liquidity_strength": "1.45",
+      "objective_progress_weight": "0.85"
+    }
+  },
+  "generation": 11,
+  "identity": "aggressive-v4-candidate-g011-s014-9a2908cce71c",
+  "parent_identity": "aggressive-v4-candidate-g010-s008-df3c51c58e1c",
+  "personality": "aggressive",
+  "phase_selector": {
+    "early": "3*future>=2*total",
+    "kind": "public-resource-horizon-v1",
+    "late": "otherwise",
+    "middle": "3*future>=total"
+  },
+  "predecessor_name": "aggressive-v3",
+  "profile_digest": "9a2908cce71cefadc7e8c1adfe56c1d0e5875e2ceafd8205183bed00c93a5d75",
+  "repository_commit": "b306d77de634efba21542b18589946a3fd8fc703",
+  "schema_version": 2,
+  "search": {
+    "manifest_digest": "0b85403b121451b2a4ab495a1c73af93c311f2743c5e52ce6accd8ef606df324",
+    "name": "aggressive-v4-search-v2"
+  },
+  "slot": 14,
+  "source_evidence": {
+    "candidate_evaluations_sha256": "f716f83591688782f9c08f96a072cf619ffd2fe159160c996a6e02cba2a7cd61",
+    "development_games_sha256": "60075dba729927c31a261fe925f876ff733cbcb8ead222346fed4791f9a3079a",
+    "search_report_sha256": "733fb7ac94106887861ac372018eced9ca06a012a46a0741b98c746272ae49da",
+    "selection_log_sha256": "00ff789758cc7f144c8c01b6edda462f4d00baedb1d26e4e59d969c1c7398339",
+    "winner_diagnostics": {
+      "winner-decision-slices.csv": "b9562f9b8a3748431bc9a3d458de7f9acc346884c2ac3ccf3116fdc4f2a3aa27",
+      "winner-diagnostics.json": "f1f3a6e3af692453308e86fee4e08b8f31a370ea4b37a529a8f58a717260f972",
+      "winner-diagnostics.md": "93d53667130eaf31e2355a04473b862ffeb2e5f1649fcfb2a9c9cf5687178472"
+    }
+  }
+}

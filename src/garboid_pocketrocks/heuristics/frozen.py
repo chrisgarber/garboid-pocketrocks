@@ -152,8 +152,20 @@ _FIXED_BOUNDARY_EVIDENCE = {
     ),
     "slices_digest": "4f8aa60edf31b28c746cb8004a4dd5468ee8ab1b26462550c914b2e3fa50d7ae",
 }
-_DEVELOPMENT_CORPUS_NAME = "development-v1"
-_DEVELOPMENT_CORPUS_DIGEST = "17c016350dbe717641b8cd499b0908e3bc0faa811a3b4f5e574f8713a5bf2b3d"
+_PHASE_DEVELOPMENT_CORPORA = {
+    "aggressive": (
+        "development-aggressive-v3-broad-v1",
+        "6531e85f69f4e085b8ac789348be6c21614455dd77ba7ac791f5390479e17638",
+    ),
+    "balanced": (
+        "development-balanced-v3-broad-v1",
+        "d556cc940c92ebf3633fde83485d4ba776b6e582f34cf8d445a5c190824b3228",
+    ),
+    "passive": (
+        "development-passive-v3-broad-v1",
+        "64124822038895aa4048469244c99177c877271368cc246d2250b737a14bf658",
+    ),
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -738,10 +750,12 @@ def _load_phase_catalog_candidate(
         development["digest"],
         field=f"development corpus digest for {identity}",
     )
-    if corpus_name != _DEVELOPMENT_CORPUS_NAME or corpus_digest != _DEVELOPMENT_CORPUS_DIGEST:
+    expected_corpus_name, expected_corpus_digest = _PHASE_DEVELOPMENT_CORPORA[personality]
+    if corpus_name != expected_corpus_name or corpus_digest != expected_corpus_digest:
         raise FrozenCandidateCatalogError(
             "invalid_development_corpus",
-            f"Frozen candidate {identity!r} must use the fixed development-v1 corpus.",
+            f"Frozen candidate {identity!r} must use the fixed broad-field "
+            f"development corpus for {personality}.",
         )
     _require_entry_match(entry, "development_corpus_name", corpus_name, identity=identity)
     _require_entry_match(entry, "development_corpus_digest", corpus_digest, identity=identity)

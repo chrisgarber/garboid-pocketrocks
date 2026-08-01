@@ -31,11 +31,11 @@ from .helpers import EvilFactory, EvilString, evil_provenance
 from .test_runner import _corpora
 
 _DIGESTS = tuple(character * 64 for character in "abcde")
-_BALANCED_V4_IDENTITY = "balanced-v4-candidate-g009-s000-4d391ce068d7"
+_BALANCED_V4_IDENTITY = "balanced-v4-candidate-g005-s010-ae48ac912b3a"
 _V4_IDENTITIES = (
-    "aggressive-v4-candidate-g011-s004-000d194163fa",
+    "aggressive-v4-candidate-g011-s014-9a2908cce71c",
     _BALANCED_V4_IDENTITY,
-    "passive-v4-candidate-g005-s005-cf4f7b924ee3",
+    "passive-v4-candidate-g011-s012-fcf5cb322e51",
 )
 _PHASES = ("early", "middle", "late")
 _COEFFICIENTS = (
@@ -52,11 +52,7 @@ _DIAGNOSTIC_NAMES = (
 
 
 def _development_for_frozen(frozen: Any) -> PromotionCorpus:
-    corpus_file = (
-        "development-heuristic-v4-v1.json"
-        if isinstance(frozen, FrozenPhaseAwareCandidate)
-        else f"development-{frozen.personality}-v3-broad-v1.json"
-    )
+    corpus_file = f"development-{frozen.personality}-v3-broad-v1.json"
     return load_promotion_corpus(
         Path("configs/promotion") / corpus_file,
         registry=BOT_SPECS_BY_NAME,
@@ -161,18 +157,18 @@ def test_phase_aware_frozen_candidate_resolution_records_exact_schema_v2_provena
         candidate_name=_BALANCED_V4_IDENTITY,
         candidate_bot_id=_BALANCED_V4_IDENTITY,
         predecessor_name="balanced-v3",
-        development_corpus_name="development-v1",
+        development_corpus_name="development-balanced-v3-broad-v1",
         development_corpus_digest=(
-            "17c016350dbe717641b8cd499b0908e3bc0faa811a3b4f5e574f8713a5bf2b3d"
+            "d556cc940c92ebf3633fde83485d4ba776b6e582f34cf8d445a5c190824b3228"
         ),
         search_name="balanced-v4-search-v2",
-        repository_commit="a66c49e559849b35a290827b51b2e5098524e2d1",
-        freeze_digest="126fbbd3d7d20dc66a239c0e7608365352c5077fee81c6b0d88c4410c5b28df3",
-        profile_digest="4d391ce068d794767aff27aaa2782a63f57255402d41fe3ee7b0196edaed036e",
-        manifest_digest="e1f1bed8f09aef9193ffeb0ed3e0be822be96df7fd69985c9e4111f5c725933c",
-        search_report_digest=("3c84573a97def0068bc417714232d8c7870a331029037aede73235c8d7b6efab"),
+        repository_commit="b306d77de634efba21542b18589946a3fd8fc703",
+        freeze_digest="373b94c6112f6838fc4ec83488427890d9e5403e2414344a3cc6f736a9d60886",
+        profile_digest="ae48ac912b3a84246be09e8f88f5e5c6a8d6dcf9668b030fc3cebfbdb376d32f",
+        manifest_digest="4c738ca18f93bd59112115a7c992d168fef6c26f0c114aed9011a80f7a8f2763",
+        search_report_digest=("fc153c9fb8905dae4fcd0028b83b5a19fb1974d20f35b1c5cdd8617f7601420a"),
         candidate_evaluations_digest=(
-            "1756519cb83597435fb395a569950f9f4a022c7aa3af48e9c2cc366c2a16b8e5"
+            "7c57f855a08a4465facf28326dafc8954d25e378a6190c3688d43f9418935a95"
         ),
         freeze_schema_version=2,
         personality="balanced",
@@ -186,43 +182,43 @@ def test_phase_aware_frozen_candidate_resolution_records_exact_schema_v2_provena
             (
                 "early",
                 (
-                    ("liquidity_strength", 0.25),
-                    ("future_cash_weight", 1.35),
-                    ("objective_progress_weight", 0.3),
-                    ("bid_shading", 0.35),
+                    ("liquidity_strength", 1.25),
+                    ("future_cash_weight", 1.05),
+                    ("objective_progress_weight", 0.55),
+                    ("bid_shading", 0.3),
                 ),
             ),
             (
                 "middle",
                 (
-                    ("liquidity_strength", 0.3),
-                    ("future_cash_weight", 1.55),
-                    ("objective_progress_weight", 0.35),
-                    ("bid_shading", 0.35),
+                    ("liquidity_strength", 1.5),
+                    ("future_cash_weight", 1.05),
+                    ("objective_progress_weight", 0.9),
+                    ("bid_shading", 0.3),
                 ),
             ),
             (
                 "late",
                 (
-                    ("liquidity_strength", 0.45),
-                    ("future_cash_weight", 1.45),
-                    ("objective_progress_weight", 0.25),
-                    ("bid_shading", 0.35),
+                    ("liquidity_strength", 1.4),
+                    ("future_cash_weight", 1.05),
+                    ("objective_progress_weight", 0.9),
+                    ("bid_shading", 0.3),
                 ),
             ),
         ),
         expert_digests=(
             (
                 "early",
-                "5b1be14a38ee161a169548dab0d87083ebacd1c9df09275b1a0b3b52ac0572de",
+                "431e66c676a0cb6cf5d0ccfa576c4cab7b46e7e9aa57ec98d254fd5dc3849f18",
             ),
             (
                 "middle",
-                "44d8d005cca8deb5f7154905bb8aa33da893cdaa8256d5880e48596095f14660",
+                "0ba361b8f4e45479586f5c50c310239e709e60abbbf1f412b51ea57bf24494b4",
             ),
             (
                 "late",
-                "56710dde4f85a1af41e78f6e1ebbc50507f5a8d8382592a2e8e81e1c43ff73c8",
+                "67fda27f11e8a1ea59f14c0e330a187a6c6ebe85d6b501d906e5a21030fe96c2",
             ),
         ),
         boundary_report_path="docs/benchmarks/2026-07-30-heuristic-v4-phase-boundaries.md",
@@ -233,22 +229,22 @@ def test_phase_aware_frozen_candidate_resolution_records_exact_schema_v2_provena
             "phase-boundary-slices.csv"
         ),
         boundary_slices_digest=("4f8aa60edf31b28c746cb8004a4dd5468ee8ab1b26462550c914b2e3fa50d7ae"),
-        selection_log_digest=("bce530095669125a9e1162e93cc5a3c7df3ca2cba6a2393fa4fff9d467357cb6"),
+        selection_log_digest=("1d2a3e08c28d5192648f2d7d198ef6a9846be91a36dd6303be369081ea3dc992"),
         development_games_digest=(
-            "54c38f79dc3690d1d0ef7eafa35d0f9cb4e8610ee166e19b37e9d053c409e273"
+            "a16e95ce7ea8b7898f79316191becc82f1a7aa7c918228af0ff67126cfc2fcdb"
         ),
         winner_diagnostics_digests=(
             (
                 "winner-decision-slices.csv",
-                "c6a6372898b25f26b7f34b14bca83743769492a68510f2f2f1aaf77c3f4a6e99",
+                "c4ac4fa036f1a606db8b4e0d2bea8fa6bcb01c91cb95e4097c265cb54bc80c96",
             ),
             (
                 "winner-diagnostics.json",
-                "4ff4b1694b7807e39b58556a050a03d5ed77f825505dff08f70db857712e1029",
+                "c957f6208435572dafdb7a8a86f606d83fbdc24ce1a0b948938aa5b698a9d055",
             ),
             (
                 "winner-diagnostics.md",
-                "7458b3e55f4efb352d14b09c79cb0907195625b9cd6aba004caa607f22d5b24d",
+                "fd1dab2cb46154295334c9d534241dc4d58d66022203747c8a452c49dc41cdba",
             ),
         ),
     )
