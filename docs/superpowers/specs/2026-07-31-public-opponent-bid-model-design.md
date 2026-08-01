@@ -47,9 +47,9 @@ It contains no current hand, objective ownership, private valuation, request
 metadata, deadline, bot identity, seed, deck order, or simulator object.
 
 Live bots obtain history through the SDK's raw-decision callback. The wrapper
-parses the raw frame immediately and passes only `PublicHistory` to a
-history-aware brain. A malformed frame fails closed; it does not silently run
-a different history-free policy.
+parses the raw frame immediately and passes only `PublicHistory` to the same
+brain interface used everywhere else. Every brain can inspect history or
+explicitly ignore it. A malformed frame fails closed before policy execution.
 
 ## Public game phase
 
@@ -140,7 +140,7 @@ so this assumption remains auditable.
 ## Expected-surplus choice
 
 The existing v3 valuator already computes `win_delta` for every legal integer
-bid: how much better winning at that price is than losing. The history-aware
+bid: how much better winning at that price is than losing. The opponent-aware
 brain does not create a second valuation system.
 
 For every legal effective bid, including zero:

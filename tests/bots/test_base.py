@@ -27,11 +27,10 @@ class _TestBot(PocketRocksFastBot):
         raise AssertionError("tests inject a brain")
 
 
-class _RecordingHistoryBrain:
+class _RecordingBrain:
     def __init__(self, decision: BotDecision) -> None:
         self.decision = decision
-        self.legacy_calls = 0
-        self.history_calls = 0
+        self.calls = 0
         self.received_context: DecisionContext | None = None
         self.received_ruleset: RulesetKnowledge | None = None
         self.received_history: PublicHistory | None = None
@@ -40,39 +39,12 @@ class _RecordingHistoryBrain:
         self,
         context: DecisionContext,
         ruleset: RulesetKnowledge,
-    ) -> BotDecision:
-        del context, ruleset
-        self.legacy_calls += 1
-        return BotDecision.pass_turn()
-
-    def choose_decision_with_history(
-        self,
-        context: DecisionContext,
-        ruleset: RulesetKnowledge,
         history: PublicHistory,
-    ) -> BotDecision:
-        self.history_calls += 1
-        self.received_context = context
-        self.received_ruleset = ruleset
-        self.received_history = history
-        return self.decision
-
-
-class _RecordingLegacyBrain:
-    def __init__(self, decision: BotDecision) -> None:
-        self.decision = decision
-        self.calls = 0
-        self.received_context: DecisionContext | None = None
-        self.received_ruleset: RulesetKnowledge | None = None
-
-    def choose_decision(
-        self,
-        context: DecisionContext,
-        ruleset: RulesetKnowledge,
     ) -> BotDecision:
         self.calls += 1
         self.received_context = context
         self.received_ruleset = ruleset
+        self.received_history = history
         return self.decision
 
 
@@ -122,7 +94,7 @@ def _bot(brain: BotBrain) -> _TestBot:
     )
 
 
-def test_raw_bridge_passes_exact_parsed_history_to_history_aware_brain(
+def test_raw_bridge_passes_exact_parsed_history_to_brain(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     context = _context()
@@ -136,54 +108,40 @@ def test_raw_bridge_passes_exact_parsed_history_to_history_aware_brain(
 
     monkeypatch.setattr(base_module, "public_history_from_sdk_frame", parse_frame)
     decision = BotDecision.submit_bid(4)
-    brain = _RecordingHistoryBrain(decision)
+    brain = _RecordingBrain(decision)
 
     actual = asyncio.run(_bot(brain).choose_raw_decision(frame, context))
 
     assert actual == decision
     assert len(parsed_frames) == 1
     assert parsed_frames[0] is frame
-    assert brain.history_calls == 1
-    assert brain.legacy_calls == 0
+    assert brain.calls == 1
     assert brain.received_context is context
     assert brain.received_ruleset == knowledge_for_context(context)
     assert brain.received_history is history
 
 
-def test_raw_bridge_invokes_ordinary_brain_once_with_legacy_result() -> None:
+def test_context_only_entry_points_supply_empty_history() -> None:
     context = _context()
-    decision = BotDecision.submit_bid(3)
-    brain = _RecordingLegacyBrain(decision)
-
-    actual = asyncio.run(_bot(brain).choose_raw_decision(_frame(), context))
-
-    assert actual == decision
-    assert brain.calls == 1
-    assert brain.received_context is context
-    assert brain.received_ruleset == knowledge_for_context(context)
-
-
-def test_context_only_entry_points_preserve_legacy_history_aware_brain_behavior() -> None:
-    context = _context()
-    brain = _RecordingHistoryBrain(BotDecision.submit_bid(4))
+    brain = _RecordingBrain(BotDecision.submit_bid(4))
     bot = _bot(brain)
 
     sync_decision = bot.choose_decision_sync(context)
     async_decision = asyncio.run(bot.choose_decision(context))
 
-    assert sync_decision == BotDecision.pass_turn()
-    assert async_decision == BotDecision.pass_turn()
-    assert brain.legacy_calls == 2
-    assert brain.history_calls == 0
+    assert sync_decision == BotDecision.submit_bid(4)
+    assert async_decision == BotDecision.submit_bid(4)
+    assert brain.calls == 2
+    assert brain.received_history == ()
 
 
 def test_fast_bot_reports_raw_decision_support() -> None:
-    assert _bot(_RecordingLegacyBrain(BotDecision.pass_turn())).uses_raw_decision()
+    assert _bot(_RecordingBrain(BotDecision.pass_turn())).uses_raw_decision()
     assert _TestBot.choose_raw_decision is not PocketRocksBot.choose_raw_decision
 
 
 def test_raw_bridge_rejects_malformed_history_before_invoking_brain() -> None:
-    brain = _RecordingLegacyBrain(BotDecision.pass_turn())
+    brain = _RecordingBrain(BotDecision.pass_turn())
 
     with pytest.raises(PublicHistoryCompatibilityError):
         asyncio.run(_bot(brain).choose_raw_decision(object(), _context()))
@@ -195,7 +153,7 @@ def test_raw_bridge_does_not_touch_non_public_frame_attributes() -> None:
     frame = _frame()
     assert isinstance(frame, SimpleNamespace)
     poisoned_frame = _PublicEventsOnlyFrame(frame.common_events)
-    brain = _RecordingLegacyBrain(BotDecision.pass_turn())
+    brain = _RecordingBrain(BotDecision.pass_turn())
 
     actual = asyncio.run(_bot(brain).choose_raw_decision(poisoned_frame, _context()))
 

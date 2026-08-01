@@ -34,8 +34,9 @@ class _OrdinaryBrain:
         self,
         context: DecisionContext,
         ruleset: RulesetKnowledge,
+        history: PublicHistory,
     ) -> BotDecision:
-        del context, ruleset
+        del context, ruleset, history
         self.calls += 1
         return BotDecision.submit_bid(2)
 
@@ -73,8 +74,9 @@ class _RaisingBrain:
         self,
         context: DecisionContext,
         ruleset: RulesetKnowledge,
+        history: PublicHistory,
     ) -> BotDecision:
-        del context, ruleset
+        del context, ruleset, history
         raise RuntimeError("broken policy")
 
 

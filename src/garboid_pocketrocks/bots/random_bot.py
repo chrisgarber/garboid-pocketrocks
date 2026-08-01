@@ -5,6 +5,7 @@ import random
 
 from pocketrocks import BotDecision, DecisionContext
 
+from garboid_pocketrocks.adapters.public_history import PublicHistory
 from garboid_pocketrocks.bots.base import PocketRocksFastBot
 from garboid_pocketrocks.knowledge import RulesetKnowledge
 
@@ -17,8 +18,9 @@ class RandomBotBrain:
         self,
         context: DecisionContext,
         ruleset: RulesetKnowledge,
+        history: PublicHistory = (),
     ) -> BotDecision:
-        del ruleset
+        del ruleset, history
         if context.decision_kind == "submitBid":
             max_amount = context.legal_max_amount
             if max_amount is None or max_amount <= 0:

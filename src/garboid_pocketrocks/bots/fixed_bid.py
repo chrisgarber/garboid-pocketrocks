@@ -6,6 +6,7 @@ from typing import ClassVar
 
 from pocketrocks import ActionId, BotDecision, DecisionContext
 
+from garboid_pocketrocks.adapters.public_history import PublicHistory
 from garboid_pocketrocks.bots.base import BotSpec
 from garboid_pocketrocks.knowledge import RulesetKnowledge
 
@@ -55,8 +56,9 @@ class ProfiledFixedBidBotBrain:
         self,
         context: DecisionContext,
         ruleset: RulesetKnowledge,
+        history: PublicHistory = (),
     ) -> BotDecision:
-        del ruleset
+        del ruleset, history
         if context.decision_kind == "selectInfoToReveal":
             if context.revealable_count <= 0:
                 return BotDecision.pass_turn()

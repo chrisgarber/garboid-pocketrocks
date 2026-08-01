@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 from pocketrocks import BotDecision, DecisionContext
 
+from garboid_pocketrocks.adapters.public_history import PublicHistory
 from garboid_pocketrocks.bots import BOT_SPECS_BY_NAME, BotSpec, BrainFactory, RandomBot
 from garboid_pocketrocks.heuristics.frozen import FROZEN_CANDIDATES_BY_NAME
 from garboid_pocketrocks.knowledge import RulesetKnowledge
@@ -45,8 +46,9 @@ class IllegalBidBrain:
         self,
         context: DecisionContext,
         ruleset: RulesetKnowledge,
+        history: PublicHistory,
     ) -> BotDecision:
-        del ruleset
+        del ruleset, history
         if context.decision_kind == "selectInfoToReveal":
             return BotDecision.select_info_to_reveal(context.revealable_count)
         assert context.legal_max_amount is not None
@@ -58,8 +60,9 @@ class RaisingDecisionBrain:
         self,
         context: DecisionContext,
         ruleset: RulesetKnowledge,
+        history: PublicHistory,
     ) -> BotDecision:
-        del context, ruleset
+        del context, ruleset, history
         raise RuntimeError("decision failed")
 
 

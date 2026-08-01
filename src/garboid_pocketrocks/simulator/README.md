@@ -29,7 +29,7 @@ at a time. A bid phase requests one decision from every seat. A choice reveal
 requests only the winning seat; automatic reveals never invoke a bot.
 
 `MatchRunner` constructs fresh brains in seat order from a per-game RNG,
-passes exact public history to history-aware brains, validates every decision,
+passes exact public history to every brain, validates every decision,
 and records replay steps in encounter order.
 
 Monte Carlo planning derives each game seed and lineup from the root seed.

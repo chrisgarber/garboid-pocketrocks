@@ -2,11 +2,11 @@
 
 ## Task 1: Deliver public history to live brains
 
-- Add a single synchronous history-aware dispatch point in `bots/base.py`.
+- Give the single `BotBrain.choose_decision` interface immutable public history.
 - Override the SDK raw-decision callback and parse `common_events` with the
   existing strict public-history adapter.
-- Preserve the ordinary brain path byte-for-byte in behavior.
-- Test exact history delivery, ordinary fallback, raw-capability reporting,
+- Preserve the decisions of brains that ignore history.
+- Test exact history delivery, context-only fallback, raw-capability reporting,
   malformed-frame failure, and hidden-field non-access.
 
 ## Task 2: Share the public turn phase
@@ -33,7 +33,7 @@
 
 - Layer the opponent forecast over the unchanged balanced-v3 valuator.
 - Keep reveal behavior unchanged.
-- Route ordinary, history-aware, and explained calls through one internal
+- Route ordinary and explained calls through one internal
   choice so tracing cannot change behavior.
 - Add a local-only candidate spec; do not register a live bot or latest alias.
 - Test expected-surplus arithmetic for bid zero and positive bids, lower-bid tie resolution,

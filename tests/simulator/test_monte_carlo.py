@@ -8,6 +8,7 @@ from pocketrocks import BotDecision, DecisionContext
 from pocketrocks.sim.constants import ACTION_WIRE_IDS
 
 from garboid_pocketrocks import simulator
+from garboid_pocketrocks.adapters.public_history import PublicHistory
 from garboid_pocketrocks.bots import BotBrain, BotSpec, RandomBot
 from garboid_pocketrocks.bots.registry import registered_bot_specs
 from garboid_pocketrocks.knowledge import RulesetKnowledge
@@ -421,8 +422,9 @@ class RaisingBrain:
         self,
         context: DecisionContext,
         ruleset: RulesetKnowledge,
+        history: PublicHistory,
     ) -> BotDecision:
-        del context, ruleset
+        del context, ruleset, history
         raise RuntimeError("brain exploded")
 
 
@@ -484,8 +486,9 @@ class ScriptedMetricsBrain:
         self,
         context: DecisionContext,
         ruleset: RulesetKnowledge,
+        history: PublicHistory,
     ) -> BotDecision:
-        del ruleset
+        del ruleset, history
         if context.decision_kind == "selectInfoToReveal":
             return (
                 BotDecision.pass_turn()

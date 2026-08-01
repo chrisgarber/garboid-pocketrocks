@@ -389,8 +389,9 @@ def test_incumbent_candidate_preserves_the_v2_reveal_decision(
     assert candidate_brain.choose_decision(
         reveal_context,
         knowledge,
+        (),
     ) == BalancedHeuristicV2Brain().choose_decision(reveal_context, knowledge)
-    assert reveal_context.is_legal(candidate_brain.choose_decision(reveal_context, knowledge))
+    assert reveal_context.is_legal(candidate_brain.choose_decision(reveal_context, knowledge, ()))
 
 
 def test_all_generated_values_stay_on_the_named_manifest_grids(

@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-from pocketrocks import BotDecision, DecisionContext
-
-from garboid_pocketrocks.adapters.public_history import public_history_from_sdk_frame
-from garboid_pocketrocks.bots.base import HistoryAwareBotBrain, PocketRocksFastBot
+from garboid_pocketrocks.bots.base import PocketRocksFastBot
 from garboid_pocketrocks.neural.tournament_bot import VectorPpoLargeV1G350kBrain
 
 
@@ -18,16 +15,3 @@ class PpoLargeTeenBot(PocketRocksFastBot):
     @classmethod
     def build_brain(cls, seed: int | None) -> VectorPpoLargeV1G350kBrain:
         return VectorPpoLargeV1G350kBrain(seed=seed)
-
-    async def choose_raw_decision(
-        self,
-        frame: object,
-        context: DecisionContext,
-    ) -> BotDecision:
-        if not isinstance(self._brain, HistoryAwareBotBrain):
-            raise TypeError("ppo-large-teen requires a history-aware brain")
-        return self._brain.choose_decision_with_history(
-            context,
-            self._knowledge_for_context(context),
-            public_history_from_sdk_frame(frame),
-        )

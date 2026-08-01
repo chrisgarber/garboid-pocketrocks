@@ -6,6 +6,7 @@ from typing import ClassVar
 
 from pocketrocks import ActionId, BotDecision, DecisionContext
 
+from garboid_pocketrocks.adapters.public_history import PublicHistory
 from garboid_pocketrocks.bots.base import BotSpec
 from garboid_pocketrocks.bots.fixed_bid import (
     FIXED_BID_PROFILE,
@@ -139,20 +140,21 @@ class FixedObjectiveOverlayBrain(ProfiledFixedBidBotBrain):
         self,
         context: DecisionContext,
         ruleset: RulesetKnowledge,
+        history: PublicHistory = (),
     ) -> BotDecision:
         if context.current_action_id is None:
-            return super().choose_decision(context, ruleset)
+            return super().choose_decision(context, ruleset, history)
         try:
             action = ActionId(context.current_action_id)
         except TypeError, ValueError:
-            return super().choose_decision(context, ruleset)
+            return super().choose_decision(context, ruleset, history)
         if context.decision_kind != "submitBid" or action not in _AUCTIONS:
-            return super().choose_decision(context, ruleset)
+            return super().choose_decision(context, ruleset, history)
 
         legal_max = context.legal_max_amount
         target = self.PROFILE.target_bid(context.current_action_id)
         if legal_max is None or legal_max <= 0 or target is None:
-            return super().choose_decision(context, ruleset)
+            return super().choose_decision(context, ruleset, history)
         try:
             adjustment = self._auction_adjustment(context, ruleset, action)
         except (
