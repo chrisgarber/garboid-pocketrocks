@@ -4,8 +4,8 @@
   "personality": "passive",
   "predecessor_name": "passive-v3",
   "development_corpus": {
-    "name": "development-v1",
-    "digest": "17c016350dbe717641b8cd499b0908e3bc0faa811a3b4f5e574f8713a5bf2b3d"
+    "name": "development-passive-v3-broad-v1",
+    "digest": "64124822038895aa4048469244c99177c877271368cc246d2250b737a14bf658"
   },
   "search_seed": 12003,
   "algorithm": {
@@ -29,22 +29,22 @@
   },
   "initial_experts": {
     "early": {
-      "liquidity_strength": "1.50",
-      "future_cash_weight": "1.80",
-      "objective_progress_weight": "0.95",
-      "bid_shading": "0.45"
+      "liquidity_strength": "0.25",
+      "future_cash_weight": "2.00",
+      "objective_progress_weight": "0.10",
+      "bid_shading": "0.50"
     },
     "middle": {
-      "liquidity_strength": "1.50",
-      "future_cash_weight": "1.80",
-      "objective_progress_weight": "0.95",
-      "bid_shading": "0.45"
+      "liquidity_strength": "0.25",
+      "future_cash_weight": "2.00",
+      "objective_progress_weight": "0.10",
+      "bid_shading": "0.50"
     },
     "late": {
-      "liquidity_strength": "1.50",
-      "future_cash_weight": "1.80",
-      "objective_progress_weight": "0.95",
-      "bid_shading": "0.45"
+      "liquidity_strength": "0.25",
+      "future_cash_weight": "2.00",
+      "objective_progress_weight": "0.10",
+      "bid_shading": "0.50"
     }
   },
   "expert_coefficient_grids": {

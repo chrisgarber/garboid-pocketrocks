@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import pickle
 from dataclasses import FrozenInstanceError, replace
@@ -120,6 +121,13 @@ _BALANCED_GENERATION_ONE_GOLDEN = (
     "balanced-v4-candidate-g001-s015-124f77c4da20|0.25,1.55,0.35,0.15,0.25,1.55,0.3,0.35,0.25,1.55,0.3,0.35",
 )
 
+_PHASE_GENERATION_ZERO_DIGESTS = {
+    "aggressive": "26dc7cc75750f7e65351d60d59f0d8b02f00446b741a7e41e52c10e27a75605a",
+    "balanced": "8d111784e6693306a71eb2d9a458c75afd563df686349d4b4c47105c2ca19498",
+    "passive": "2567077e260c444dfc1d13c9f77329d776f01dcd567932a36bdb00ef907952c9",
+}
+_BALANCED_GENERATION_ONE_DIGEST = "3ad1bbf79a860125678ae75188e02919993507fc2728d46a920260d768a21281"
+
 
 @pytest.fixture(scope="module")
 def balanced_manifest() -> SearchManifest:
@@ -136,7 +144,7 @@ def balanced_manifest() -> SearchManifest:
 @pytest.fixture(scope="module")
 def balanced_phase_manifest() -> PhaseSearchManifest:
     corpus = load_promotion_corpus(
-        REPOSITORY_ROOT / "configs/promotion/development-heuristic-v4-v1.json",
+        REPOSITORY_ROOT / "configs/promotion/development-balanced-v3-broad-v1.json",
         registry=BOT_SPECS_BY_NAME,
     )
     recipe = load_search_recipe(
@@ -543,7 +551,7 @@ def test_phase_genome_digest_binds_selector_and_all_twelve_labeled_values(
             balanced_phase_manifest.initial_experts,
             early=replace(
                 balanced_phase_manifest.initial_experts.early,
-                liquidity_strength=Decimal("0.250"),
+                liquidity_strength=Decimal("1.400"),
             ),
         ),
         phase_selector=balanced_phase_manifest.phase_selector.kind,
@@ -608,12 +616,12 @@ def test_phase_generation_zero_has_stratified_locus_and_phase_proposals(
     assert build_initial_population(balanced_phase_manifest) == population
 
 
-@pytest.mark.parametrize("personality", tuple(_PHASE_GENERATION_ZERO_GOLDENS))
+@pytest.mark.parametrize("personality", tuple(_PHASE_GENERATION_ZERO_DIGESTS))
 def test_phase_generation_zero_full_genomes_and_identities_are_golden(
     personality: str,
 ) -> None:
     corpus = load_promotion_corpus(
-        REPOSITORY_ROOT / "configs/promotion/development-heuristic-v4-v1.json",
+        REPOSITORY_ROOT / f"configs/promotion/development-{personality}-v3-broad-v1.json",
         registry=BOT_SPECS_BY_NAME,
     )
     recipe = load_search_recipe(
@@ -623,7 +631,8 @@ def test_phase_generation_zero_full_genomes_and_identities_are_golden(
     assert isinstance(recipe, PhaseSearchManifest)
     population = build_initial_population(recipe)
 
-    assert _phase_population_snapshot(population) == _PHASE_GENERATION_ZERO_GOLDENS[personality]
+    snapshot = "\n".join(_phase_population_snapshot(population)).encode()
+    assert hashlib.sha256(snapshot).hexdigest() == _PHASE_GENERATION_ZERO_DIGESTS[personality]
 
 
 def test_phase_later_generations_cover_all_loci_continuously(
@@ -684,7 +693,8 @@ def test_phase_generation_one_has_golden_genomes_and_identities(
         ranked_elites=initial[: balanced_phase_manifest.algorithm.elite_count],
     )
 
-    assert _phase_population_snapshot(children) == _BALANCED_GENERATION_ONE_GOLDEN
+    snapshot = "\n".join(_phase_population_snapshot(children)).encode()
+    assert hashlib.sha256(snapshot).hexdigest() == _BALANCED_GENERATION_ONE_DIGEST
 
 
 def test_phase_populations_are_independent_of_decimal_context(

@@ -12,7 +12,11 @@ from pathlib import Path
 from typing import Literal, NoReturn, cast
 
 from garboid_pocketrocks.heuristics.phases import PHASE_SELECTOR_NAME, HeuristicPhase
-from garboid_pocketrocks.heuristics.profiles import HEURISTIC_V2, HeuristicProfile
+from garboid_pocketrocks.heuristics.profiles import (
+    HEURISTIC_V2,
+    HEURISTIC_V3,
+    HeuristicProfile,
+)
 from garboid_pocketrocks.promotion.corpus import PromotionCorpus
 
 CoefficientName = Literal[
@@ -85,10 +89,20 @@ _BOUNDARY_SLICES_PATH = (
     "2026-07-30-heuristic-v3-phase-boundaries-development/phase-boundary-slices.csv"
 )
 _BOUNDARY_SLICES_DIGEST = "4f8aa60edf31b28c746cb8004a4dd5468ee8ab1b26462550c914b2e3fa50d7ae"
-_FIXED_DEVELOPMENT_CORPUS_NAME = "development-v1"
-_FIXED_DEVELOPMENT_CORPUS_DIGEST = (
-    "17c016350dbe717641b8cd499b0908e3bc0faa811a3b4f5e574f8713a5bf2b3d"
-)
+_FIXED_PHASE_DEVELOPMENT_CORPORA: dict[Personality, tuple[str, str]] = {
+    "aggressive": (
+        "development-aggressive-v3-broad-v1",
+        "6531e85f69f4e085b8ac789348be6c21614455dd77ba7ac791f5390479e17638",
+    ),
+    "balanced": (
+        "development-balanced-v3-broad-v1",
+        "d556cc940c92ebf3633fde83485d4ba776b6e582f34cf8d445a5c190824b3228",
+    ),
+    "passive": (
+        "development-passive-v3-broad-v1",
+        "64124822038895aa4048469244c99177c877271368cc246d2250b737a14bf658",
+    ),
+}
 _FIXED_PHASE_SEARCH_SEEDS: dict[Personality, int] = {
     "aggressive": 12001,
     "balanced": 12002,
@@ -600,6 +614,7 @@ def validate_phase_search_manifest_contract(manifest: PhaseSearchManifest) -> No
     if manifest.personality not in expected_personalities:
         _raise_invalid_phase_search_contract()
     personality = manifest.personality
+    expected_corpus_name, expected_corpus_digest = _FIXED_PHASE_DEVELOPMENT_CORPORA[personality]
     expected_profile = _fixed_phase_initial_profile(personality)
     expected_experts = PhaseCoefficientValues(
         early=expected_profile,
@@ -627,8 +642,8 @@ def validate_phase_search_manifest_contract(manifest: PhaseSearchManifest) -> No
         manifest.schema_version != 2
         or manifest.name != f"{personality}-v4-search-v2"
         or manifest.predecessor_name != f"{personality}-v3"
-        or manifest.development_corpus.name != _FIXED_DEVELOPMENT_CORPUS_NAME
-        or manifest.development_corpus.digest != _FIXED_DEVELOPMENT_CORPUS_DIGEST
+        or manifest.development_corpus.name != expected_corpus_name
+        or manifest.development_corpus.digest != expected_corpus_digest
         or manifest.search_seed != _FIXED_PHASE_SEARCH_SEEDS[personality]
         or manifest.algorithm != _FIXED_PHASE_SEARCH_ALGORITHM
         or manifest.phase_selector != expected_selector
@@ -1337,12 +1352,7 @@ def _validate_phase_initial_coefficients(
 
 
 def _fixed_phase_initial_profile(personality: Personality) -> CoefficientValues:
-    values = {
-        "aggressive": ("1", "1.95", "0.15", "0.4"),
-        "balanced": ("0.25", "1.55", "0.30", "0.35"),
-        "passive": ("1.5", "1.8", "0.95", "0.45"),
-    }[personality]
-    return CoefficientValues(*(Decimal(value) for value in values))
+    return _profile_coefficient_values(getattr(HEURISTIC_V3, personality))
 
 
 def _profile_coefficient_values(profile: HeuristicProfile) -> CoefficientValues:

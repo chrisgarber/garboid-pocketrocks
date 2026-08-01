@@ -436,7 +436,7 @@ def test_rejects_fresh_digest_forged_phase_contract_before_simulation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     corpus = load_promotion_corpus(
-        REPOSITORY_ROOT / "configs/promotion/development-heuristic-v4-v1.json",
+        REPOSITORY_ROOT / "configs/promotion/development-balanced-v3-broad-v1.json",
         registry=BOT_SPECS_BY_NAME,
     )
     loaded = load_search_recipe(
@@ -610,7 +610,7 @@ def _small_phase_inputs(
     cases: int,
 ) -> tuple[PhaseSearchManifest, PromotionCorpus]:
     corpus = load_promotion_corpus(
-        REPOSITORY_ROOT / "configs/promotion/development-heuristic-v4-v1.json",
+        REPOSITORY_ROOT / "configs/promotion/development-balanced-v3-broad-v1.json",
         registry=BOT_SPECS_BY_NAME,
     )
     loaded = load_search_recipe(

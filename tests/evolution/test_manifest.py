@@ -26,7 +26,9 @@ from garboid_pocketrocks.promotion.corpus import (
 )
 
 REPOSITORY_ROOT = Path(__file__).parents[2]
-DEVELOPMENT_CORPUS_PATH = REPOSITORY_ROOT / "configs/promotion/development-heuristic-v4-v1.json"
+DEVELOPMENT_CORPUS_PATH = (
+    REPOSITORY_ROOT / "configs/promotion/development-balanced-v3-broad-v1.json"
+)
 EVOLUTION_CONFIG_DIRECTORY = REPOSITORY_ROOT / "configs/evolution"
 BOUNDARY_REPORT_PATH = "docs/benchmarks/2026-07-30-heuristic-v4-phase-boundaries.md"
 BOUNDARY_REPORT_DIGEST = "9961f26f32270dcebc98df443588e96cbde2f953858cd131c66a37aeecaa9b01"
@@ -50,7 +52,7 @@ def _manifest_payload(
     *,
     personality: str = "balanced",
     predecessor_name: str = "balanced-v2",
-    corpus_name: str = "development-v1",
+    corpus_name: str = "development-balanced-v3-broad-v1",
     corpus_digest: str = "1" * 64,
     search_seed: object = 11002,
     algorithm: object | None = None,
@@ -127,22 +129,22 @@ def _phase_manifest_payload(
 ) -> dict[str, object]:
     initial_by_personality = {
         "aggressive": {
-            "liquidity_strength": "1.00",
-            "future_cash_weight": "1.95",
-            "objective_progress_weight": "0.15",
-            "bid_shading": "0.40",
+            "liquidity_strength": "1.50",
+            "future_cash_weight": "0.50",
+            "objective_progress_weight": "1.00",
+            "bid_shading": "0.05",
         },
         "balanced": {
-            "liquidity_strength": "0.25",
-            "future_cash_weight": "1.55",
-            "objective_progress_weight": "0.30",
-            "bid_shading": "0.35",
+            "liquidity_strength": "1.40",
+            "future_cash_weight": "1.05",
+            "objective_progress_weight": "0.70",
+            "bid_shading": "0.30",
         },
         "passive": {
-            "liquidity_strength": "1.50",
-            "future_cash_weight": "1.80",
-            "objective_progress_weight": "0.95",
-            "bid_shading": "0.45",
+            "liquidity_strength": "0.25",
+            "future_cash_weight": "2.00",
+            "objective_progress_weight": "0.10",
+            "bid_shading": "0.50",
         },
     }
     grid = {
@@ -905,10 +907,10 @@ def test_loads_schema_v2_as_explicit_phase_recipe(
     assert (
         tuple(map(str, recipe.initial_experts.as_loci()))
         == (
-            "0.25",
-            "1.55",
+            "1.4",
+            "1.05",
+            "0.7",
             "0.3",
-            "0.35",
         )
         * 3
     )
@@ -1065,12 +1067,16 @@ def test_committed_schema_v2_manifests_bind_v3_and_fixed_evidence(
     development_corpus: PromotionCorpus,
 ) -> None:
     expected_initial = {
-        "aggressive": ("1", "1.95", "0.15", "0.4"),
-        "balanced": ("0.25", "1.55", "0.3", "0.35"),
-        "passive": ("1.5", "1.8", "0.95", "0.45"),
+        "aggressive": ("1.5", "0.5", "1", "0.05"),
+        "balanced": ("1.4", "1.05", "0.7", "0.3"),
+        "passive": ("0.25", "2", "0.1", "0.5"),
     }
 
     for seed_offset, personality in enumerate(("aggressive", "balanced", "passive"), start=1):
+        development_corpus = load_promotion_corpus(
+            REPOSITORY_ROOT / f"configs/promotion/development-{personality}-v3-broad-v1.json",
+            registry=BOT_SPECS_BY_NAME,
+        )
         recipe = manifest_module.load_search_recipe(
             EVOLUTION_CONFIG_DIRECTORY / f"{personality}-v4-search-v2.json",
             development_corpus=development_corpus,
@@ -1264,20 +1270,24 @@ def test_schema_v2_canonical_payload_digests_are_frozen(
 ) -> None:
     expected = {
         "aggressive": (
-            2120,
-            "71c06a1a246e81c935156ff818f66dcac454719168fabdd4af63ba94249ca69b",
+            2137,
+            "0b85403b121451b2a4ab495a1c73af93c311f2743c5e52ce6accd8ef606df324",
         ),
         "balanced": (
-            2123,
-            "e1f1bed8f09aef9193ffeb0ed3e0be822be96df7fd69985c9e4111f5c725933c",
+            2135,
+            "4c738ca18f93bd59112115a7c992d168fef6c26f0c114aed9011a80f7a8f2763",
         ),
         "passive": (
-            2117,
-            "334579f896a0d4281c8926bb4cc5d9bffd9b3c63b8be3d0ae3375699792d4bc6",
+            2125,
+            "11f7a8e38b89e9eea9b4f670632f9acd950a74ed48414b1a4e263ba27e90b048",
         ),
     }
 
     for personality, (expected_size, expected_digest) in expected.items():
+        development_corpus = load_promotion_corpus(
+            REPOSITORY_ROOT / f"configs/promotion/development-{personality}-v3-broad-v1.json",
+            registry=BOT_SPECS_BY_NAME,
+        )
         recipe = manifest_module.load_search_recipe(
             EVOLUTION_CONFIG_DIRECTORY / f"{personality}-v4-search-v2.json",
             development_corpus=development_corpus,
