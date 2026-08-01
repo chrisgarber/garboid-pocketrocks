@@ -4,10 +4,13 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from typing import cast
 
 from garboid_pocketrocks.bots import BOT_SPECS_BY_NAME, BotSpec
 from garboid_pocketrocks.evolution.candidates import (
     HeuristicCandidate,
+    PhaseAwareHeuristicCandidate,
+    SearchCandidate,
     build_initial_population,
     build_mutation_population,
     candidate_bot_spec,
@@ -17,8 +20,12 @@ from garboid_pocketrocks.evolution.evaluation import (
     evaluate_candidate,
 )
 from garboid_pocketrocks.evolution.manifest import (
-    SearchManifest,
+    PhaseSearchManifest,
+    SearchManifestError,
+    SearchRecipe,
+    recompute_phase_search_manifest_digest,
     recompute_search_manifest_digest,
+    validate_phase_search_manifest_contract,
 )
 from garboid_pocketrocks.evolution.planning import (
     DevelopmentPlan,
@@ -56,7 +63,7 @@ class SearchFailure:
 class CandidateRun:
     """One proposal, its exact plan and games, and its evaluation."""
 
-    candidate: HeuristicCandidate
+    candidate: SearchCandidate
     plan: DevelopmentPlan
     result: MonteCarloResult
     evaluation: CandidateEvaluation
@@ -75,7 +82,7 @@ class CandidateRun:
 class SearchRun:
     """All in-memory source evidence and decisions from one search."""
 
-    manifest: SearchManifest
+    manifest: SearchRecipe
     development_corpus: PromotionCorpus
     incumbent: BotSpec
     baseline_config: MonteCarloConfig
@@ -83,8 +90,8 @@ class SearchRun:
     baseline_result: MonteCarloResult
     candidate_runs: tuple[CandidateRun, ...]
     selections: tuple[GenerationSelection, ...]
-    selected_candidate: HeuristicCandidate | None
-    frozen_candidate: HeuristicCandidate | None
+    selected_candidate: SearchCandidate | None
+    frozen_candidate: SearchCandidate | None
     failures: tuple[SearchFailure, ...]
 
     @property
@@ -105,7 +112,7 @@ class SearchRunError(ValueError):
 
 
 def run_search(
-    manifest: SearchManifest,
+    manifest: SearchRecipe,
     development_corpus: PromotionCorpus,
     *,
     registry: Mapping[str, BotSpec],
@@ -141,11 +148,30 @@ def run_search(
     prior_elites: tuple[EvaluatedCandidate, ...] = ()
     for generation in range(manifest.algorithm.generation_count):
         if generation > 0:
-            population = build_mutation_population(
+            _validate_prior_elites(
                 manifest,
+                prior_elites,
                 generation=generation,
-                ranked_elites=tuple(item.candidate for item in prior_elites),
             )
+            ranked_candidates = tuple(item.candidate for item in prior_elites)
+            if isinstance(manifest, PhaseSearchManifest):
+                population = build_mutation_population(
+                    manifest,
+                    generation=generation,
+                    ranked_elites=cast(
+                        tuple[PhaseAwareHeuristicCandidate, ...],
+                        ranked_candidates,
+                    ),
+                )
+            else:
+                population = build_mutation_population(
+                    manifest,
+                    generation=generation,
+                    ranked_elites=cast(
+                        tuple[HeuristicCandidate, ...],
+                        ranked_candidates,
+                    ),
+                )
         generation_runs = tuple(
             _run_candidate(
                 candidate,
@@ -204,7 +230,7 @@ def run_search(
 
 
 def _run_candidate(
-    candidate: HeuristicCandidate,
+    candidate: SearchCandidate,
     *,
     development_corpus: PromotionCorpus,
     incumbent: BotSpec,
@@ -247,7 +273,7 @@ def _run_candidate(
 
 
 def _validate_invocation(
-    manifest: SearchManifest,
+    manifest: SearchRecipe,
     development_corpus: PromotionCorpus,
     *,
     registry: Mapping[str, BotSpec],
@@ -258,11 +284,18 @@ def _validate_invocation(
         raise SearchRunError("invalid_workers", "Search workers must be positive.")
     if batch_size is not None and batch_size <= 0:
         raise SearchRunError("invalid_batch_size", "Search batch size must be positive.")
-    if recompute_search_manifest_digest(manifest) != manifest.digest:
+    recomputed_manifest_digest = (
+        recompute_phase_search_manifest_digest(manifest)
+        if isinstance(manifest, PhaseSearchManifest)
+        else recompute_search_manifest_digest(manifest)
+    )
+    if recomputed_manifest_digest != manifest.digest:
         raise SearchRunError(
             "stale_manifest_digest",
             "The search manifest digest does not match its normalized content.",
         )
+    if isinstance(manifest, PhaseSearchManifest):
+        _validate_phase_recipe_contract(manifest)
     if recompute_promotion_corpus_digest(development_corpus) != development_corpus.digest:
         raise SearchRunError(
             "stale_development_corpus_digest",
@@ -309,3 +342,61 @@ def _validate_invocation(
             "invalid_algorithm",
             "Search generations, population, and elites must form a positive valid algorithm.",
         )
+
+
+def _validate_phase_recipe_contract(manifest: PhaseSearchManifest) -> None:
+    """Translate the fixed schema-v2 manifest contract to the runner error API."""
+
+    try:
+        validate_phase_search_manifest_contract(manifest)
+    except SearchManifestError as error:
+        raise SearchRunError(error.code, str(error)) from error
+
+
+def _validate_prior_elites(
+    manifest: SearchRecipe,
+    prior_elites: tuple[EvaluatedCandidate, ...],
+    *,
+    generation: int,
+) -> None:
+    """Reject selection state that cannot safely seed the next generation."""
+
+    if len(prior_elites) != manifest.algorithm.elite_count:
+        raise SearchRunError(
+            "prior_elite_count_mismatch",
+            f"Generation {generation} requires exactly "
+            f"{manifest.algorithm.elite_count} prior elites.",
+        )
+    for elite in prior_elites:
+        candidate = elite.candidate
+        if isinstance(manifest, PhaseSearchManifest):
+            if not isinstance(candidate, PhaseAwareHeuristicCandidate):
+                raise SearchRunError(
+                    "prior_elite_family_mismatch",
+                    "Schema-v2 mutation requires phase-aware prior elites.",
+                )
+            if candidate.personality != manifest.personality:
+                raise SearchRunError(
+                    "prior_elite_personality_mismatch",
+                    "Prior elites must match the search manifest personality.",
+                )
+            if candidate.genome.phase_selector != manifest.phase_selector.kind:
+                raise SearchRunError(
+                    "prior_elite_selector_mismatch",
+                    "Prior elites must use the search manifest phase selector.",
+                )
+        elif not isinstance(candidate, HeuristicCandidate):
+            raise SearchRunError(
+                "prior_elite_family_mismatch",
+                "Schema-v1 mutation requires scalar prior elites.",
+            )
+        elif candidate.personality != manifest.personality:
+            raise SearchRunError(
+                "prior_elite_personality_mismatch",
+                "Prior elites must match the search manifest personality.",
+            )
+        if candidate.generation >= generation:
+            raise SearchRunError(
+                "prior_elite_generation_mismatch",
+                "Prior elites must come from an earlier generation.",
+            )

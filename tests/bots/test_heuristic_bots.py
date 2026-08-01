@@ -3,6 +3,7 @@ from __future__ import annotations
 import pickle
 from collections.abc import Callable
 from dataclasses import replace
+from typing import cast
 
 import pytest
 from pocketrocks import OBJECTIVES, ActionId, BotDecision, DecisionContext, Suit
@@ -43,13 +44,18 @@ from garboid_pocketrocks.bots.heuristic import (
     PASSIVE_HEURISTIC_V3_BOT_SPEC,
     HeuristicBotBrain,
 )
-from garboid_pocketrocks.diagnostics.trace import HeuristicBidExplanation
+from garboid_pocketrocks.diagnostics.trace import (
+    HeuristicBidExplanation,
+    PhaseAwareHeuristicBidExplanation,
+)
 from garboid_pocketrocks.heuristics.errors import HeuristicInputError
+from garboid_pocketrocks.heuristics.phases import HeuristicPhase, PublicResourceHorizon
 from garboid_pocketrocks.heuristics.profiles import (
     BALANCED_PROFILE,
     HEURISTIC_V1,
     HEURISTIC_V2,
     HEURISTIC_V3,
+    PhaseAwareHeuristicProfile,
 )
 from garboid_pocketrocks.heuristics.valuation import BidEvaluation, HeuristicValuator
 from garboid_pocketrocks.knowledge import (
@@ -224,6 +230,165 @@ def test_unversioned_brains_match_v3_decisions(
     )
 
 
+def _representative_legacy_explanation(
+    *,
+    liquidity_value: float,
+    total_value: float,
+    reservation_bid: int,
+    chosen_bid: int,
+) -> HeuristicBidExplanation:
+    return HeuristicBidExplanation(
+        resource_value=5.8181818181818175,
+        objective_completion_value=0,
+        objective_progress_value=0,
+        terminal_cash_value=-float(chosen_bid),
+        liquidity_value=liquidity_value,
+        future_cash_value=0.0,
+        total_value=total_value,
+        reservation_bid=reservation_bid,
+        chosen_bid=chosen_bid,
+    )
+
+
+def test_v1_through_v3_representative_decisions_match_current_frozen_profiles() -> None:
+    context = make_context(
+        action_id=ActionId.AUCTION2,
+        current_resources=(int(Suit.BRICK), int(Suit.WOOD)),
+        hand=(int(Suit.ORE), int(Suit.SHEEP)),
+        legal_max=9,
+    )
+    knowledge = make_knowledge(private_cards=2, resource_counts=(3, 3, 3, 3, 3))
+    brain_classes = (
+        AggressiveHeuristicV1Brain,
+        BalancedHeuristicV1Brain,
+        PassiveHeuristicV1Brain,
+        AggressiveHeuristicV2Brain,
+        BalancedHeuristicV2Brain,
+        PassiveHeuristicV2Brain,
+        AggressiveHeuristicV3Brain,
+        BalancedHeuristicV3Brain,
+        PassiveHeuristicV3Brain,
+    )
+
+    actual = tuple(
+        brain_class().choose_explained_decision(context, knowledge, ())
+        for brain_class in brain_classes
+    )
+
+    expected = (
+        (
+            BotDecision.submit_bid(3),
+            _representative_legacy_explanation(
+                liquidity_value=-0.6036876255108243,
+                total_value=2.214494192670993,
+                reservation_bid=4,
+                chosen_bid=3,
+            ),
+        ),
+        (
+            BotDecision.submit_bid(3),
+            _representative_legacy_explanation(
+                liquidity_value=-0.3219667336057732,
+                total_value=2.4962150845760442,
+                reservation_bid=5,
+                chosen_bid=3,
+            ),
+        ),
+        (
+            BotDecision.submit_bid(2),
+            _representative_legacy_explanation(
+                liquidity_value=-0.0795591546343255,
+                total_value=3.738622663547492,
+                reservation_bid=5,
+                chosen_bid=2,
+            ),
+        ),
+        (
+            BotDecision.submit_bid(3),
+            _representative_legacy_explanation(
+                liquidity_value=-0.6036876255108243,
+                total_value=2.214494192670993,
+                reservation_bid=4,
+                chosen_bid=3,
+            ),
+        ),
+        (
+            BotDecision.submit_bid(3),
+            _representative_legacy_explanation(
+                liquidity_value=-0.3219667336057732,
+                total_value=2.4962150845760442,
+                reservation_bid=5,
+                chosen_bid=3,
+            ),
+        ),
+        (
+            BotDecision.submit_bid(3),
+            _representative_legacy_explanation(
+                liquidity_value=-0.12073752510216496,
+                total_value=2.6974442930796525,
+                reservation_bid=5,
+                chosen_bid=3,
+            ),
+        ),
+        (
+            BotDecision.submit_bid(3),
+            _representative_legacy_explanation(
+                liquidity_value=-1.2073752510216487,
+                total_value=1.6108065671601688,
+                reservation_bid=4,
+                chosen_bid=3,
+            ),
+        ),
+        (
+            BotDecision.submit_bid(2),
+            _representative_legacy_explanation(
+                liquidity_value=-0.7425521099203714,
+                total_value=3.075629708261446,
+                reservation_bid=4,
+                chosen_bid=2,
+            ),
+        ),
+        (
+            BotDecision.submit_bid(2),
+            _representative_legacy_explanation(
+                liquidity_value=-0.1325985910572096,
+                total_value=3.685583227124608,
+                reservation_bid=5,
+                chosen_bid=2,
+            ),
+        ),
+    )
+
+    assert tuple(item.decision for item in actual) == tuple(
+        decision for decision, _explanation in expected
+    )
+    for item, (_decision, expected_explanation) in zip(actual, expected, strict=True):
+        assert isinstance(item.explanation, HeuristicBidExplanation)
+        assert item.explanation.reservation_bid == expected_explanation.reservation_bid
+        assert item.explanation.chosen_bid == expected_explanation.chosen_bid
+        assert (
+            item.explanation.resource_value,
+            item.explanation.objective_completion_value,
+            item.explanation.objective_progress_value,
+            item.explanation.terminal_cash_value,
+            item.explanation.liquidity_value,
+            item.explanation.future_cash_value,
+            item.explanation.total_value,
+        ) == pytest.approx(
+            (
+                expected_explanation.resource_value,
+                expected_explanation.objective_completion_value,
+                expected_explanation.objective_progress_value,
+                expected_explanation.terminal_cash_value,
+                expected_explanation.liquidity_value,
+                expected_explanation.future_cash_value,
+                expected_explanation.total_value,
+            ),
+            rel=1e-14,
+            abs=1e-14,
+        )
+
+
 @pytest.mark.parametrize(
     ("brain_class", "bot_class"),
     (
@@ -375,6 +540,147 @@ def test_heuristic_reveal_decision_has_no_bid_explanation() -> None:
 
     assert context.is_legal(explained.decision)
     assert explained.explanation is None
+
+
+def _phase_aware_test_profile() -> PhaseAwareHeuristicProfile:
+    return PhaseAwareHeuristicProfile(
+        "balanced",
+        HEURISTIC_V1.balanced,
+        HEURISTIC_V2.balanced,
+        HEURISTIC_V3.balanced,
+    )
+
+
+def _context_with_future_resources(
+    future_resources: int,
+) -> tuple[DecisionContext, RulesetKnowledge]:
+    knowledge = make_knowledge(resource_counts=(3, 3, 3, 3, 3))
+    won_resources = 15 - future_resources - 1
+    won_by_suit = (
+        0,
+        *(min(3, max(0, won_resources - (3 * suit_index))) for suit_index in range(4)),
+    )
+    context = replace(
+        make_context(
+            action_id=ActionId.AUCTION1,
+            current_resources=(int(Suit.BRICK), 0),
+        ),
+        won_resource_counts_by_seat=(
+            won_by_suit,
+            (0, 0, 0, 0, 0),
+            (0, 0, 0, 0, 0),
+        ),
+    )
+    return context, knowledge
+
+
+@pytest.mark.parametrize(
+    ("future_resources", "expected_phase"),
+    ((10, "early"), (9, "middle"), (5, "middle"), (4, "late")),
+)
+def test_phase_aware_brain_matches_the_selected_ordinary_expert(
+    future_resources: int,
+    expected_phase: str,
+) -> None:
+    profile = _phase_aware_test_profile()
+    brain_class = heuristic_module.PhaseAwareHeuristicBotBrain
+    context, knowledge = _context_with_future_resources(future_resources)
+
+    actual = brain_class(profile).choose_explained_decision(context, knowledge, ())
+    expected = HeuristicBotBrain(
+        profile.profile_for_phase(expected_phase),  # type: ignore[arg-type]
+    ).choose_explained_decision(context, knowledge, ())
+
+    assert actual.decision == expected.decision
+    assert isinstance(actual.explanation, PhaseAwareHeuristicBidExplanation)
+    assert isinstance(expected.explanation, HeuristicBidExplanation)
+    assert actual.explanation.selected_expert_phase == expected_phase
+    assert actual.explanation.future_biddable_resources == future_resources
+    assert actual.explanation.total_biddable_resources == 15
+    assert (
+        actual.explanation.resource_value,
+        actual.explanation.objective_completion_value,
+        actual.explanation.objective_progress_value,
+        actual.explanation.terminal_cash_value,
+        actual.explanation.liquidity_value,
+        actual.explanation.future_cash_value,
+        actual.explanation.total_value,
+        actual.explanation.reservation_bid,
+        actual.explanation.chosen_bid,
+    ) == (
+        expected.explanation.resource_value,
+        expected.explanation.objective_completion_value,
+        expected.explanation.objective_progress_value,
+        expected.explanation.terminal_cash_value,
+        expected.explanation.liquidity_value,
+        expected.explanation.future_cash_value,
+        expected.explanation.total_value,
+        expected.explanation.reservation_bid,
+        expected.explanation.chosen_bid,
+    )
+
+
+def test_phase_aware_brain_selects_and_values_exactly_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context, knowledge = _context_with_future_resources(5)
+    original_select = cast(
+        Callable[[PublicResourceHorizon], HeuristicPhase],
+        heuristic_module.__dict__["select_expert_phase"],
+    )
+    original_evaluate = HeuristicValuator.evaluate_bid
+    selections = []
+    evaluations = []
+
+    def record_selection(horizon: PublicResourceHorizon) -> HeuristicPhase:
+        selections.append(horizon)
+        return original_select(horizon)
+
+    def record_evaluation(
+        valuator: HeuristicValuator,
+        context: DecisionContext,
+        ruleset: RulesetKnowledge,
+    ) -> BidEvaluation:
+        evaluations.append(valuator)
+        return original_evaluate(valuator, context, ruleset)
+
+    monkeypatch.setattr(heuristic_module, "select_expert_phase", record_selection)
+    monkeypatch.setattr(HeuristicValuator, "evaluate_bid", record_evaluation)
+
+    explained = heuristic_module.PhaseAwareHeuristicBotBrain(
+        _phase_aware_test_profile(),
+    ).choose_explained_decision(context, knowledge, ())
+
+    assert explained.explanation is not None
+    assert len(selections) == 1
+    assert len(evaluations) == 1
+
+
+def test_phase_aware_reveal_and_invalid_input_do_not_select_an_expert(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    brain = heuristic_module.PhaseAwareHeuristicBotBrain(_phase_aware_test_profile())
+
+    def reject_selection(_horizon: object) -> str:
+        raise RuntimeError("expert selection is disabled")
+
+    monkeypatch.setattr(heuristic_module, "select_expert_phase", reject_selection)
+    reveal_context = make_context(
+        decision_kind="selectInfoToReveal",
+        action_id=ActionId.AUCTION1,
+        current_resources=(0, 0),
+        hand=(int(Suit.ORE), int(Suit.SHEEP)),
+        legal_max=None,
+    )
+    reveal_knowledge = make_knowledge(private_cards=2, resource_counts=(3, 3, 3, 3, 3))
+    reveal = brain.choose_explained_decision(reveal_context, reveal_knowledge, ())
+    invalid_context = replace(make_context(), player_count=4)
+    invalid = brain.choose_explained_decision(invalid_context, make_knowledge(), ())
+
+    assert reveal_context.is_legal(reveal.decision)
+    assert reveal.explanation is None
+    assert invalid.decision == BotDecision.pass_turn()
+    assert invalid.explanation is None
 
 
 @pytest.mark.parametrize("chart_name", ("B", "C", "D", "E"))

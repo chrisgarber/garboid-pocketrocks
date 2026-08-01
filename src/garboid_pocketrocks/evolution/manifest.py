@@ -11,7 +11,12 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Literal, NoReturn, cast
 
-from garboid_pocketrocks.heuristics.profiles import HEURISTIC_V2, HeuristicProfile
+from garboid_pocketrocks.heuristics.phases import PHASE_SELECTOR_NAME, HeuristicPhase
+from garboid_pocketrocks.heuristics.profiles import (
+    HEURISTIC_V2,
+    HEURISTIC_V3,
+    HeuristicProfile,
+)
 from garboid_pocketrocks.promotion.corpus import PromotionCorpus
 
 CoefficientName = Literal[
@@ -52,6 +57,57 @@ _EXPECTED_GRID_KEYS = {"minimum", "maximum", "step"}
 _SEARCH_NAME_PATTERN = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*\Z")
 _DIGEST_PATTERN = re.compile(r"[0-9a-f]{64}\Z")
 _SUPPORTED_ALGORITHM = "mu-plus-lambda-v1"
+_PHASES: tuple[HeuristicPhase, ...] = ("early", "middle", "late")
+_EXPECTED_PHASE_MANIFEST_KEYS = {
+    "schema_version",
+    "name",
+    "personality",
+    "predecessor_name",
+    "development_corpus",
+    "search_seed",
+    "algorithm",
+    "phase_selector",
+    "boundary_evidence",
+    "initial_experts",
+    "expert_coefficient_grids",
+}
+_EXPECTED_PHASE_KEYS: set[str] = set(_PHASES)
+_EXPECTED_PHASE_SELECTOR_KEYS = {"kind", "early", "middle", "late"}
+_EXPECTED_BOUNDARY_EVIDENCE_KEYS = {
+    "report_path",
+    "report_digest",
+    "slices_path",
+    "slices_digest",
+}
+_PHASE_SELECTOR_EARLY_RULE = "3*future>=2*total"
+_PHASE_SELECTOR_MIDDLE_RULE = "3*future>=total"
+_PHASE_SELECTOR_LATE_RULE = "otherwise"
+_BOUNDARY_REPORT_PATH = "docs/benchmarks/2026-07-30-heuristic-v4-phase-boundaries.md"
+_BOUNDARY_REPORT_DIGEST = "9961f26f32270dcebc98df443588e96cbde2f953858cd131c66a37aeecaa9b01"
+_BOUNDARY_SLICES_PATH = (
+    "docs/benchmarks/tournaments/"
+    "2026-07-30-heuristic-v3-phase-boundaries-development/phase-boundary-slices.csv"
+)
+_BOUNDARY_SLICES_DIGEST = "4f8aa60edf31b28c746cb8004a4dd5468ee8ab1b26462550c914b2e3fa50d7ae"
+_FIXED_PHASE_DEVELOPMENT_CORPORA: dict[Personality, tuple[str, str]] = {
+    "aggressive": (
+        "development-aggressive-v3-broad-v1",
+        "6531e85f69f4e085b8ac789348be6c21614455dd77ba7ac791f5390479e17638",
+    ),
+    "balanced": (
+        "development-balanced-v3-broad-v1",
+        "d556cc940c92ebf3633fde83485d4ba776b6e582f34cf8d445a5c190824b3228",
+    ),
+    "passive": (
+        "development-passive-v3-broad-v1",
+        "64124822038895aa4048469244c99177c877271368cc246d2250b737a14bf658",
+    ),
+}
+_FIXED_PHASE_SEARCH_SEEDS: dict[Personality, int] = {
+    "aggressive": 12001,
+    "balanced": 12002,
+    "passive": 12003,
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -155,6 +211,115 @@ class SearchManifest:
     digest: str
 
 
+@dataclass(frozen=True, slots=True)
+class PhaseCoefficientValues:
+    """The three experts' coefficients in public-resource phase order."""
+
+    early: CoefficientValues
+    middle: CoefficientValues
+    late: CoefficientValues
+
+    def as_tuple(self) -> tuple[CoefficientValues, CoefficientValues, CoefficientValues]:
+        """Return experts in the canonical early, middle, late order."""
+
+        return (self.early, self.middle, self.late)
+
+    def as_loci(self) -> tuple[Decimal, ...]:
+        """Return all twelve values, phase first and coefficient second."""
+
+        return tuple(value for expert in self.as_tuple() for value in expert.as_tuple())
+
+
+@dataclass(frozen=True, slots=True)
+class PhaseCoefficientGrids:
+    """The allowed coefficient grids for the three public-resource phases."""
+
+    early: CoefficientGrids
+    middle: CoefficientGrids
+    late: CoefficientGrids
+
+    def as_tuple(self) -> tuple[CoefficientGrids, CoefficientGrids, CoefficientGrids]:
+        """Return expert grids in the canonical early, middle, late order."""
+
+        return (self.early, self.middle, self.late)
+
+    def as_loci(self) -> tuple[CoefficientGrid, ...]:
+        """Return all twelve grids, phase first and coefficient second."""
+
+        return tuple(grid for expert in self.as_tuple() for grid in expert.as_tuple())
+
+
+@dataclass(frozen=True, slots=True)
+class PhaseSelector:
+    """The one public-information rule allowed for phase-aware v4 searches."""
+
+    kind: str
+    early: str
+    middle: str
+    late: str
+
+
+@dataclass(frozen=True, slots=True)
+class BoundaryEvidence:
+    """Content-addressed development evidence chosen before v4 search."""
+
+    report_path: str
+    report_digest: str
+    slices_path: str
+    slices_digest: str
+
+
+@dataclass(frozen=True, slots=True)
+class PhaseSearchManifest:
+    """One validated twelve-locus phase-aware search recipe."""
+
+    schema_version: int
+    name: str
+    personality: Personality
+    predecessor_name: str
+    development_corpus: DevelopmentCorpusBinding
+    search_seed: int
+    algorithm: SearchAlgorithm
+    phase_selector: PhaseSelector
+    boundary_evidence: BoundaryEvidence
+    initial_experts: PhaseCoefficientValues
+    expert_coefficient_grids: PhaseCoefficientGrids
+    digest: str
+
+
+type SearchRecipe = SearchManifest | PhaseSearchManifest
+
+_FIXED_PHASE_SEARCH_ALGORITHM = SearchAlgorithm(
+    name=_SUPPORTED_ALGORITHM,
+    generation_count=12,
+    population_size=16,
+    elite_count=4,
+    mutation_radius_steps=4,
+)
+_ESTABLISHED_COEFFICIENT_GRIDS = CoefficientGrids(
+    liquidity_strength=CoefficientGrid(
+        minimum=Decimal("0"),
+        maximum=Decimal("1.5"),
+        step=Decimal("0.05"),
+    ),
+    future_cash_weight=CoefficientGrid(
+        minimum=Decimal("0"),
+        maximum=Decimal("2"),
+        step=Decimal("0.05"),
+    ),
+    objective_progress_weight=CoefficientGrid(
+        minimum=Decimal("0"),
+        maximum=Decimal("1"),
+        step=Decimal("0.05"),
+    ),
+    bid_shading=CoefficientGrid(
+        minimum=Decimal("0"),
+        maximum=Decimal("1"),
+        step=Decimal("0.05"),
+    ),
+)
+
+
 class SearchManifestError(ValueError):
     """Explain why a search manifest cannot be trusted."""
 
@@ -255,6 +420,116 @@ def load_search_manifest(
     )
 
 
+def load_search_recipe(
+    path: Path,
+    *,
+    development_corpus: PromotionCorpus,
+) -> SearchRecipe:
+    """Load either an immutable v1 recipe or a phase-aware v2 recipe."""
+
+    if development_corpus.recipe.purpose != "development":
+        raise SearchManifestError(
+            "held_out_corpus_forbidden",
+            "Evolution may use only a development corpus; held-out games are the final exam.",
+        )
+
+    payload = _load_json_object(path)
+    _reject_held_out_keys(payload)
+    schema_version = _require_integer(
+        payload.get("schema_version"),
+        code="unsupported_schema",
+        field_name="schema_version",
+        minimum=1,
+    )
+    if schema_version == 1:
+        return load_search_manifest(path, development_corpus=development_corpus)
+    if schema_version != 2:
+        raise SearchManifestError(
+            "unsupported_schema",
+            f"Search manifest schema version {schema_version} is not supported; expected 1 or 2.",
+        )
+    return _decode_phase_search_manifest(
+        payload,
+        development_corpus=development_corpus,
+    )
+
+
+def _decode_phase_search_manifest(
+    payload: dict[str, object],
+    *,
+    development_corpus: PromotionCorpus,
+) -> PhaseSearchManifest:
+    _require_exact_keys(
+        payload,
+        _EXPECTED_PHASE_MANIFEST_KEYS,
+        code="invalid_manifest_keys",
+        subject="phase search manifest",
+    )
+    personality = _decode_personality(payload["personality"])
+    name = _decode_phase_search_name(payload["name"], personality=personality)
+    predecessor_name = _decode_phase_predecessor(
+        payload["predecessor_name"],
+        personality=personality,
+    )
+    corpus_binding = _decode_corpus_binding(
+        payload["development_corpus"],
+        development_corpus=development_corpus,
+    )
+    search_seed = _require_integer(
+        payload["search_seed"],
+        code="invalid_search_seed",
+        field_name="search_seed",
+        minimum=0,
+    )
+    algorithm = _decode_algorithm(payload["algorithm"])
+    if algorithm != _FIXED_PHASE_SEARCH_ALGORITHM:
+        raise SearchManifestError(
+            "wrong_phase_search_algorithm",
+            "Schema-v2 searches require exactly 12 generations, a population of 16, "
+            "4 elites, and a 4-step mutation radius.",
+        )
+    phase_selector = _decode_phase_selector(payload["phase_selector"])
+    boundary_evidence = _decode_boundary_evidence(payload["boundary_evidence"])
+    initial_experts = _decode_phase_coefficient_values(payload["initial_experts"])
+    expert_grids = _decode_phase_coefficient_grids(payload["expert_coefficient_grids"])
+    _validate_phase_initial_coefficients(
+        initial_experts,
+        grids=expert_grids,
+        personality=personality,
+    )
+
+    without_digest = PhaseSearchManifest(
+        schema_version=2,
+        name=name,
+        personality=personality,
+        predecessor_name=predecessor_name,
+        development_corpus=corpus_binding,
+        search_seed=search_seed,
+        algorithm=algorithm,
+        phase_selector=phase_selector,
+        boundary_evidence=boundary_evidence,
+        initial_experts=initial_experts,
+        expert_coefficient_grids=expert_grids,
+        digest="",
+    )
+    manifest = PhaseSearchManifest(
+        schema_version=without_digest.schema_version,
+        name=without_digest.name,
+        personality=without_digest.personality,
+        predecessor_name=without_digest.predecessor_name,
+        development_corpus=without_digest.development_corpus,
+        search_seed=without_digest.search_seed,
+        algorithm=without_digest.algorithm,
+        phase_selector=without_digest.phase_selector,
+        boundary_evidence=without_digest.boundary_evidence,
+        initial_experts=without_digest.initial_experts,
+        expert_coefficient_grids=without_digest.expert_coefficient_grids,
+        digest=recompute_phase_search_manifest_digest(without_digest),
+    )
+    validate_phase_search_manifest_contract(manifest)
+    return manifest
+
+
 def search_manifest_payload(manifest: SearchManifest) -> dict[str, object]:
     """Return the normalized recipe without its derived digest."""
 
@@ -284,6 +559,106 @@ def recompute_search_manifest_digest(manifest: SearchManifest) -> str:
     """Hash the manifest's current normalized content, ignoring its stored digest."""
 
     return hashlib.sha256(_canonical_json_bytes(search_manifest_payload(manifest))).hexdigest()
+
+
+def phase_search_manifest_payload(manifest: PhaseSearchManifest) -> dict[str, object]:
+    """Return a normalized schema-v2 recipe without its derived digest."""
+
+    return {
+        "schema_version": manifest.schema_version,
+        "name": manifest.name,
+        "personality": manifest.personality,
+        "predecessor_name": manifest.predecessor_name,
+        "development_corpus": {
+            "name": manifest.development_corpus.name,
+            "digest": manifest.development_corpus.digest,
+        },
+        "search_seed": manifest.search_seed,
+        "algorithm": {
+            "name": manifest.algorithm.name,
+            "generation_count": manifest.algorithm.generation_count,
+            "population_size": manifest.algorithm.population_size,
+            "elite_count": manifest.algorithm.elite_count,
+            "mutation_radius_steps": manifest.algorithm.mutation_radius_steps,
+        },
+        "phase_selector": {
+            "kind": manifest.phase_selector.kind,
+            "early": manifest.phase_selector.early,
+            "middle": manifest.phase_selector.middle,
+            "late": manifest.phase_selector.late,
+        },
+        "boundary_evidence": {
+            "report_path": manifest.boundary_evidence.report_path,
+            "report_digest": manifest.boundary_evidence.report_digest,
+            "slices_path": manifest.boundary_evidence.slices_path,
+            "slices_digest": manifest.boundary_evidence.slices_digest,
+        },
+        "initial_experts": _phase_coefficient_values_payload(manifest.initial_experts),
+        "expert_coefficient_grids": _phase_coefficient_grids_payload(
+            manifest.expert_coefficient_grids
+        ),
+    }
+
+
+def recompute_phase_search_manifest_digest(manifest: PhaseSearchManifest) -> str:
+    """Hash the current normalized schema-v2 content, ignoring its stored digest."""
+
+    payload_bytes = _canonical_json_bytes(phase_search_manifest_payload(manifest))
+    return hashlib.sha256(payload_bytes).hexdigest()
+
+
+def validate_phase_search_manifest_contract(manifest: PhaseSearchManifest) -> None:
+    """Require the complete precommitted schema-v2 development search contract."""
+
+    expected_personalities = ("aggressive", "balanced", "passive")
+    if manifest.personality not in expected_personalities:
+        _raise_invalid_phase_search_contract()
+    personality = manifest.personality
+    expected_corpus_name, expected_corpus_digest = _FIXED_PHASE_DEVELOPMENT_CORPORA[personality]
+    expected_profile = _fixed_phase_initial_profile(personality)
+    expected_experts = PhaseCoefficientValues(
+        early=expected_profile,
+        middle=expected_profile,
+        late=expected_profile,
+    )
+    expected_grids = PhaseCoefficientGrids(
+        early=_ESTABLISHED_COEFFICIENT_GRIDS,
+        middle=_ESTABLISHED_COEFFICIENT_GRIDS,
+        late=_ESTABLISHED_COEFFICIENT_GRIDS,
+    )
+    expected_selector = PhaseSelector(
+        kind=PHASE_SELECTOR_NAME,
+        early=_PHASE_SELECTOR_EARLY_RULE,
+        middle=_PHASE_SELECTOR_MIDDLE_RULE,
+        late=_PHASE_SELECTOR_LATE_RULE,
+    )
+    expected_evidence = BoundaryEvidence(
+        report_path=_BOUNDARY_REPORT_PATH,
+        report_digest=_BOUNDARY_REPORT_DIGEST,
+        slices_path=_BOUNDARY_SLICES_PATH,
+        slices_digest=_BOUNDARY_SLICES_DIGEST,
+    )
+    if (
+        manifest.schema_version != 2
+        or manifest.name != f"{personality}-v4-search-v2"
+        or manifest.predecessor_name != f"{personality}-v3"
+        or manifest.development_corpus.name != expected_corpus_name
+        or manifest.development_corpus.digest != expected_corpus_digest
+        or manifest.search_seed != _FIXED_PHASE_SEARCH_SEEDS[personality]
+        or manifest.algorithm != _FIXED_PHASE_SEARCH_ALGORITHM
+        or manifest.phase_selector != expected_selector
+        or manifest.boundary_evidence != expected_evidence
+        or manifest.initial_experts != expected_experts
+        or manifest.expert_coefficient_grids != expected_grids
+    ):
+        _raise_invalid_phase_search_contract()
+
+
+def _raise_invalid_phase_search_contract() -> NoReturn:
+    raise SearchManifestError(
+        "invalid_phase_search_contract",
+        "Schema-v2 evolution requires the exact committed v4 development-search contract.",
+    )
 
 
 def decimal_grid_index(
@@ -431,6 +806,23 @@ def _require_integer(
     return value
 
 
+def _require_string(
+    value: object,
+    *,
+    code: str,
+    field_name: str,
+) -> str:
+    if not isinstance(value, str):
+        raise SearchManifestError(code, f"{field_name} must be a string.")
+    return value
+
+
+def _decode_digest(value: object, *, code: str, field_name: str) -> str:
+    if not isinstance(value, str) or _DIGEST_PATTERN.fullmatch(value) is None:
+        raise SearchManifestError(code, f"{field_name} must be a lowercase SHA-256 digest.")
+    return value
+
+
 def _decode_personality(value: object) -> Personality:
     if value == "aggressive":
         return "aggressive"
@@ -460,12 +852,37 @@ def _decode_search_name(value: object, *, personality: Personality) -> str:
     return value
 
 
+def _decode_phase_search_name(value: object, *, personality: Personality) -> str:
+    if not isinstance(value, str) or _SEARCH_NAME_PATTERN.fullmatch(value) is None:
+        raise SearchManifestError(
+            "invalid_search_name",
+            "Search name must be a lowercase, hyphen-separated versioned name.",
+        )
+    expected = f"{personality}-v4-search-v2"
+    if value != expected:
+        raise SearchManifestError(
+            "invalid_search_name",
+            f"Schema-v2 search name must be exactly {expected!r}.",
+        )
+    return value
+
+
 def _decode_predecessor(value: object, *, personality: Personality) -> str:
     expected = f"{personality}-v2"
     if value != expected:
         raise SearchManifestError(
             "wrong_predecessor",
             f"The {personality} search predecessor must be exactly {expected!r}.",
+        )
+    return value
+
+
+def _decode_phase_predecessor(value: object, *, personality: Personality) -> str:
+    expected = f"{personality}-v3"
+    if value != expected:
+        raise SearchManifestError(
+            "wrong_predecessor",
+            f"The {personality} v4 search predecessor must be exactly {expected!r}.",
         )
     return value
 
@@ -558,58 +975,228 @@ def _decode_algorithm(value: object) -> SearchAlgorithm:
     )
 
 
-def _decode_coefficient_values(value: object) -> CoefficientValues:
+def _decode_phase_selector(value: object) -> PhaseSelector:
+    payload = _require_object(
+        value,
+        code="invalid_phase_selector",
+        subject="phase_selector",
+    )
+    _require_exact_keys(
+        payload,
+        _EXPECTED_PHASE_SELECTOR_KEYS,
+        code="invalid_phase_selector_keys",
+        subject="phase_selector",
+    )
+    expected = PhaseSelector(
+        kind=PHASE_SELECTOR_NAME,
+        early=_PHASE_SELECTOR_EARLY_RULE,
+        middle=_PHASE_SELECTOR_MIDDLE_RULE,
+        late=_PHASE_SELECTOR_LATE_RULE,
+    )
+    decoded = PhaseSelector(
+        kind=_require_string(
+            payload["kind"],
+            code="invalid_phase_selector",
+            field_name="phase_selector.kind",
+        ),
+        early=_require_string(
+            payload["early"],
+            code="invalid_phase_selector",
+            field_name="phase_selector.early",
+        ),
+        middle=_require_string(
+            payload["middle"],
+            code="invalid_phase_selector",
+            field_name="phase_selector.middle",
+        ),
+        late=_require_string(
+            payload["late"],
+            code="invalid_phase_selector",
+            field_name="phase_selector.late",
+        ),
+    )
+    if decoded != expected:
+        raise SearchManifestError(
+            "invalid_phase_selector",
+            "Schema-v2 searches must use the fixed public-resource horizon selector.",
+        )
+    return decoded
+
+
+def _decode_boundary_evidence(value: object) -> BoundaryEvidence:
+    payload = _require_object(
+        value,
+        code="invalid_boundary_evidence",
+        subject="boundary_evidence",
+    )
+    _require_exact_keys(
+        payload,
+        _EXPECTED_BOUNDARY_EVIDENCE_KEYS,
+        code="invalid_boundary_evidence_keys",
+        subject="boundary_evidence",
+    )
+    decoded = BoundaryEvidence(
+        report_path=_require_string(
+            payload["report_path"],
+            code="invalid_boundary_evidence",
+            field_name="boundary_evidence.report_path",
+        ),
+        report_digest=_decode_digest(
+            payload["report_digest"],
+            code="invalid_boundary_evidence",
+            field_name="boundary_evidence.report_digest",
+        ),
+        slices_path=_require_string(
+            payload["slices_path"],
+            code="invalid_boundary_evidence",
+            field_name="boundary_evidence.slices_path",
+        ),
+        slices_digest=_decode_digest(
+            payload["slices_digest"],
+            code="invalid_boundary_evidence",
+            field_name="boundary_evidence.slices_digest",
+        ),
+    )
+    expected = BoundaryEvidence(
+        report_path=_BOUNDARY_REPORT_PATH,
+        report_digest=_BOUNDARY_REPORT_DIGEST,
+        slices_path=_BOUNDARY_SLICES_PATH,
+        slices_digest=_BOUNDARY_SLICES_DIGEST,
+    )
+    if decoded != expected:
+        raise SearchManifestError(
+            "wrong_boundary_evidence",
+            "Schema-v2 searches must bind the committed pre-search boundary evidence.",
+        )
+    return decoded
+
+
+def _decode_coefficient_values(
+    value: object,
+    *,
+    subject: str = "initial_coefficients",
+) -> CoefficientValues:
     payload = _require_object(
         value,
         code="invalid_coefficients",
-        subject="initial_coefficients",
+        subject=subject,
     )
     _require_coefficient_names(payload)
     return CoefficientValues(
         liquidity_strength=_decode_decimal(
             payload["liquidity_strength"],
-            field_name="initial_coefficients.liquidity_strength",
+            field_name=f"{subject}.liquidity_strength",
         ),
         future_cash_weight=_decode_decimal(
             payload["future_cash_weight"],
-            field_name="initial_coefficients.future_cash_weight",
+            field_name=f"{subject}.future_cash_weight",
         ),
         objective_progress_weight=_decode_decimal(
             payload["objective_progress_weight"],
-            field_name="initial_coefficients.objective_progress_weight",
+            field_name=f"{subject}.objective_progress_weight",
         ),
         bid_shading=_decode_decimal(
             payload["bid_shading"],
-            field_name="initial_coefficients.bid_shading",
+            field_name=f"{subject}.bid_shading",
         ),
     )
 
 
-def _decode_coefficient_grids(value: object) -> CoefficientGrids:
+def _decode_coefficient_grids(
+    value: object,
+    *,
+    subject: str = "coefficient_grids",
+) -> CoefficientGrids:
     payload = _require_object(
         value,
         code="invalid_coefficient_grids",
-        subject="coefficient_grids",
+        subject=subject,
     )
     _require_coefficient_names(payload)
     return CoefficientGrids(
         liquidity_strength=_decode_grid(
             payload["liquidity_strength"],
             coefficient_name="liquidity_strength",
+            subject=subject,
         ),
         future_cash_weight=_decode_grid(
             payload["future_cash_weight"],
             coefficient_name="future_cash_weight",
+            subject=subject,
         ),
         objective_progress_weight=_decode_grid(
             payload["objective_progress_weight"],
             coefficient_name="objective_progress_weight",
+            subject=subject,
         ),
         bid_shading=_decode_grid(
             payload["bid_shading"],
             coefficient_name="bid_shading",
+            subject=subject,
         ),
     )
+
+
+def _decode_phase_coefficient_values(value: object) -> PhaseCoefficientValues:
+    payload = _decode_phase_object(value, subject="initial_experts")
+    return PhaseCoefficientValues(
+        early=_decode_coefficient_values(
+            payload["early"],
+            subject="initial_experts.early",
+        ),
+        middle=_decode_coefficient_values(
+            payload["middle"],
+            subject="initial_experts.middle",
+        ),
+        late=_decode_coefficient_values(
+            payload["late"],
+            subject="initial_experts.late",
+        ),
+    )
+
+
+def _decode_phase_coefficient_grids(value: object) -> PhaseCoefficientGrids:
+    payload = _decode_phase_object(value, subject="expert_coefficient_grids")
+    decoded = PhaseCoefficientGrids(
+        early=_decode_coefficient_grids(
+            payload["early"],
+            subject="expert_coefficient_grids.early",
+        ),
+        middle=_decode_coefficient_grids(
+            payload["middle"],
+            subject="expert_coefficient_grids.middle",
+        ),
+        late=_decode_coefficient_grids(
+            payload["late"],
+            subject="expert_coefficient_grids.late",
+        ),
+    )
+    if not decoded.early == decoded.middle == decoded.late:
+        raise SearchManifestError(
+            "unequal_expert_grids",
+            "Every phase expert must use identical coefficient grids.",
+        )
+    if decoded.early != _ESTABLISHED_COEFFICIENT_GRIDS:
+        raise SearchManifestError(
+            "wrong_phase_coefficient_grids",
+            "Schema-v2 searches must use the established four coefficient grids.",
+        )
+    return decoded
+
+
+def _decode_phase_object(value: object, *, subject: str) -> dict[str, object]:
+    payload = _require_object(
+        value,
+        code="invalid_phase_names",
+        subject=subject,
+    )
+    _require_exact_keys(
+        payload,
+        _EXPECTED_PHASE_KEYS,
+        code="invalid_phase_names",
+        subject=subject,
+    )
+    return payload
 
 
 def _require_coefficient_names(payload: Mapping[str, object]) -> None:
@@ -624,29 +1211,35 @@ def _require_coefficient_names(payload: Mapping[str, object]) -> None:
         )
 
 
-def _decode_grid(value: object, *, coefficient_name: CoefficientName) -> CoefficientGrid:
+def _decode_grid(
+    value: object,
+    *,
+    coefficient_name: CoefficientName,
+    subject: str = "coefficient_grids",
+) -> CoefficientGrid:
+    field_name = f"{subject}.{coefficient_name}"
     payload = _require_object(
         value,
         code="invalid_coefficient_grid",
-        subject=f"coefficient_grids.{coefficient_name}",
+        subject=field_name,
     )
     _require_exact_keys(
         payload,
         _EXPECTED_GRID_KEYS,
         code="invalid_coefficient_grid_keys",
-        subject=f"coefficient_grids.{coefficient_name}",
+        subject=field_name,
     )
     minimum = _decode_decimal(
         payload["minimum"],
-        field_name=f"coefficient_grids.{coefficient_name}.minimum",
+        field_name=f"{field_name}.minimum",
     )
     maximum = _decode_decimal(
         payload["maximum"],
-        field_name=f"coefficient_grids.{coefficient_name}.maximum",
+        field_name=f"{field_name}.maximum",
     )
     step = _decode_decimal(
         payload["step"],
-        field_name=f"coefficient_grids.{coefficient_name}.step",
+        field_name=f"{field_name}.step",
     )
     if (
         minimum > maximum
@@ -716,6 +1309,52 @@ def _validate_initial_coefficients(
         )
 
 
+def _validate_phase_initial_coefficients(
+    values: PhaseCoefficientValues,
+    *,
+    grids: PhaseCoefficientGrids,
+    personality: Personality,
+) -> None:
+    for phase, phase_values, phase_grids in zip(
+        _PHASES,
+        values.as_tuple(),
+        grids.as_tuple(),
+        strict=True,
+    ):
+        for coefficient_name, coefficient_value, grid in zip(
+            COEFFICIENT_NAMES,
+            phase_values.as_tuple(),
+            phase_grids.as_tuple(),
+            strict=True,
+        ):
+            if (
+                coefficient_value < grid.minimum
+                or coefficient_value > grid.maximum
+                or not _decimal_is_aligned_to_grid(
+                    coefficient_value,
+                    minimum=grid.minimum,
+                    step=grid.step,
+                )
+            ):
+                raise SearchManifestError(
+                    "initial_coefficient_off_grid",
+                    f"Initial {phase} {coefficient_name} must lie exactly on its declared grid.",
+                )
+
+    expected = _fixed_phase_initial_profile(personality)
+    for phase, phase_values in zip(_PHASES, values.as_tuple(), strict=True):
+        if phase_values != expected:
+            raise SearchManifestError(
+                "wrong_initial_coefficients",
+                f"Initial {phase} coefficients for {personality} must match "
+                "the frozen v4 search contract.",
+            )
+
+
+def _fixed_phase_initial_profile(personality: Personality) -> CoefficientValues:
+    return _profile_coefficient_values(getattr(HEURISTIC_V3, personality))
+
+
 def _profile_coefficient_values(profile: HeuristicProfile) -> CoefficientValues:
     return CoefficientValues(
         liquidity_strength=Decimal(str(profile.liquidity_strength)),
@@ -748,6 +1387,20 @@ def _coefficient_grids_payload(grids: CoefficientGrids) -> dict[str, object]:
             grids.as_tuple(),
             strict=True,
         )
+    }
+
+
+def _phase_coefficient_values_payload(values: PhaseCoefficientValues) -> dict[str, object]:
+    return {
+        phase: _coefficient_values_payload(phase_values)
+        for phase, phase_values in zip(_PHASES, values.as_tuple(), strict=True)
+    }
+
+
+def _phase_coefficient_grids_payload(grids: PhaseCoefficientGrids) -> dict[str, object]:
+    return {
+        phase: _coefficient_grids_payload(phase_grids)
+        for phase, phase_grids in zip(_PHASES, grids.as_tuple(), strict=True)
     }
 
 

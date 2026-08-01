@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from garboid_pocketrocks.bots import BOT_SPECS_BY_NAME
+from garboid_pocketrocks.evolution import manifest as manifest_module
 from garboid_pocketrocks.evolution.manifest import (
     COEFFICIENT_NAMES,
     SearchManifest,
@@ -25,8 +26,18 @@ from garboid_pocketrocks.promotion.corpus import (
 )
 
 REPOSITORY_ROOT = Path(__file__).parents[2]
-DEVELOPMENT_CORPUS_PATH = REPOSITORY_ROOT / "configs/promotion/development-v1.json"
+DEVELOPMENT_CORPUS_PATH = (
+    REPOSITORY_ROOT / "configs/promotion/development-balanced-v3-broad-v1.json"
+)
 EVOLUTION_CONFIG_DIRECTORY = REPOSITORY_ROOT / "configs/evolution"
+BOUNDARY_REPORT_PATH = "docs/benchmarks/2026-07-30-heuristic-v4-phase-boundaries.md"
+BOUNDARY_REPORT_DIGEST = "9961f26f32270dcebc98df443588e96cbde2f953858cd131c66a37aeecaa9b01"
+BOUNDARY_SLICES_PATH = (
+    "docs/benchmarks/tournaments/"
+    "2026-07-30-heuristic-v3-phase-boundaries-development/phase-boundary-slices.csv"
+)
+BOUNDARY_SLICES_DIGEST = "4f8aa60edf31b28c746cb8004a4dd5468ee8ab1b26462550c914b2e3fa50d7ae"
+PHASES = ("early", "middle", "late")
 
 
 @pytest.fixture(scope="module")
@@ -41,7 +52,7 @@ def _manifest_payload(
     *,
     personality: str = "balanced",
     predecessor_name: str = "balanced-v2",
-    corpus_name: str = "development-v1",
+    corpus_name: str = "development-balanced-v3-broad-v1",
     corpus_digest: str = "1" * 64,
     search_seed: object = 11002,
     algorithm: object | None = None,
@@ -105,6 +116,91 @@ def _manifest_payload(
             if coefficient_grids is None
             else coefficient_grids
         ),
+    }
+
+
+def _phase_manifest_payload(
+    *,
+    personality: str = "balanced",
+    predecessor_name: str = "balanced-v3",
+    corpus_name: str = "development-v1",
+    corpus_digest: str = "1" * 64,
+    search_seed: object = 12002,
+) -> dict[str, object]:
+    initial_by_personality = {
+        "aggressive": {
+            "liquidity_strength": "1.50",
+            "future_cash_weight": "0.50",
+            "objective_progress_weight": "1.00",
+            "bid_shading": "0.05",
+        },
+        "balanced": {
+            "liquidity_strength": "1.40",
+            "future_cash_weight": "1.05",
+            "objective_progress_weight": "0.70",
+            "bid_shading": "0.30",
+        },
+        "passive": {
+            "liquidity_strength": "0.25",
+            "future_cash_weight": "2.00",
+            "objective_progress_weight": "0.10",
+            "bid_shading": "0.50",
+        },
+    }
+    grid = {
+        "liquidity_strength": {
+            "minimum": "0.00",
+            "maximum": "1.50",
+            "step": "0.05",
+        },
+        "future_cash_weight": {
+            "minimum": "0.00",
+            "maximum": "2.00",
+            "step": "0.05",
+        },
+        "objective_progress_weight": {
+            "minimum": "0.00",
+            "maximum": "1.00",
+            "step": "0.05",
+        },
+        "bid_shading": {
+            "minimum": "0.00",
+            "maximum": "1.00",
+            "step": "0.05",
+        },
+    }
+    initial = initial_by_personality[personality]
+    return {
+        "schema_version": 2,
+        "name": f"{personality}-v4-search-v2",
+        "personality": personality,
+        "predecessor_name": predecessor_name,
+        "development_corpus": {
+            "name": corpus_name,
+            "digest": corpus_digest,
+        },
+        "search_seed": search_seed,
+        "algorithm": {
+            "name": "mu-plus-lambda-v1",
+            "generation_count": 12,
+            "population_size": 16,
+            "elite_count": 4,
+            "mutation_radius_steps": 4,
+        },
+        "phase_selector": {
+            "kind": "public-resource-horizon-v1",
+            "early": "3*future>=2*total",
+            "middle": "3*future>=total",
+            "late": "otherwise",
+        },
+        "boundary_evidence": {
+            "report_path": BOUNDARY_REPORT_PATH,
+            "report_digest": BOUNDARY_REPORT_DIGEST,
+            "slices_path": BOUNDARY_SLICES_PATH,
+            "slices_digest": BOUNDARY_SLICES_DIGEST,
+        },
+        "initial_experts": {phase: dict(initial) for phase in PHASES},
+        "expert_coefficient_grids": {phase: json.loads(json.dumps(grid)) for phase in PHASES},
     }
 
 
@@ -706,3 +802,529 @@ def test_committed_manifests_bind_v2_and_the_fixed_design() -> None:
             (Decimal("0.00"), Decimal("1.00"), Decimal("0.05")),
             (Decimal("0.00"), Decimal("1.00"), Decimal("0.05")),
         )
+
+
+def _test_legacy_schema_v1_canonical_payload_bytes_and_digests_are_frozen(
+    development_corpus: PromotionCorpus,
+) -> None:
+    expected = {
+        "aggressive": (
+            '{"algorithm":{"elite_count":4,"generation_count":8,"mutation_radius_steps":4,'
+            '"name":"mu-plus-lambda-v1","population_size":12},"coefficient_grids":{'
+            '"bid_shading":{"maximum":"1","minimum":"0","step":"0.05"},'
+            '"future_cash_weight":{"maximum":"2","minimum":"0","step":"0.05"},'
+            '"liquidity_strength":{"maximum":"1.5","minimum":"0","step":"0.05"},'
+            '"objective_progress_weight":{"maximum":"1","minimum":"0","step":"0.05"}},'
+            '"development_corpus":{"digest":'
+            '"17c016350dbe717641b8cd499b0908e3bc0faa811a3b4f5e574f8713a5bf2b3d",'
+            '"name":"development-v1"},"initial_coefficients":{"bid_shading":"0.05",'
+            '"future_cash_weight":"1.5","liquidity_strength":"0.75",'
+            '"objective_progress_weight":"0.25"},"name":"aggressive-v3-search-v1",'
+            '"personality":"aggressive","predecessor_name":"aggressive-v2",'
+            '"schema_version":1,"search_seed":11001}\n',
+            "627eb77836f8dceace745a8fb7f60573e2dad05aa47a423d902850c32a98f5e0",
+        ),
+        "balanced": (
+            '{"algorithm":{"elite_count":4,"generation_count":8,"mutation_radius_steps":4,'
+            '"name":"mu-plus-lambda-v1","population_size":12},"coefficient_grids":{'
+            '"bid_shading":{"maximum":"1","minimum":"0","step":"0.05"},'
+            '"future_cash_weight":{"maximum":"2","minimum":"0","step":"0.05"},'
+            '"liquidity_strength":{"maximum":"1.5","minimum":"0","step":"0.05"},'
+            '"objective_progress_weight":{"maximum":"1","minimum":"0","step":"0.05"}},'
+            '"development_corpus":{"digest":'
+            '"17c016350dbe717641b8cd499b0908e3bc0faa811a3b4f5e574f8713a5bf2b3d",'
+            '"name":"development-v1"},"initial_coefficients":{"bid_shading":"0.25",'
+            '"future_cash_weight":"0.75","liquidity_strength":"0.4",'
+            '"objective_progress_weight":"0.2"},"name":"balanced-v3-search-v1",'
+            '"personality":"balanced","predecessor_name":"balanced-v2",'
+            '"schema_version":1,"search_seed":11002}\n',
+            "da9e2162eec9dd934dc80e59d9950b49c74a3a4cd4d72e6273134b502e705152",
+        ),
+        "passive": (
+            '{"algorithm":{"elite_count":4,"generation_count":8,"mutation_radius_steps":4,'
+            '"name":"mu-plus-lambda-v1","population_size":12},"coefficient_grids":{'
+            '"bid_shading":{"maximum":"1","minimum":"0","step":"0.05"},'
+            '"future_cash_weight":{"maximum":"2","minimum":"0","step":"0.05"},'
+            '"liquidity_strength":{"maximum":"1.5","minimum":"0","step":"0.05"},'
+            '"objective_progress_weight":{"maximum":"1","minimum":"0","step":"0.05"}},'
+            '"development_corpus":{"digest":'
+            '"17c016350dbe717641b8cd499b0908e3bc0faa811a3b4f5e574f8713a5bf2b3d",'
+            '"name":"development-v1"},"initial_coefficients":{"bid_shading":"0.3",'
+            '"future_cash_weight":"0.6","liquidity_strength":"0.15",'
+            '"objective_progress_weight":"0.15"},"name":"passive-v3-search-v1",'
+            '"personality":"passive","predecessor_name":"passive-v2",'
+            '"schema_version":1,"search_seed":11003}\n',
+            "bf533a434a4208e7b018606c53488fcc3a09499b6da2fcb4b1d020346001a9c1",
+        ),
+    }
+
+    for personality, (expected_bytes, expected_digest) in expected.items():
+        manifest = load_search_manifest(
+            EVOLUTION_CONFIG_DIRECTORY / f"{personality}-v3-search-v1.json",
+            development_corpus=development_corpus,
+        )
+        canonical_bytes = (
+            json.dumps(
+                search_manifest_payload(manifest),
+                allow_nan=False,
+                separators=(",", ":"),
+                sort_keys=True,
+            )
+            + "\n"
+        )
+        assert canonical_bytes == expected_bytes
+        assert manifest.digest == expected_digest
+        assert hashlib.sha256(canonical_bytes.encode()).hexdigest() == expected_digest
+
+
+def test_loads_schema_v2_as_explicit_phase_recipe(
+    tmp_path: Path,
+    development_corpus: PromotionCorpus,
+) -> None:
+    payload = _phase_manifest_payload(
+        corpus_name=development_corpus.recipe.name,
+        corpus_digest=development_corpus.digest,
+    )
+    path = tmp_path / "balanced-v4-search-v2.json"
+    _write_manifest(path, payload)
+
+    recipe = manifest_module.load_search_recipe(path, development_corpus=development_corpus)
+
+    assert isinstance(recipe, manifest_module.PhaseSearchManifest)
+    assert recipe.schema_version == 2
+    assert recipe.name == "balanced-v4-search-v2"
+    assert recipe.predecessor_name == "balanced-v3"
+    assert recipe.phase_selector == manifest_module.PhaseSelector(
+        kind="public-resource-horizon-v1",
+        early="3*future>=2*total",
+        middle="3*future>=total",
+        late="otherwise",
+    )
+    assert recipe.boundary_evidence.report_path == BOUNDARY_REPORT_PATH
+    assert recipe.boundary_evidence.report_digest == BOUNDARY_REPORT_DIGEST
+    assert recipe.boundary_evidence.slices_path == BOUNDARY_SLICES_PATH
+    assert recipe.boundary_evidence.slices_digest == BOUNDARY_SLICES_DIGEST
+    assert (
+        tuple(map(str, recipe.initial_experts.as_loci()))
+        == (
+            "1.4",
+            "1.05",
+            "0.7",
+            "0.3",
+        )
+        * 3
+    )
+    assert recipe.expert_coefficient_grids.early == recipe.expert_coefficient_grids.middle
+    assert recipe.expert_coefficient_grids.middle == recipe.expert_coefficient_grids.late
+    assert len(recipe.expert_coefficient_grids.as_loci()) == 12
+    assert manifest_module.recompute_phase_search_manifest_digest(recipe) == recipe.digest
+    normalized_payload = manifest_module.phase_search_manifest_payload(recipe)
+    assert normalized_payload["phase_selector"] == payload["phase_selector"]
+    assert normalized_payload["boundary_evidence"] == payload["boundary_evidence"]
+    initial_experts = payload["initial_experts"]
+    assert isinstance(initial_experts, dict)
+    assert all(isinstance(initial_experts[phase], dict) for phase in PHASES)
+    assert normalized_payload["initial_experts"] == {
+        phase: {
+            coefficient: str(Decimal(value).normalize())
+            for coefficient, value in initial_experts[phase].items()
+        }
+        for phase in PHASES
+    }
+
+
+def test_load_search_manifest_remains_schema_v1_only(
+    tmp_path: Path,
+    development_corpus: PromotionCorpus,
+) -> None:
+    path = tmp_path / "balanced-v4-search-v2.json"
+    _write_manifest(
+        path,
+        _phase_manifest_payload(
+            corpus_name=development_corpus.recipe.name,
+            corpus_digest=development_corpus.digest,
+        ),
+    )
+
+    with pytest.raises(SearchManifestError) as captured:
+        load_search_manifest(path, development_corpus=development_corpus)
+
+    assert captured.value.code == "invalid_manifest_keys"
+
+
+@pytest.mark.parametrize(
+    ("mutate", "expected_code"),
+    (
+        (
+            lambda payload: payload["phase_selector"].__setitem__("early", "future>=total"),
+            "invalid_phase_selector",
+        ),
+        (
+            lambda payload: payload.__setitem__("predecessor_name", "balanced-v2"),
+            "wrong_predecessor",
+        ),
+        (
+            lambda payload: payload["initial_experts"].__delitem__("late"),
+            "invalid_phase_names",
+        ),
+        (
+            lambda payload: payload["initial_experts"].__setitem__(
+                "opening", payload["initial_experts"]["early"]
+            ),
+            "invalid_phase_names",
+        ),
+        (
+            lambda payload: payload["initial_experts"]["middle"].__setitem__(
+                "liquidity_strength", True
+            ),
+            "invalid_decimal",
+        ),
+        (
+            lambda payload: payload["initial_experts"]["middle"].__setitem__(
+                "liquidity_strength", "NaN"
+            ),
+            "invalid_decimal",
+        ),
+        (
+            lambda payload: payload["initial_experts"]["middle"].__setitem__(
+                "liquidity_strength", "0.26"
+            ),
+            "initial_coefficient_off_grid",
+        ),
+        (
+            lambda payload: payload["initial_experts"]["middle"].__setitem__(
+                "liquidity_strength", "0.30"
+            ),
+            "wrong_initial_coefficients",
+        ),
+        (
+            lambda payload: payload["expert_coefficient_grids"]["late"][
+                "liquidity_strength"
+            ].__setitem__("maximum", "1.45"),
+            "unequal_expert_grids",
+        ),
+        (
+            lambda payload: payload["boundary_evidence"].__setitem__("report_digest", "0" * 64),
+            "wrong_boundary_evidence",
+        ),
+        (
+            lambda payload: payload["algorithm"].__setitem__("held_out_seed", 999),
+            "held_out_key_forbidden",
+        ),
+    ),
+)
+def test_schema_v2_rejects_noncanonical_or_unsafe_content(
+    tmp_path: Path,
+    development_corpus: PromotionCorpus,
+    mutate: object,
+    expected_code: str,
+) -> None:
+    payload = _phase_manifest_payload(
+        corpus_name=development_corpus.recipe.name,
+        corpus_digest=development_corpus.digest,
+    )
+    assert callable(mutate)
+    mutate(payload)
+    path = tmp_path / "manifest.json"
+    _write_manifest(path, payload)
+
+    with pytest.raises(SearchManifestError) as captured:
+        manifest_module.load_search_recipe(path, development_corpus=development_corpus)
+
+    assert captured.value.code == expected_code
+
+
+def test_schema_v2_rejects_duplicate_and_unknown_nested_keys(
+    tmp_path: Path,
+    development_corpus: PromotionCorpus,
+) -> None:
+    payload = _phase_manifest_payload(
+        corpus_name=development_corpus.recipe.name,
+        corpus_digest=development_corpus.digest,
+    )
+    selector = payload["phase_selector"]
+    assert isinstance(selector, dict)
+    selector["notes"] = "not part of the fixed selector"
+    unknown_path = tmp_path / "unknown.json"
+    _write_manifest(unknown_path, payload)
+
+    duplicate_path = tmp_path / "duplicate.json"
+    duplicate_path.write_text(
+        '{"schema_version":2,"schema_version":2}',
+        encoding="utf-8",
+    )
+
+    for path, code in (
+        (unknown_path, "invalid_phase_selector_keys"),
+        (duplicate_path, "duplicate_json_key"),
+    ):
+        with pytest.raises(SearchManifestError) as captured:
+            manifest_module.load_search_recipe(path, development_corpus=development_corpus)
+        assert captured.value.code == code
+
+
+def test_committed_schema_v2_manifests_bind_v3_and_fixed_evidence(
+    development_corpus: PromotionCorpus,
+) -> None:
+    expected_initial = {
+        "aggressive": ("1.5", "0.5", "1", "0.05"),
+        "balanced": ("1.4", "1.05", "0.7", "0.3"),
+        "passive": ("0.25", "2", "0.1", "0.5"),
+    }
+
+    for seed_offset, personality in enumerate(("aggressive", "balanced", "passive"), start=1):
+        development_corpus = load_promotion_corpus(
+            REPOSITORY_ROOT / f"configs/promotion/development-{personality}-v3-broad-v1.json",
+            registry=BOT_SPECS_BY_NAME,
+        )
+        recipe = manifest_module.load_search_recipe(
+            EVOLUTION_CONFIG_DIRECTORY / f"{personality}-v4-search-v2.json",
+            development_corpus=development_corpus,
+        )
+        assert isinstance(recipe, manifest_module.PhaseSearchManifest)
+        assert recipe.name == f"{personality}-v4-search-v2"
+        assert recipe.predecessor_name == f"{personality}-v3"
+        assert recipe.search_seed == 12000 + seed_offset
+        assert recipe.algorithm.generation_count == 12
+        assert recipe.algorithm.population_size == 16
+        assert recipe.algorithm.elite_count == 4
+        assert recipe.algorithm.mutation_radius_steps == 4
+        assert (
+            tuple(map(str, recipe.initial_experts.early.as_tuple()))
+            == expected_initial[personality]
+        )
+        assert recipe.initial_experts.early == recipe.initial_experts.middle
+        assert recipe.initial_experts.middle == recipe.initial_experts.late
+        assert recipe.boundary_evidence.report_digest == BOUNDARY_REPORT_DIGEST
+        assert recipe.boundary_evidence.slices_digest == BOUNDARY_SLICES_DIGEST
+
+
+def test_public_phase_contract_validator_rejects_forged_dataclass_fields(
+    development_corpus: PromotionCorpus,
+) -> None:
+    recipe = manifest_module.load_search_recipe(
+        EVOLUTION_CONFIG_DIRECTORY / "balanced-v4-search-v2.json",
+        development_corpus=development_corpus,
+    )
+    assert isinstance(recipe, manifest_module.PhaseSearchManifest)
+    forged_recipes = (
+        replace(recipe, schema_version=1),
+        replace(recipe, name="balanced-v4-search-custom"),
+        replace(recipe, personality="passive"),
+        replace(recipe, predecessor_name="balanced-v2"),
+        replace(
+            recipe,
+            development_corpus=replace(
+                recipe.development_corpus,
+                name="development-custom",
+            ),
+        ),
+        replace(
+            recipe,
+            development_corpus=replace(
+                recipe.development_corpus,
+                digest="0" * 64,
+            ),
+        ),
+        replace(recipe, search_seed=999),
+        replace(
+            recipe,
+            algorithm=replace(recipe.algorithm, generation_count=1),
+        ),
+        replace(
+            recipe,
+            phase_selector=replace(recipe.phase_selector, kind="custom-selector"),
+        ),
+        replace(
+            recipe,
+            boundary_evidence=replace(
+                recipe.boundary_evidence,
+                report_digest="0" * 64,
+            ),
+        ),
+        replace(
+            recipe,
+            initial_experts=replace(
+                recipe.initial_experts,
+                early=replace(
+                    recipe.initial_experts.early,
+                    liquidity_strength=Decimal("0.30"),
+                ),
+            ),
+        ),
+        replace(
+            recipe,
+            expert_coefficient_grids=replace(
+                recipe.expert_coefficient_grids,
+                late=replace(
+                    recipe.expert_coefficient_grids.late,
+                    liquidity_strength=replace(
+                        recipe.expert_coefficient_grids.late.liquidity_strength,
+                        maximum=Decimal("1.45"),
+                    ),
+                ),
+            ),
+        ),
+    )
+
+    for forged in forged_recipes:
+        with pytest.raises(SearchManifestError) as captured:
+            manifest_module.validate_phase_search_manifest_contract(forged)
+        assert captured.value.code == "invalid_phase_search_contract"
+
+
+@pytest.mark.parametrize(
+    ("algorithm_field", "alternate_value"),
+    (
+        ("generation_count", 11),
+        ("population_size", 15),
+        ("elite_count", 3),
+        ("mutation_radius_steps", 3),
+    ),
+)
+def test_schema_v2_rejects_an_alternative_algorithm_budget(
+    tmp_path: Path,
+    development_corpus: PromotionCorpus,
+    algorithm_field: str,
+    alternate_value: int,
+) -> None:
+    payload = _phase_manifest_payload(
+        corpus_name=development_corpus.recipe.name,
+        corpus_digest=development_corpus.digest,
+    )
+    algorithm = payload["algorithm"]
+    assert isinstance(algorithm, dict)
+    algorithm[algorithm_field] = alternate_value
+    path = tmp_path / "manifest.json"
+    _write_manifest(path, payload)
+
+    with pytest.raises(SearchManifestError) as captured:
+        manifest_module.load_search_recipe(path, development_corpus=development_corpus)
+
+    assert captured.value.code == "wrong_phase_search_algorithm"
+
+
+def test_schema_v2_rejects_alternative_grids_even_when_all_phases_match(
+    tmp_path: Path,
+    development_corpus: PromotionCorpus,
+) -> None:
+    payload = _phase_manifest_payload(
+        corpus_name=development_corpus.recipe.name,
+        corpus_digest=development_corpus.digest,
+    )
+    phase_grids = payload["expert_coefficient_grids"]
+    assert isinstance(phase_grids, dict)
+    for phase in PHASES:
+        grids = phase_grids[phase]
+        assert isinstance(grids, dict)
+        liquidity_grid = grids["liquidity_strength"]
+        assert isinstance(liquidity_grid, dict)
+        liquidity_grid["maximum"] = "1.55"
+    path = tmp_path / "manifest.json"
+    _write_manifest(path, payload)
+
+    with pytest.raises(SearchManifestError) as captured:
+        manifest_module.load_search_recipe(path, development_corpus=development_corpus)
+
+    assert captured.value.code == "wrong_phase_coefficient_grids"
+
+
+def test_phase_coefficient_loci_are_phase_first_then_coefficient_name() -> None:
+    values = manifest_module.PhaseCoefficientValues(
+        early=manifest_module.CoefficientValues(
+            Decimal("1"),
+            Decimal("2"),
+            Decimal("3"),
+            Decimal("4"),
+        ),
+        middle=manifest_module.CoefficientValues(
+            Decimal("5"),
+            Decimal("6"),
+            Decimal("7"),
+            Decimal("8"),
+        ),
+        late=manifest_module.CoefficientValues(
+            Decimal("9"),
+            Decimal("10"),
+            Decimal("11"),
+            Decimal("12"),
+        ),
+    )
+
+    assert values.as_loci() == tuple(Decimal(value) for value in range(1, 13))
+
+
+def test_committed_boundary_evidence_content_matches_pinned_digests() -> None:
+    expected = (
+        (BOUNDARY_REPORT_PATH, BOUNDARY_REPORT_DIGEST),
+        (BOUNDARY_SLICES_PATH, BOUNDARY_SLICES_DIGEST),
+    )
+
+    for relative_path, expected_digest in expected:
+        content = (REPOSITORY_ROOT / relative_path).read_bytes()
+        assert hashlib.sha256(content).hexdigest() == expected_digest
+
+
+def test_schema_v2_canonical_payload_digests_are_frozen(
+    development_corpus: PromotionCorpus,
+) -> None:
+    expected = {
+        "aggressive": (
+            2137,
+            "0b85403b121451b2a4ab495a1c73af93c311f2743c5e52ce6accd8ef606df324",
+        ),
+        "balanced": (
+            2135,
+            "4c738ca18f93bd59112115a7c992d168fef6c26f0c114aed9011a80f7a8f2763",
+        ),
+        "passive": (
+            2125,
+            "11f7a8e38b89e9eea9b4f670632f9acd950a74ed48414b1a4e263ba27e90b048",
+        ),
+    }
+
+    for personality, (expected_size, expected_digest) in expected.items():
+        development_corpus = load_promotion_corpus(
+            REPOSITORY_ROOT / f"configs/promotion/development-{personality}-v3-broad-v1.json",
+            registry=BOT_SPECS_BY_NAME,
+        )
+        recipe = manifest_module.load_search_recipe(
+            EVOLUTION_CONFIG_DIRECTORY / f"{personality}-v4-search-v2.json",
+            development_corpus=development_corpus,
+        )
+        assert isinstance(recipe, manifest_module.PhaseSearchManifest)
+        canonical_bytes = (
+            json.dumps(
+                manifest_module.phase_search_manifest_payload(recipe),
+                allow_nan=False,
+                separators=(",", ":"),
+                sort_keys=True,
+            )
+            + "\n"
+        ).encode()
+        assert len(canonical_bytes) == expected_size
+        assert hashlib.sha256(canonical_bytes).hexdigest() == expected_digest
+        assert recipe.digest == expected_digest
+
+
+def test_schema_v2_errors_identify_the_nested_phase_field(
+    tmp_path: Path,
+    development_corpus: PromotionCorpus,
+) -> None:
+    payload = _phase_manifest_payload(
+        corpus_name=development_corpus.recipe.name,
+        corpus_digest=development_corpus.digest,
+    )
+    initial_experts = payload["initial_experts"]
+    assert isinstance(initial_experts, dict)
+    middle = initial_experts["middle"]
+    assert isinstance(middle, dict)
+    middle["liquidity_strength"] = True
+    path = tmp_path / "manifest.json"
+    _write_manifest(path, payload)
+
+    with pytest.raises(SearchManifestError) as captured:
+        manifest_module.load_search_recipe(path, development_corpus=development_corpus)
+
+    assert captured.value.code == "invalid_decimal"
+    assert "initial_experts.middle.liquidity_strength" in str(captured.value)

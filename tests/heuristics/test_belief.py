@@ -14,6 +14,7 @@ from pocketrocks.sim.constants import VALUE_CHARTS
 from garboid_pocketrocks.heuristics import belief as belief_module
 from garboid_pocketrocks.heuristics.belief import build_belief
 from garboid_pocketrocks.heuristics.errors import HeuristicInputError
+from garboid_pocketrocks.heuristics.phases import PublicResourceHorizon
 from garboid_pocketrocks.knowledge import RulesetKnowledge, canonical_knowledge
 from garboid_pocketrocks.simulator.session import SdkGameSession
 
@@ -108,6 +109,38 @@ def test_expected_future_biddable_counts_and_horizon_conserve_cards() -> None:
     assert belief.expected_future_biddable_counts == pytest.approx((0.75, 0.75, 1.5, 1.5, 1.5))
     assert sum(belief.expected_future_biddable_counts) == pytest.approx(6.0)
     assert belief.normalized_horizon == pytest.approx(6 / 7)
+
+
+def test_normalized_horizon_uses_shared_public_resource_accounting(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = make_context(
+        current_resources=(int(Suit.BRICK), 0),
+        hand=(int(Suit.WOOD),),
+    )
+    knowledge = make_knowledge(private_cards=1)
+    calls: list[tuple[DecisionContext, RulesetKnowledge]] = []
+
+    def shared_horizon(
+        received_context: DecisionContext,
+        received_knowledge: RulesetKnowledge,
+    ) -> PublicResourceHorizon:
+        calls.append((received_context, received_knowledge))
+        return PublicResourceHorizon(
+            total_biddable_resources=12,
+            future_biddable_resources=6,
+        )
+
+    monkeypatch.setattr(
+        belief_module,
+        "public_resource_horizon",
+        shared_horizon,
+    )
+
+    belief = build_belief(context, knowledge)
+
+    assert calls == [(context, knowledge)]
+    assert belief.normalized_horizon == pytest.approx(0.5)
 
 
 def test_public_card_accounting_is_the_conserved_posterior_boundary() -> None:

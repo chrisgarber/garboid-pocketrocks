@@ -16,7 +16,7 @@ from garboid_pocketrocks.evolution.candidates import (
     candidate_bot_spec,
 )
 from garboid_pocketrocks.evolution.evaluation import evaluate_candidate
-from garboid_pocketrocks.evolution.manifest import load_search_manifest
+from garboid_pocketrocks.evolution.manifest import load_search_recipe
 from garboid_pocketrocks.evolution.planning import (
     DevelopmentPlan,
     plan_development_games,
@@ -290,13 +290,20 @@ def test_malformed_rating_observation_is_invalid_evidence(
     assert evaluation.rating_delta is None
 
 
-def test_real_development_jobs_match_across_serial_batch_and_workers() -> None:
+@pytest.mark.parametrize(
+    "manifest_name",
+    ("balanced-v3-search-v1.json", "balanced-v4-search-v2.json"),
+)
+def test_real_development_jobs_match_across_serial_batch_and_workers(
+    manifest_name: str,
+) -> None:
+    corpus_name = "development-balanced-v3-broad-v1.json"
     corpus = load_promotion_corpus(
-        REPOSITORY_ROOT / "configs/promotion/development-balanced-v3-broad-v1.json",
+        REPOSITORY_ROOT / "configs" / "promotion" / corpus_name,
         registry=BOT_SPECS_BY_NAME,
     )
-    manifest = load_search_manifest(
-        REPOSITORY_ROOT / "configs/evolution/balanced-v3-search-v1.json",
+    manifest = load_search_recipe(
+        REPOSITORY_ROOT / "configs/evolution" / manifest_name,
         development_corpus=corpus,
     )
     candidate = candidate_bot_spec(build_initial_population(manifest)[1])

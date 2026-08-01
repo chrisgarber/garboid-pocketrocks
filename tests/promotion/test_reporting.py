@@ -11,13 +11,17 @@ from typing import Any
 import pytest
 
 from garboid_pocketrocks.bots import BOT_SPECS_BY_NAME, BotSpec, RandomBot
-from garboid_pocketrocks.heuristics.frozen import FROZEN_CANDIDATES_BY_NAME
+from garboid_pocketrocks.heuristics.frozen import (
+    FROZEN_CANDIDATES_BY_NAME,
+    FrozenPhaseAwareCandidate,
+)
 from garboid_pocketrocks.promotion.analysis import (
     PromotionAnalysis,
     PromotionFailure,
     RatingDifferenceInterval,
 )
 from garboid_pocketrocks.promotion.candidates import (
+    FrozenPhaseAwareCandidateProvenance,
     PromotionCandidateError,
     resolve_promotion_candidate,
 )
@@ -29,6 +33,7 @@ from garboid_pocketrocks.promotion.corpus import (
     load_promotion_corpus,
     recompute_promotion_corpus_digest,
 )
+from garboid_pocketrocks.promotion.planning import plan_paired_games
 from garboid_pocketrocks.promotion.reporting import (
     PromotionReport,
     build_promotion_report,
@@ -53,6 +58,15 @@ _ARTIFACT_NAMES = (
     "paired-games.jsonl",
     "corpus-snapshot.json",
 )
+_BALANCED_V4_IDENTITY = "balanced-v4-candidate-g005-s010-ae48ac912b3a"
+
+
+def _development_for_frozen(frozen: Any) -> PromotionCorpus:
+    corpus_file = f"development-{frozen.personality}-v3-broad-v1.json"
+    return load_promotion_corpus(
+        Path("configs/promotion") / corpus_file,
+        registry=BOT_SPECS_BY_NAME,
+    )
 
 
 def _corpus(
@@ -197,6 +211,74 @@ def _frozen_report_inputs() -> tuple[
     )
 
 
+def _phase_aware_report_inputs() -> tuple[
+    PromotionReport,
+    tuple[GameSummary, ...],
+    PromotionCorpus,
+    PromotionCorpus,
+]:
+    base_report, summaries, _, held_out = _report_inputs()
+    frozen = FROZEN_CANDIDATES_BY_NAME[_BALANCED_V4_IDENTITY]
+    assert type(frozen) is FrozenPhaseAwareCandidate
+    development = _development_for_frozen(frozen)
+    opponents = (
+        BOT_SPECS_BY_NAME["random"],
+        BOT_SPECS_BY_NAME["aggressive-v1"],
+    )
+    held_out = replace(
+        held_out,
+        recipe=replace(
+            held_out.recipe,
+            opponent_names=tuple(opponent.name for opponent in opponents),
+        ),
+        cases=tuple(
+            replace(
+                case,
+                opponent_names_by_seat=tuple(
+                    (
+                        None
+                        if opponent_name is None
+                        else opponents[0].name
+                        if opponent_name == "opponent-a"
+                        else opponents[1].name
+                    )
+                    for opponent_name in case.opponent_names_by_seat
+                ),
+            )
+            for case in held_out.cases
+        ),
+    )
+    resolved = resolve_promotion_candidate(
+        frozen.bot_spec.name,
+        registry=BOT_SPECS_BY_NAME,
+        frozen_candidates=FROZEN_CANDIDATES_BY_NAME,
+    )
+    assert type(resolved.frozen_provenance) is FrozenPhaseAwareCandidateProvenance
+    plan = plan_paired_games(
+        held_out,
+        candidate=frozen.bot_spec,
+        incumbent=BOT_SPECS_BY_NAME["balanced-v3"],
+        registry=BOT_SPECS_BY_NAME,
+    )
+    report = build_promotion_report(
+        repository_commit=base_report.repository_commit,
+        candidate=plan.candidate,
+        incumbent=plan.incumbent,
+        opponents=plan.opponents,
+        opponent_pool=plan.opponent_pool,
+        plan=plan,
+        development=development,
+        held_out=held_out,
+        bootstrap_samples=base_report.bootstrap_samples,
+        bootstrap_seed=base_report.bootstrap_seed,
+        workers=base_report.workers,
+        batch_size=base_report.batch_size,
+        analysis=base_report.analysis,
+        candidate_provenance=resolved.frozen_provenance,
+    )
+    return report, summaries, development, held_out
+
+
 def test_report_payload_has_complete_explicit_schema() -> None:
     report, _, development, held_out = _report_inputs()
 
@@ -310,6 +392,7 @@ def test_frozen_candidate_report_records_complete_search_provenance() -> None:
 
     payload = promotion_report_payload(report)
 
+    assert report.schema_version == 1
     assert payload["candidate_provenance"] == {
         "kind": "frozen_heuristic_candidate",
         "candidate_name": report.candidate.name,
@@ -325,6 +408,216 @@ def test_frozen_candidate_report_records_complete_search_provenance() -> None:
         "search_report_digest": "d" * 64,
         "candidate_evaluations_digest": "e" * 64,
     }
+
+
+def test_phase_aware_candidate_report_has_complete_explicit_schema_v2_provenance() -> None:
+    report, _, _, _ = _phase_aware_report_inputs()
+
+    payload = promotion_report_payload(report)
+
+    assert report.schema_version == 2
+    assert payload["schema_version"] == 2
+    assert payload["candidate_provenance"] == {
+        "kind": "frozen_phase_aware_heuristic_candidate",
+        "freeze_schema_version": 2,
+        "candidate_name": _BALANCED_V4_IDENTITY,
+        "candidate_bot_id": _BALANCED_V4_IDENTITY,
+        "personality": "balanced",
+        "predecessor_name": "balanced-v3",
+        "development_corpus_name": "development-balanced-v3-broad-v1",
+        "development_corpus_digest": (
+            "d556cc940c92ebf3633fde83485d4ba776b6e582f34cf8d445a5c190824b3228"
+        ),
+        "search_name": "balanced-v4-search-v2",
+        "repository_commit": "b306d77de634efba21542b18589946a3fd8fc703",
+        "freeze_digest": ("373b94c6112f6838fc4ec83488427890d9e5403e2414344a3cc6f736a9d60886"),
+        "profile_digest": ("ae48ac912b3a84246be09e8f88f5e5c6a8d6dcf9668b030fc3cebfbdb376d32f"),
+        "manifest_digest": ("4c738ca18f93bd59112115a7c992d168fef6c26f0c114aed9011a80f7a8f2763"),
+        "search_report_digest": (
+            "fc153c9fb8905dae4fcd0028b83b5a19fb1974d20f35b1c5cdd8617f7601420a"
+        ),
+        "candidate_evaluations_digest": (
+            "7c57f855a08a4465facf28326dafc8954d25e378a6190c3688d43f9418935a95"
+        ),
+        "phase_selector": {
+            "kind": "public-resource-horizon-v1",
+            "early": "3*future>=2*total",
+            "middle": "3*future>=total",
+            "late": "otherwise",
+        },
+        "experts": {
+            "early": {
+                "profile": {
+                    "liquidity_strength": 1.25,
+                    "future_cash_weight": 1.05,
+                    "objective_progress_weight": 0.55,
+                    "bid_shading": 0.3,
+                },
+                "profile_digest": (
+                    "431e66c676a0cb6cf5d0ccfa576c4cab7b46e7e9aa57ec98d254fd5dc3849f18"
+                ),
+            },
+            "middle": {
+                "profile": {
+                    "liquidity_strength": 1.5,
+                    "future_cash_weight": 1.05,
+                    "objective_progress_weight": 0.9,
+                    "bid_shading": 0.3,
+                },
+                "profile_digest": (
+                    "0ba361b8f4e45479586f5c50c310239e709e60abbbf1f412b51ea57bf24494b4"
+                ),
+            },
+            "late": {
+                "profile": {
+                    "liquidity_strength": 1.4,
+                    "future_cash_weight": 1.05,
+                    "objective_progress_weight": 0.9,
+                    "bid_shading": 0.3,
+                },
+                "profile_digest": (
+                    "67fda27f11e8a1ea59f14c0e330a187a6c6ebe85d6b501d906e5a21030fe96c2"
+                ),
+            },
+        },
+        "boundary_evidence": {
+            "report_path": "docs/benchmarks/2026-07-30-heuristic-v4-phase-boundaries.md",
+            "report_digest": ("9961f26f32270dcebc98df443588e96cbde2f953858cd131c66a37aeecaa9b01"),
+            "slices_path": (
+                "docs/benchmarks/tournaments/"
+                "2026-07-30-heuristic-v3-phase-boundaries-development/"
+                "phase-boundary-slices.csv"
+            ),
+            "slices_digest": ("4f8aa60edf31b28c746cb8004a4dd5468ee8ab1b26462550c914b2e3fa50d7ae"),
+        },
+        "selection_log_digest": (
+            "1d2a3e08c28d5192648f2d7d198ef6a9846be91a36dd6303be369081ea3dc992"
+        ),
+        "development_games_digest": (
+            "a16e95ce7ea8b7898f79316191becc82f1a7aa7c918228af0ff67126cfc2fcdb"
+        ),
+        "winner_diagnostics_digests": {
+            "winner-decision-slices.csv": (
+                "c4ac4fa036f1a606db8b4e0d2bea8fa6bcb01c91cb95e4097c265cb54bc80c96"
+            ),
+            "winner-diagnostics.json": (
+                "c957f6208435572dafdb7a8a86f606d83fbdc24ce1a0b948938aa5b698a9d055"
+            ),
+            "winner-diagnostics.md": (
+                "fd1dab2cb46154295334c9d534241dc4d58d66022203747c8a452c49dc41cdba"
+            ),
+        },
+    }
+
+
+@pytest.mark.parametrize(
+    ("report_kind", "schema_version", "message"),
+    (
+        ("phase", 1, "schema version 1 requires exact legacy"),
+        ("legacy", 2, "schema version 2 requires exact phase-aware"),
+        ("plain", 2, "schema version 2 requires exact phase-aware"),
+        ("plain", True, "Unsupported promotion report schema version"),
+    ),
+)
+def test_promotion_report_schema_must_exactly_match_its_provenance_type(
+    report_kind: str,
+    schema_version: int,
+    message: str,
+) -> None:
+    if report_kind == "phase":
+        report, _, _, _ = _phase_aware_report_inputs()
+    elif report_kind == "legacy":
+        report, _, _, _, _ = _frozen_report_inputs()
+    else:
+        report, _, _, _ = _report_inputs()
+
+    with pytest.raises(ValueError, match=message):
+        promotion_report_payload(replace(report, schema_version=schema_version))
+
+
+@pytest.mark.parametrize(
+    ("binding", "message"),
+    (
+        ("candidate_name", "candidate"),
+        ("candidate_bot_id", "candidate"),
+        ("incumbent", "predecessor"),
+        ("development_name", "development corpus"),
+        ("development_digest", "development corpus"),
+    ),
+)
+def test_schema_v2_payload_rejects_report_bindings_that_contradict_provenance(
+    binding: str,
+    message: str,
+) -> None:
+    report, _, _, _ = _phase_aware_report_inputs()
+    if binding == "candidate_name":
+        report = replace(
+            report,
+            candidate=replace(report.candidate, name="changed-v4-candidate"),
+        )
+    elif binding == "candidate_bot_id":
+        report = replace(
+            report,
+            candidate=replace(report.candidate, bot_id="changed-v4-candidate"),
+        )
+    elif binding == "incumbent":
+        report = replace(report, incumbent=BOT_SPECS_BY_NAME["aggressive-v3"])
+    elif binding == "development_name":
+        report = replace(
+            report,
+            development=replace(
+                report.development,
+                recipe=replace(report.development.recipe, name="changed-development"),
+            ),
+        )
+    else:
+        report = replace(
+            report,
+            development=replace(report.development, digest="0" * 64),
+        )
+
+    with pytest.raises(ValueError, match=message):
+        promotion_report_payload(report)
+
+
+@pytest.mark.parametrize(
+    "tamper",
+    (
+        lambda provenance: replace(
+            provenance,
+            phase_selector_rules=(
+                *provenance.phase_selector_rules[:-1],
+                ("late", "changed-rule"),
+            ),
+        ),
+        lambda provenance: replace(
+            provenance,
+            winner_diagnostics_digests=(
+                *provenance.winner_diagnostics_digests[:-1],
+                ("winner-diagnostics.md", "0" * 64),
+            ),
+        ),
+    ),
+)
+def test_writer_rejects_nested_phase_aware_provenance_tampering_before_output(
+    tmp_path: Path,
+    tamper: Any,
+) -> None:
+    report, summaries, development, held_out = _phase_aware_report_inputs()
+    provenance = report.candidate_provenance
+    assert type(provenance) is FrozenPhaseAwareCandidateProvenance
+
+    with pytest.raises(PromotionCandidateError, match="trusted frozen candidate record"):
+        write_promotion_artifacts(
+            tmp_path,
+            report=replace(report, candidate_provenance=tamper(provenance)),
+            game_summaries=summaries,
+            development=development,
+            held_out=held_out,
+            registry=BOT_SPECS_BY_NAME,
+        )
+
+    assert not tuple(tmp_path.iterdir())
 
 
 def test_writer_does_not_accept_an_alternate_frozen_candidate_catalog() -> None:
@@ -461,10 +754,7 @@ def test_writer_rejects_lying_provenance_string_subclasses(
         resolved.frozen_provenance,
         **{field_name: EvilString(forged_value)},
     )
-    development = load_promotion_corpus(
-        Path("configs/promotion/development-v1.json"),
-        registry=BOT_SPECS_BY_NAME,
-    )
+    development = _development_for_frozen(frozen)
     report, summaries, _, held_out = _report_inputs()
     held_out = replace(
         held_out,
@@ -510,10 +800,7 @@ def test_writer_rejects_a_lying_provenance_subclass(
     )
     assert resolved.frozen_provenance is not None
     forged_provenance = evil_provenance(resolved.frozen_provenance)
-    development = load_promotion_corpus(
-        Path("configs/promotion/development-v1.json"),
-        registry=BOT_SPECS_BY_NAME,
-    )
+    development = _development_for_frozen(frozen)
     report, summaries, _, held_out = _report_inputs()
     held_out = replace(
         held_out,

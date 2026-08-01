@@ -3,6 +3,8 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 
+from garboid_pocketrocks.heuristics.phases import PHASE_SELECTOR_NAME, HeuristicPhase
+
 
 @dataclass(frozen=True, slots=True)
 class HeuristicProfile:
@@ -33,6 +35,41 @@ class HeuristicProfile:
             raise ValueError("objective progress weight must be between zero and one")
         if not 0 <= self.bid_shading <= 1:
             raise ValueError("bid shading must be between zero and one")
+
+
+@dataclass(frozen=True, slots=True)
+class PhaseAwareHeuristicProfile:
+    """Three ordinary heuristic experts selected by the public game phase."""
+
+    name: str
+    early: HeuristicProfile
+    middle: HeuristicProfile
+    late: HeuristicProfile
+    phase_selector: str = PHASE_SELECTOR_NAME
+
+    def __post_init__(self) -> None:
+        if self.name not in ("aggressive", "balanced", "passive"):
+            raise ValueError("phase-aware profile name must be a canonical personality")
+        experts = (self.early, self.middle, self.late)
+        if not all(
+            isinstance(expert, HeuristicProfile) and expert.name == self.name for expert in experts
+        ):
+            raise ValueError(
+                "every phase expert must use the matching canonical personality",
+            )
+        if self.phase_selector != PHASE_SELECTOR_NAME:
+            raise ValueError("phase-aware profile must use the fixed public resource selector")
+
+    def profile_for_phase(self, phase: HeuristicPhase) -> HeuristicProfile:
+        """Return the ordinary heuristic profile assigned to one public phase."""
+
+        if phase == "early":
+            return self.early
+        if phase == "middle":
+            return self.middle
+        if phase == "late":
+            return self.late
+        raise ValueError(f"unknown heuristic phase {phase!r}")
 
 
 @dataclass(frozen=True, slots=True)

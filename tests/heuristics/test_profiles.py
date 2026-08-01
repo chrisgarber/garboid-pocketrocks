@@ -3,6 +3,7 @@ from dataclasses import FrozenInstanceError
 
 import pytest
 
+import garboid_pocketrocks.heuristics.profiles as profiles_module
 from garboid_pocketrocks.heuristics.errors import HeuristicInputError
 from garboid_pocketrocks.heuristics.profiles import (
     AGGRESSIVE_PROFILE,
@@ -145,3 +146,69 @@ def test_profiles_are_frozen_and_coefficients_are_finite() -> None:
     )
     with pytest.raises(FrozenInstanceError):
         AGGRESSIVE_PROFILE.bid_shading = 1.0  # type: ignore[misc]
+
+
+def test_phase_aware_profile_returns_the_expert_for_each_phase() -> None:
+    profile_class = profiles_module.PhaseAwareHeuristicProfile
+    early = HeuristicProfile("balanced", 0.1, 0.2, 0.3, 0.4)
+    middle = HeuristicProfile("balanced", 0.2, 0.3, 0.4, 0.5)
+    late = HeuristicProfile("balanced", 0.3, 0.4, 0.5, 0.6)
+
+    profile = profile_class("balanced", early, middle, late)
+
+    assert profile.profile_for_phase("early") is early
+    assert profile.profile_for_phase("middle") is middle
+    assert profile.profile_for_phase("late") is late
+    assert profile.phase_selector == "public-resource-horizon-v1"
+    with pytest.raises(FrozenInstanceError):
+        profile.early = middle  # type: ignore[misc]
+
+
+@pytest.mark.parametrize("name", ("", "custom", "Balanced"))
+def test_phase_aware_profile_rejects_noncanonical_personality(name: str) -> None:
+    profile_class = profiles_module.PhaseAwareHeuristicProfile
+    expert = HeuristicProfile("balanced", 0.1, 0.2, 0.3, 0.4)
+
+    with pytest.raises(ValueError, match="canonical personality"):
+        profile_class(name, expert, expert, expert)
+
+
+@pytest.mark.parametrize("missing_phase", ("early", "middle", "late"))
+def test_phase_aware_profile_requires_matching_experts_for_every_phase(
+    missing_phase: str,
+) -> None:
+    profile_class = profiles_module.PhaseAwareHeuristicProfile
+    balanced = HeuristicProfile("balanced", 0.1, 0.2, 0.3, 0.4)
+    aggressive = HeuristicProfile("aggressive", 0.1, 0.2, 0.3, 0.4)
+    experts = {
+        "early": balanced,
+        "middle": balanced,
+        "late": balanced,
+    }
+    experts[missing_phase] = aggressive
+
+    with pytest.raises(ValueError, match="matching canonical personality"):
+        profile_class("balanced", experts["early"], experts["middle"], experts["late"])
+
+
+def test_phase_aware_profile_rejects_an_unknown_phase() -> None:
+    profile_class = profiles_module.PhaseAwareHeuristicProfile
+    expert = HeuristicProfile("balanced", 0.1, 0.2, 0.3, 0.4)
+    profile = profile_class("balanced", expert, expert, expert)
+
+    with pytest.raises(ValueError, match="phase"):
+        profile.profile_for_phase("endgame")  # type: ignore[arg-type]
+
+
+def test_phase_aware_profile_rejects_an_alternate_selector() -> None:
+    profile_class = profiles_module.PhaseAwareHeuristicProfile
+    expert = HeuristicProfile("balanced", 0.1, 0.2, 0.3, 0.4)
+
+    with pytest.raises(ValueError, match="selector"):
+        profile_class(
+            "balanced",
+            expert,
+            expert,
+            expert,
+            phase_selector="turn-number-v1",
+        )

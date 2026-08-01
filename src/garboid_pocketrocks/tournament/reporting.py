@@ -198,7 +198,7 @@ def _summary_payload(
         payload["decision_diagnostics"] = {
             "schema_version": decision_report.schema_version,
             "seed_disclosure": "withheld_for_privacy",
-            "reconciliation": asdict(decision_report.reconciliation),
+            "reconciliation": _decision_reconciliation_payload(decision_report),
         }
         payload["artifacts"].update(
             {
@@ -208,6 +208,22 @@ def _summary_payload(
                 "decision_slices_csv": DECISION_SLICES_NAME,
             }
         )
+    return payload
+
+
+def _decision_reconciliation_payload(
+    report: DecisionReport,
+) -> dict[str, int]:
+    reconciliation = report.reconciliation
+    payload = {
+        "game_count": reconciliation.game_count,
+        "game_seat_count": reconciliation.game_seat_count,
+        "trace_decision_count": reconciliation.trace_decision_count,
+        "game_summary_decision_count": reconciliation.game_summary_decision_count,
+        "slice_decision_count": reconciliation.slice_decision_count,
+    }
+    if report.schema_version == 2:
+        payload["selected_expert_decision_count"] = reconciliation.selected_expert_decision_count
     return payload
 
 

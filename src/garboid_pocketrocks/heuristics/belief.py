@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pocketrocks import ActionId, DecisionContext, Suit
 
 from garboid_pocketrocks.heuristics.errors import HeuristicInputError
+from garboid_pocketrocks.heuristics.phases import public_resource_horizon
 from garboid_pocketrocks.knowledge import RulesetKnowledge
 
 _SUIT_COUNT = len(Suit)
@@ -316,16 +317,9 @@ def _account_public_cards(
         if seat != context.bot_seat
     )
     unseen_population = sum(unseen_by_suit)
-    total_biddable = sum(knowledge.resource_counts) - (
-        context.player_count * knowledge.private_cards_per_player
-    )
-    if total_biddable <= 0:
-        raise HeuristicInputError("ruleset setup must leave a biddable resource")
-    won_count = sum(won_by_suit)
-    offered_count = sum(offered_by_suit)
-    future_biddable = total_biddable - won_count - offered_count
-    if future_biddable < 0:
-        raise HeuristicInputError("known won and offered cards exceed biddable resources")
+    horizon = public_resource_horizon(context, knowledge)
+    total_biddable = horizon.total_biddable_resources
+    future_biddable = horizon.future_biddable_resources
     if unseen_population < opponent_hidden_slots:
         raise HeuristicInputError("opponent hidden slots exceed the unseen population")
     unknown_future_biddable = unseen_population - opponent_hidden_slots

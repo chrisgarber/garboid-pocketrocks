@@ -1,0 +1,70 @@
+{
+  "schema_version": 2,
+  "name": "passive-v4-search-v2",
+  "personality": "passive",
+  "predecessor_name": "passive-v3",
+  "development_corpus": {
+    "name": "development-passive-v3-broad-v1",
+    "digest": "64124822038895aa4048469244c99177c877271368cc246d2250b737a14bf658"
+  },
+  "search_seed": 12003,
+  "algorithm": {
+    "name": "mu-plus-lambda-v1",
+    "generation_count": 12,
+    "population_size": 16,
+    "elite_count": 4,
+    "mutation_radius_steps": 4
+  },
+  "phase_selector": {
+    "kind": "public-resource-horizon-v1",
+    "early": "3*future>=2*total",
+    "middle": "3*future>=total",
+    "late": "otherwise"
+  },
+  "boundary_evidence": {
+    "report_path": "docs/benchmarks/2026-07-30-heuristic-v4-phase-boundaries.md",
+    "report_digest": "9961f26f32270dcebc98df443588e96cbde2f953858cd131c66a37aeecaa9b01",
+    "slices_path": "docs/benchmarks/tournaments/2026-07-30-heuristic-v3-phase-boundaries-development/phase-boundary-slices.csv",
+    "slices_digest": "4f8aa60edf31b28c746cb8004a4dd5468ee8ab1b26462550c914b2e3fa50d7ae"
+  },
+  "initial_experts": {
+    "early": {
+      "liquidity_strength": "0.25",
+      "future_cash_weight": "2.00",
+      "objective_progress_weight": "0.10",
+      "bid_shading": "0.50"
+    },
+    "middle": {
+      "liquidity_strength": "0.25",
+      "future_cash_weight": "2.00",
+      "objective_progress_weight": "0.10",
+      "bid_shading": "0.50"
+    },
+    "late": {
+      "liquidity_strength": "0.25",
+      "future_cash_weight": "2.00",
+      "objective_progress_weight": "0.10",
+      "bid_shading": "0.50"
+    }
+  },
+  "expert_coefficient_grids": {
+    "early": {
+      "liquidity_strength": {"minimum": "0.00", "maximum": "1.50", "step": "0.05"},
+      "future_cash_weight": {"minimum": "0.00", "maximum": "2.00", "step": "0.05"},
+      "objective_progress_weight": {"minimum": "0.00", "maximum": "1.00", "step": "0.05"},
+      "bid_shading": {"minimum": "0.00", "maximum": "1.00", "step": "0.05"}
+    },
+    "middle": {
+      "liquidity_strength": {"minimum": "0.00", "maximum": "1.50", "step": "0.05"},
+      "future_cash_weight": {"minimum": "0.00", "maximum": "2.00", "step": "0.05"},
+      "objective_progress_weight": {"minimum": "0.00", "maximum": "1.00", "step": "0.05"},
+      "bid_shading": {"minimum": "0.00", "maximum": "1.00", "step": "0.05"}
+    },
+    "late": {
+      "liquidity_strength": {"minimum": "0.00", "maximum": "1.50", "step": "0.05"},
+      "future_cash_weight": {"minimum": "0.00", "maximum": "2.00", "step": "0.05"},
+      "objective_progress_weight": {"minimum": "0.00", "maximum": "1.00", "step": "0.05"},
+      "bid_shading": {"minimum": "0.00", "maximum": "1.00", "step": "0.05"}
+    }
+  }
+}

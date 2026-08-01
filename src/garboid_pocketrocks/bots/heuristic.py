@@ -9,13 +9,21 @@ from garboid_pocketrocks.bots.base import BotSpec, PocketRocksFastBot
 from garboid_pocketrocks.diagnostics.trace import (
     ExplainedBotDecision,
     HeuristicBidExplanation,
+    PhaseAwareHeuristicBidExplanation,
 )
 from garboid_pocketrocks.heuristics.errors import HeuristicInputError
+from garboid_pocketrocks.heuristics.phases import (
+    HeuristicPhase,
+    PublicResourceHorizon,
+    public_resource_horizon,
+    select_expert_phase,
+)
 from garboid_pocketrocks.heuristics.profiles import (
     HEURISTIC_V1,
     HEURISTIC_V2,
     HEURISTIC_V3,
     HeuristicProfile,
+    PhaseAwareHeuristicProfile,
 )
 from garboid_pocketrocks.heuristics.valuation import BidEvaluation, HeuristicValuator
 from garboid_pocketrocks.knowledge import RulesetKnowledge
@@ -25,6 +33,14 @@ from garboid_pocketrocks.knowledge import RulesetKnowledge
 class _HeuristicChoice:
     decision: BotDecision
     bid_evaluation: BidEvaluation | None
+
+
+@dataclass(frozen=True, slots=True)
+class _PhaseAwareHeuristicChoice:
+    decision: BotDecision
+    bid_evaluation: BidEvaluation | None
+    selected_expert_phase: HeuristicPhase | None
+    resource_horizon: PublicResourceHorizon | None
 
 
 class HeuristicBotBrain:
@@ -93,6 +109,93 @@ class HeuristicBotBrain:
             )
         except HeuristicInputError:
             return _HeuristicChoice(BotDecision.pass_turn(), None)
+
+
+class PhaseAwareHeuristicBotBrain:
+    """Choose one ordinary heuristic expert from the public resource horizon."""
+
+    def __init__(self, profile: PhaseAwareHeuristicProfile) -> None:
+        self.profile = profile
+        self.valuators_by_phase: dict[HeuristicPhase, HeuristicValuator] = {
+            phase: HeuristicValuator(profile.profile_for_phase(phase))
+            for phase in ("early", "middle", "late")
+        }
+
+    def choose_decision(
+        self,
+        context: DecisionContext,
+        ruleset: RulesetKnowledge,
+    ) -> BotDecision:
+        return self._choose_raw(context, ruleset).decision
+
+    def choose_explained_decision(
+        self,
+        context: DecisionContext,
+        ruleset: RulesetKnowledge,
+        history: PublicHistory,
+    ) -> ExplainedBotDecision:
+        """Choose once and retain both the selected phase and bid valuation."""
+
+        del history
+        choice = self._choose_raw(context, ruleset)
+        evaluation = choice.bid_evaluation
+        phase = choice.selected_expert_phase
+        horizon = choice.resource_horizon
+        if evaluation is None or phase is None or horizon is None:
+            return ExplainedBotDecision(decision=choice.decision)
+        bid = evaluation.chosen_bid
+        point = evaluation.points[bid]
+        return ExplainedBotDecision(
+            decision=choice.decision,
+            explanation=PhaseAwareHeuristicBidExplanation(
+                resource_value=point.breakdown.resource,
+                objective_completion_value=point.breakdown.objective_completion,
+                objective_progress_value=point.breakdown.objective_progress,
+                terminal_cash_value=point.breakdown.terminal_cash,
+                liquidity_value=point.breakdown.liquidity,
+                future_cash_value=point.breakdown.future_cash,
+                total_value=point.breakdown.total,
+                reservation_bid=evaluation.reservation_bid,
+                chosen_bid=bid,
+                selected_expert_phase=phase,
+                future_biddable_resources=horizon.future_biddable_resources,
+                total_biddable_resources=horizon.total_biddable_resources,
+            ),
+        )
+
+    def _choose_raw(
+        self,
+        context: DecisionContext,
+        ruleset: RulesetKnowledge,
+    ) -> _PhaseAwareHeuristicChoice:
+        """Select at most one expert and evaluate its policy exactly once."""
+
+        try:
+            if context.decision_kind == "selectInfoToReveal":
+                reveal = self.valuators_by_phase["early"].choose_reveal(context, ruleset)
+                return _PhaseAwareHeuristicChoice(
+                    BotDecision.select_info_to_reveal(reveal),
+                    None,
+                    None,
+                    None,
+                )
+            horizon = public_resource_horizon(context, ruleset)
+            phase = select_expert_phase(horizon)
+            evaluation = self.valuators_by_phase[phase].evaluate_bid(context, ruleset)
+            bid = evaluation.chosen_bid
+            return _PhaseAwareHeuristicChoice(
+                BotDecision.pass_turn() if bid == 0 else BotDecision.submit_bid(bid),
+                evaluation,
+                phase,
+                horizon,
+            )
+        except HeuristicInputError:
+            return _PhaseAwareHeuristicChoice(
+                BotDecision.pass_turn(),
+                None,
+                None,
+                None,
+            )
 
 
 class AggressiveHeuristicV1Brain(HeuristicBotBrain):

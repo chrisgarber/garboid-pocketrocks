@@ -20,6 +20,7 @@ from garboid_pocketrocks.simulator.session import SessionScore
 
 @dataclass(frozen=True, slots=True)
 class FrozenCandidateFixture:
+    identity: str
     bot_spec: BotSpec
     predecessor_name: str
     development_corpus_name: str
@@ -95,7 +96,9 @@ def frozen_candidate_fixture(
     predecessor_name: str,
     development: PromotionCorpus,
 ) -> FrozenCandidateFixture:
+    identity = bot_spec.name
     return FrozenCandidateFixture(
+        identity=identity,
         bot_spec=bot_spec,
         predecessor_name=predecessor_name,
         development_corpus_name=development.recipe.name,
