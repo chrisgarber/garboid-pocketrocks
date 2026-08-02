@@ -14,6 +14,7 @@ from garboid_pocketrocks.bots.base import BotBrain, BotSpec
 from garboid_pocketrocks.diagnostics.trace import (
     DecisionExplanation,
     ExplainedBotDecision,
+    FixedObjectiveOverlayV3BidExplanation,
     HeuristicBidExplanation,
     NeuralPolicyExplanation,
     RecordedAction,
@@ -194,7 +195,10 @@ def _validate_explanation_agrees_with_decision(
         ):
             raise ValueError("neural selected probability must match the selected legal action")
         return
-    if not isinstance(explanation, HeuristicBidExplanation):
+    if not isinstance(
+        explanation,
+        (HeuristicBidExplanation, FixedObjectiveOverlayV3BidExplanation),
+    ):
         return
     selected_bid = 0 if recorded.action_kind == "pass" else recorded.value
     if recorded.action_kind not in ("pass", "submitBid") or selected_bid != explanation.chosen_bid:

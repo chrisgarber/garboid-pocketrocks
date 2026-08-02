@@ -16,6 +16,7 @@ from garboid_pocketrocks.bots.fixed_objective_overlay import (
     FixedObjectiveOverlayBrain,
     FixedObjectiveOverlayV1Brain,
     FixedObjectiveOverlayV2Brain,
+    FixedObjectiveOverlayV3Brain,
 )
 from garboid_pocketrocks.bots.heuristic import (
     AggressiveHeuristicBot,
@@ -63,6 +64,7 @@ __all__ = [
     "FixedObjectiveOverlayBrain",
     "FixedObjectiveOverlayV1Brain",
     "FixedObjectiveOverlayV2Brain",
+    "FixedObjectiveOverlayV3Brain",
     "AggressiveHeuristicBot",
     "AggressiveHeuristicBrain",
     "AggressiveHeuristicV1Brain",

@@ -8,6 +8,7 @@ import math
 import os
 import statistics
 import tempfile
+from collections import Counter
 from collections.abc import Collection, Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -20,6 +21,7 @@ from garboid_pocketrocks.diagnostics.reporting import (
     GAME_SUMMARIES_NAME,
     render_decision_artifacts,
 )
+from garboid_pocketrocks.diagnostics.trace import FixedObjectiveOverlayV3BidExplanation
 from garboid_pocketrocks.tournament.analysis import (
     BootstrapSummary,
     TournamentAnalysis,
@@ -200,6 +202,9 @@ def _summary_payload(
             "seed_disclosure": "withheld_for_privacy",
             "reconciliation": asdict(decision_report.reconciliation),
         }
+        v3_rules = _fixed_objective_overlay_v3_rule_diagnostics(decision_report)
+        if v3_rules is not None:
+            payload["decision_diagnostics"]["fixed_objective_overlay_v3_rules"] = v3_rules
         payload["artifacts"].update(
             {
                 "game_summaries_jsonl": GAME_SUMMARIES_NAME,
@@ -353,10 +358,23 @@ players {", ".join(map(str, config.player_counts))} · {seed_text}</p>
 
 def _decision_diagnostics_html(report: DecisionReport) -> str:
     reconciliation = report.reconciliation
+    v3_rules = _fixed_objective_overlay_v3_rule_diagnostics(report)
+    v3_html = ""
+    if v3_rules is not None:
+        rule_counts = v3_rules["rule_counts"]
+        assert isinstance(rule_counts, dict)
+        v3_html = (
+            "<h3>fixed-objective-overlay-v3 rules</h3>"
+            f"<p>The exact guarantee cap applied {rule_counts['guaranteed_win']:,} times "
+            f"across {v3_rules['resource_auction_decisions']:,} resource auctions. "
+            f"The selected bid changed {v3_rules['adjusted_bid_decisions']:,} times, "
+            f"reducing submitted bids by {v3_rules['total_bid_reduction']:,} units.</p>"
+        )
     return (
         "<h2>Decision diagnostics</h2>"
         f"<p>Validated {reconciliation.trace_decision_count:,} decisions across "
         f"{reconciliation.game_count:,} games.</p>"
+        f"{v3_html}"
         "<ul>"
         f'<li><a href="{GAME_SUMMARIES_NAME}">Game summaries</a></li>'
         f'<li><a href="{GAME_DETAILS_NAME}">Game details</a></li>'
@@ -364,6 +382,41 @@ def _decision_diagnostics_html(report: DecisionReport) -> str:
         f'<li><a href="{DECISION_SLICES_NAME}">Decision slices</a></li>'
         "</ul>"
     )
+
+
+def _fixed_objective_overlay_v3_rule_diagnostics(
+    report: DecisionReport,
+) -> dict[str, Any] | None:
+    explanations = tuple(
+        explanation
+        for trace in report.decision_traces
+        if isinstance(
+            (explanation := trace.explanation),
+            FixedObjectiveOverlayV3BidExplanation,
+        )
+    )
+    if not explanations:
+        return None
+    counts = Counter(explanation.rule for explanation in explanations)
+    eligible = counts["baseline"] + counts["guaranteed_win"]
+    applied = counts["guaranteed_win"]
+    adjusted = sum(
+        explanation.chosen_bid != explanation.planned_bid for explanation in explanations
+    )
+    reduction = sum(
+        explanation.planned_bid - explanation.chosen_bid for explanation in explanations
+    )
+    return {
+        "bid_decisions": len(explanations),
+        "resource_auction_decisions": eligible,
+        "rule_counts": {
+            rule: counts[rule] for rule in ("not_applicable", "baseline", "guaranteed_win")
+        },
+        "rule_application_rate": applied / eligible if eligible else 0.0,
+        "adjusted_bid_decisions": adjusted,
+        "adjusted_bid_rate": adjusted / eligible if eligible else 0.0,
+        "total_bid_reduction": reduction,
+    }
 
 
 def _rating_svg(

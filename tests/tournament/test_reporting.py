@@ -13,6 +13,10 @@ import pytest
 from diagnostics.test_analysis import _build as build_decision_report_fixture
 from diagnostics.test_analysis import _game as decision_game_fixture
 from diagnostics.test_analysis import _trace as decision_trace_fixture
+from garboid_pocketrocks.diagnostics.trace import (
+    FixedObjectiveOverlayV3BidExplanation,
+    RecordedAction,
+)
 from garboid_pocketrocks.simulator.monte_carlo import MonteCarloResult
 from garboid_pocketrocks.tournament.analysis import (
     BootstrapSummary,
@@ -183,6 +187,73 @@ def test_decision_report_adds_sanitized_artifacts_summary_and_html_links(tmp_pat
     assert '<a href="game-details.jsonl">Game details</a>' in html
     assert '<a href="decision-traces.jsonl">Decision traces</a>' in html
     assert '<a href="decision-slices.csv">Decision slices</a>' in html
+
+
+def test_decision_report_summarizes_v3_rule_applications(tmp_path: Path) -> None:
+    config, plan, fit, analysis, bootstrap = _report_inputs()
+    game = decision_game_fixture(decision_counts=(3, 0, 0))
+    traces = (
+        replace(
+            decision_trace_fixture(game, seat=0, step_index=0),
+            explanation=FixedObjectiveOverlayV3BidExplanation(
+                rule="not_applicable",
+                planned_bid=3,
+                chosen_bid=3,
+            ),
+        ),
+        replace(
+            decision_trace_fixture(game, seat=0, step_index=1),
+            explanation=FixedObjectiveOverlayV3BidExplanation(
+                rule="baseline",
+                planned_bid=3,
+                chosen_bid=3,
+            ),
+        ),
+        replace(
+            decision_trace_fixture(
+                game,
+                seat=0,
+                step_index=2,
+                selected_action=RecordedAction("submitBid", 2),
+            ),
+            explanation=FixedObjectiveOverlayV3BidExplanation(
+                rule="guaranteed_win",
+                planned_bid=3,
+                chosen_bid=2,
+            ),
+        ),
+    )
+    decision_report = build_decision_report_fixture(traces, (game,))
+
+    artifacts = write_tournament_artifacts(
+        output_dir=tmp_path,
+        overwrite=False,
+        config=config,
+        plan=plan,
+        fit=fit,
+        analysis=analysis,
+        bootstrap=bootstrap,
+        decision_report=decision_report,
+    )
+
+    payload = json.loads(artifacts.summary_json.read_text(encoding="utf-8"))
+    assert payload["decision_diagnostics"]["fixed_objective_overlay_v3_rules"] == {
+        "bid_decisions": 3,
+        "resource_auction_decisions": 2,
+        "rule_counts": {
+            "not_applicable": 1,
+            "baseline": 1,
+            "guaranteed_win": 1,
+        },
+        "rule_application_rate": pytest.approx(1 / 2),
+        "adjusted_bid_decisions": 1,
+        "adjusted_bid_rate": pytest.approx(1 / 2),
+        "total_bid_reduction": 1,
+    }
+    html = artifacts.report_html.read_text(encoding="utf-8")
+    assert "exact guarantee cap applied 1 times" in html
+    assert "across 2 resource auctions" in html
+    assert "reducing submitted bids by 1 units" in html
 
 
 def test_csv_follows_rating_order_and_round_trips_values(tmp_path: Path) -> None:

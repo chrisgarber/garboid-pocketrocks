@@ -21,6 +21,11 @@ from garboid_pocketrocks.adapters.public_history import (
 
 type RecordedActionKind = Literal["pass", "submitBid", "selectInfoToReveal"]
 type SelectionSource = Literal["policy", "fault_fallback"]
+type FixedObjectiveOverlayV3Rule = Literal[
+    "not_applicable",
+    "baseline",
+    "guaranteed_win",
+]
 
 _PUBLIC_CONTEXT_FIELDS = frozenset(
     {
@@ -215,6 +220,18 @@ class HeuristicBidExplanation:
 
 
 @dataclass(frozen=True, slots=True)
+class FixedObjectiveOverlayV3BidExplanation:
+    """Public audit record for one v3 bid and the rule that priced it."""
+
+    rule: FixedObjectiveOverlayV3Rule
+    planned_bid: int
+    chosen_bid: int
+
+    def __post_init__(self) -> None:
+        _validate_explanation(self)
+
+
+@dataclass(frozen=True, slots=True)
 class NeuralPolicyExplanation:
     """Closed explanation for one masked neural-policy selection."""
 
@@ -227,7 +244,9 @@ class NeuralPolicyExplanation:
         _validate_explanation(self)
 
 
-type DecisionExplanation = HeuristicBidExplanation | NeuralPolicyExplanation
+type DecisionExplanation = (
+    HeuristicBidExplanation | FixedObjectiveOverlayV3BidExplanation | NeuralPolicyExplanation
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -336,7 +355,10 @@ def _validate_pending(trace: PendingDecisionTrace | DecisionTrace) -> None:
         raise ValueError("fault fallback cannot have a policy explanation")
     if trace.explanation is not None:
         _validate_explanation(trace.explanation)
-        if isinstance(trace.explanation, HeuristicBidExplanation):
+        if isinstance(
+            trace.explanation,
+            (HeuristicBidExplanation, FixedObjectiveOverlayV3BidExplanation),
+        ):
             selected_bid = (
                 0 if trace.selected_action.action_kind == "pass" else trace.selected_action.value
             )
@@ -373,6 +395,27 @@ def _validate_pending(trace: PendingDecisionTrace | DecisionTrace) -> None:
 
 
 def _validate_explanation(explanation: DecisionExplanation) -> None:
+    if isinstance(explanation, FixedObjectiveOverlayV3BidExplanation):
+        if explanation.rule not in (
+            "not_applicable",
+            "baseline",
+            "guaranteed_win",
+        ):
+            raise ValueError("fixed-objective-overlay-v3 rule is unknown")
+        if (
+            not isinstance(explanation.planned_bid, int)
+            or isinstance(explanation.planned_bid, bool)
+            or explanation.planned_bid < 0
+            or not isinstance(explanation.chosen_bid, int)
+            or isinstance(explanation.chosen_bid, bool)
+            or not 0 <= explanation.chosen_bid <= explanation.planned_bid
+        ):
+            raise ValueError("fixed-objective-overlay-v3 explanation bids are invalid")
+        if explanation.rule in ("not_applicable", "baseline") and (
+            explanation.chosen_bid != explanation.planned_bid
+        ):
+            raise ValueError("an inactive v3 rule cannot change the planned bid")
+        return
     if isinstance(explanation, HeuristicBidExplanation):
         heuristic_values = (
             explanation.resource_value,
@@ -429,7 +472,9 @@ def decision_trace_payload(trace: DecisionTrace) -> dict[str, object]:
     """Encode a complete trace without recursively inspecting foreign objects."""
 
     return {
-        "schema_version": 1,
+        "schema_version": (
+            2 if isinstance(trace.explanation, FixedObjectiveOverlayV3BidExplanation) else 1
+        ),
         "game_index": trace.game_index,
         "chart": trace.chart,
         "step_index": trace.step_index,
@@ -453,7 +498,8 @@ def decision_trace_from_payload(payload: Mapping[str, object]) -> DecisionTrace:
     """Strictly decode a trace, rejecting every unrecognized schema field."""
 
     _require_exact_fields(payload, _TRACE_FIELDS, "decision trace")
-    if _integer(payload["schema_version"], "schema_version") != 1:
+    schema_version = _integer(payload["schema_version"], "schema_version")
+    if schema_version not in (1, 2):
         raise ValueError("unsupported decision trace schema version")
     context = _public_context_from_payload(_mapping(payload["context"], "context"))
     return DecisionTrace(
@@ -478,7 +524,10 @@ def decision_trace_from_payload(payload: Mapping[str, object]) -> DecisionTrace:
         selected_action=_action_from_payload(
             _mapping(payload["selected_action"], "selected_action")
         ),
-        explanation=_explanation_from_payload(payload["explanation"]),
+        explanation=_explanation_from_payload(
+            payload["explanation"],
+            schema_version=schema_version,
+        ),
         selection_source=_selection_source(payload["selection_source"]),
         outcome=_outcome_from_payload(_mapping(payload["outcome"], "outcome")),
     )
@@ -629,6 +678,13 @@ def _public_event_from_payload(payload: Mapping[str, object]) -> PublicEvent:
 def _explanation_payload(explanation: DecisionExplanation | None) -> dict[str, object] | None:
     if explanation is None:
         return None
+    if isinstance(explanation, FixedObjectiveOverlayV3BidExplanation):
+        return {
+            "kind": "fixed_objective_overlay_v3_bid",
+            "rule": explanation.rule,
+            "planned_bid": explanation.planned_bid,
+            "chosen_bid": explanation.chosen_bid,
+        }
     if isinstance(explanation, HeuristicBidExplanation):
         return {
             "kind": "heuristic_bid",
@@ -651,12 +707,35 @@ def _explanation_payload(explanation: DecisionExplanation | None) -> dict[str, o
     }
 
 
-def _explanation_from_payload(payload: object) -> DecisionExplanation | None:
+def _explanation_from_payload(
+    payload: object,
+    *,
+    schema_version: int,
+) -> DecisionExplanation | None:
     if payload is None:
+        if schema_version == 2:
+            raise ValueError("decision trace schema v2 requires a v3 rule explanation")
         return None
     explanation = _mapping(payload, "explanation")
     kind = explanation.get("kind")
+    if kind == "fixed_objective_overlay_v3_bid":
+        if schema_version != 2:
+            raise ValueError("fixed-objective-overlay-v3 explanation requires schema v2")
+        fields = frozenset({"kind", "rule", "planned_bid", "chosen_bid"})
+        _require_exact_fields(explanation, fields, "fixed-objective-overlay-v3 explanation")
+        rule = explanation["rule"]
+        if rule not in ("not_applicable", "baseline", "guaranteed_win"):
+            raise ValueError("fixed-objective-overlay-v3 explanation rule is unknown")
+        v3_explanation = FixedObjectiveOverlayV3BidExplanation(
+            rule=rule,
+            planned_bid=_integer(explanation["planned_bid"], "planned_bid"),
+            chosen_bid=_integer(explanation["chosen_bid"], "chosen_bid"),
+        )
+        _validate_explanation(v3_explanation)
+        return v3_explanation
     if kind == "heuristic_bid":
+        if schema_version != 1:
+            raise ValueError("heuristic explanation requires decision trace schema v1")
         fields = frozenset(
             {
                 "kind",
@@ -698,6 +777,8 @@ def _explanation_from_payload(payload: object) -> DecisionExplanation | None:
         _validate_explanation(heuristic_explanation)
         return heuristic_explanation
     if kind == "neural_policy":
+        if schema_version != 1:
+            raise ValueError("neural explanation requires decision trace schema v1")
         fields = frozenset(
             {
                 "kind",

@@ -15,6 +15,7 @@ from garboid_pocketrocks.adapters.public_history import (
 )
 from garboid_pocketrocks.diagnostics.trace import (
     DecisionTrace,
+    FixedObjectiveOverlayV3BidExplanation,
     HeuristicBidExplanation,
     NeuralPolicyExplanation,
     PendingDecisionTrace,
@@ -90,7 +91,12 @@ def _history() -> PublicHistory:
 def _pending(
     *,
     selected_action: RecordedAction | None = None,
-    explanation: HeuristicBidExplanation | NeuralPolicyExplanation | None = None,
+    explanation: (
+        HeuristicBidExplanation
+        | FixedObjectiveOverlayV3BidExplanation
+        | NeuralPolicyExplanation
+        | None
+    ) = None,
 ) -> PendingDecisionTrace:
     return PendingDecisionTrace(
         game_index=2,
@@ -340,6 +346,42 @@ def test_typed_explanations_round_trip_without_arbitrary_metadata() -> None:
     explanation_payload["belief_state"] = {"opponent_hidden_slots": 4}
     with pytest.raises(ValueError, match="unknown heuristic explanation fields"):
         decision_trace_from_payload({**payload, "explanation": explanation_payload})
+
+
+def test_v3_rule_explanation_round_trips_and_requires_the_selected_bid() -> None:
+    explanation = FixedObjectiveOverlayV3BidExplanation(
+        rule="guaranteed_win",
+        planned_bid=5,
+        chosen_bid=3,
+    )
+    trace = DecisionTrace.from_pending(_pending(explanation=explanation), _outcome())
+    payload = decision_trace_payload(trace)
+
+    assert decision_trace_from_payload(payload).explanation == explanation
+    assert payload["schema_version"] == 2
+    assert payload["explanation"] == {
+        "kind": "fixed_objective_overlay_v3_bid",
+        "rule": "guaranteed_win",
+        "planned_bid": 5,
+        "chosen_bid": 3,
+    }
+    with pytest.raises(ValueError, match="agree with selected action"):
+        _pending(
+            explanation=FixedObjectiveOverlayV3BidExplanation(
+                rule="guaranteed_win",
+                planned_bid=5,
+                chosen_bid=2,
+            )
+        )
+
+
+def test_v3_inactive_rule_cannot_change_the_bid() -> None:
+    with pytest.raises(ValueError, match="inactive"):
+        FixedObjectiveOverlayV3BidExplanation(
+            rule="baseline",
+            planned_bid=5,
+            chosen_bid=4,
+        )
 
 
 def test_neural_explanation_probabilities_round_trip_in_canonical_action_order() -> None:
