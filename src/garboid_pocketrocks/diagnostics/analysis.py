@@ -7,12 +7,15 @@ import statistics
 from collections import Counter, defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Literal
 
 from pocketrocks.sim.constants import ACTION_WIRE_IDS
 
 from garboid_pocketrocks.diagnostics.game_detail import PublicGameDetail
 from garboid_pocketrocks.diagnostics.trace import DecisionTrace
+from garboid_pocketrocks.heuristics.game_phase import (
+    GamePhase,
+    game_phase_for_turn_index,
+)
 from garboid_pocketrocks.knowledge import (
     canonical_knowledge,
     ruleset_name,
@@ -28,8 +31,6 @@ from garboid_pocketrocks.tournament.analysis import (
     TournamentAnalysis,
     TournamentBotRow,
 )
-
-type GamePhase = Literal["early", "middle", "late"]
 
 _ACTION_NAME_BY_ID = {wire_id: name for name, wire_id in ACTION_WIRE_IDS.items()}
 
@@ -392,14 +393,10 @@ def _slice_key(trace: DecisionTrace) -> _SliceKey:
 
 
 def _game_phase(turn_index: int) -> GamePhase:
-    if turn_index < 0:
-        raise DecisionAnalysisError("decision trace turn index must be nonnegative")
-    one_based_turn = turn_index + 1
-    if one_based_turn <= 5:
-        return "early"
-    if one_based_turn <= 12:
-        return "middle"
-    return "late"
+    try:
+        return game_phase_for_turn_index(turn_index)
+    except ValueError as error:
+        raise DecisionAnalysisError("decision trace turn index must be nonnegative") from error
 
 
 def _cash_horizon(trace: DecisionTrace) -> tuple[int, int]:

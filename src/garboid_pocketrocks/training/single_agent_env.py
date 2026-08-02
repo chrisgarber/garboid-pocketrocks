@@ -217,12 +217,14 @@ class PocketRocksEnv(gym.Env[dict[str, Any], int]):
         assert self.session is not None
         while not self.session.terminated:
             decisions = dict(learner_decisions)
+            history = self.public_history
             for seat, context in self.session.pending.contexts:
                 if seat == self.learner_seat:
                     continue
                 decisions[seat] = self._brains[seat].choose_decision(
                     context,
                     self._knowledge_for_game(),
+                    history,
                 )
             self.transition = self.session.step(decisions)
             accumulated = _add_breakdowns(

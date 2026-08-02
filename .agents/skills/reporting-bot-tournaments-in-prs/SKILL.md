@@ -44,7 +44,8 @@ with its predecessor, including uncertainty or faults that affect the conclusion
 | `<predecessor>` | `<rank>/<field>` | `<rating> (<lower>–<upper>)` | `<games>` | `<rate>` | `<money>` | `<count>` |
 
 - Configuration: `<total games>` games; root seed `<seed>`; players `<counts>`; charts `<charts>`.
-- Evidence: [`<benchmark note>`](<repository-relative-link>) and [`summary.json`](<repository-relative-link>).
+- Evidence: [`<benchmark note>`](https://github.com/OWNER/REPO/blob/COMMIT/path/to/benchmark.md)
+  and [`summary.json`](https://github.com/OWNER/REPO/blob/COMMIT/path/to/summary.json).
 - Reproduce: `<exact command>`
 ```
 

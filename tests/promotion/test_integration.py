@@ -6,6 +6,7 @@ from pathlib import Path
 
 from pocketrocks import BotDecision, DecisionContext
 
+from garboid_pocketrocks.adapters.public_history import PublicHistory
 from garboid_pocketrocks.bots import BOT_SPECS_BY_NAME, BotSpec
 from garboid_pocketrocks.knowledge import RulesetKnowledge
 from garboid_pocketrocks.promotion.corpus import (
@@ -34,8 +35,9 @@ class _IllegalBidBrain:
         self,
         context: DecisionContext,
         ruleset: RulesetKnowledge,
+        history: PublicHistory,
     ) -> BotDecision:
-        del ruleset
+        del ruleset, history
         if context.decision_kind == "selectInfoToReveal":
             return BotDecision.select_info_to_reveal(context.revealable_count)
         assert context.legal_max_amount is not None

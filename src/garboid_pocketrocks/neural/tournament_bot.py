@@ -90,14 +90,6 @@ class _FrozenNeuralBrain:
         self,
         context: DecisionContext,
         ruleset: RulesetKnowledge,
-    ) -> BotDecision:
-        del context, ruleset
-        raise RuntimeError("frozen neural policy requires public history")
-
-    def choose_decision_with_history(
-        self,
-        context: DecisionContext,
-        ruleset: RulesetKnowledge,
         history: PublicHistory,
     ) -> BotDecision:
         return self._choose_raw(context, ruleset, history).decision

@@ -37,7 +37,9 @@ class HeuristicBotBrain:
         self,
         context: DecisionContext,
         ruleset: RulesetKnowledge,
+        history: PublicHistory = (),
     ) -> BotDecision:
+        del history
         return self._choose_raw(context, ruleset).decision
 
     def choose_explained_decision(

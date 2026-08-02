@@ -539,7 +539,7 @@ The concrete assertions are:
 - scalar and batch replay files written by `save_replay` have equal bytes;
 - singleton versus multi-row batching returns identical row results in input
   order;
-- history-aware brains receive the same setup/turn/resolution/reveal history;
+- all brains receive the same setup/turn/resolution/reveal history;
 - construction and runtime faults match under `RECORD_AND_PASS`;
 - original exception type/message propagates under `RAISE`;
 - decision steps are contiguous, bids use seat order, choice reveals contain

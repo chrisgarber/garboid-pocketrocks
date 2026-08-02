@@ -247,7 +247,11 @@ def test_profile_brain_factories_are_deterministic_and_fresh(
 
     assert isinstance(first, brain_class)
     assert first is not second
-    assert first.choose_decision(context, knowledge) == second.choose_decision(context, knowledge)
+    assert first.choose_decision(context, knowledge, ()) == second.choose_decision(
+        context,
+        knowledge,
+        (),
+    )
 
 
 @pytest.mark.parametrize(

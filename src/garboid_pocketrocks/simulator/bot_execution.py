@@ -10,7 +10,7 @@ from typing import Protocol, runtime_checkable
 from pocketrocks import BotDecision, DecisionContext
 
 from garboid_pocketrocks.adapters.public_history import PublicHistory
-from garboid_pocketrocks.bots.base import BotBrain, BotSpec, HistoryAwareBotBrain
+from garboid_pocketrocks.bots.base import BotBrain, BotSpec
 from garboid_pocketrocks.diagnostics.trace import (
     DecisionExplanation,
     ExplainedBotDecision,
@@ -149,15 +149,8 @@ def execute_brain_decision(
                 decision,
                 explanation,
             )
-        elif isinstance(brain, HistoryAwareBotBrain):
-            decision = brain.choose_decision_with_history(
-                context,
-                knowledge,
-                history,
-            )
-            explanation = None
         else:
-            decision = brain.choose_decision(context, knowledge)
+            decision = brain.choose_decision(context, knowledge, history)
             explanation = None
         context.validate(decision)
         return DecisionExecution(

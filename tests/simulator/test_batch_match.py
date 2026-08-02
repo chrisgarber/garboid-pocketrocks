@@ -116,14 +116,6 @@ class _HistoryRecordingBrain:
         self,
         context: DecisionContext,
         ruleset: RulesetKnowledge,
-    ) -> BotDecision:
-        del context, ruleset
-        raise AssertionError("history-aware brain used the history-free entry point")
-
-    def choose_decision_with_history(
-        self,
-        context: DecisionContext,
-        ruleset: RulesetKnowledge,
         history: PublicHistory,
     ) -> BotDecision:
         del ruleset
@@ -146,8 +138,9 @@ class _AlwaysPassBrain:
         self,
         context: DecisionContext,
         ruleset: RulesetKnowledge,
+        history: PublicHistory,
     ) -> BotDecision:
-        del ruleset
+        del ruleset, history
         if context.decision_kind == "selectInfoToReveal":
             return BotDecision.select_info_to_reveal(0)
         return BotDecision.submit_bid(0)
@@ -199,8 +192,9 @@ class _RaisingBrain:
         self,
         context: DecisionContext,
         ruleset: RulesetKnowledge,
+        history: PublicHistory,
     ) -> BotDecision:
-        del context, ruleset
+        del context, ruleset, history
         raise RuntimeError("brain exploded")
 
 
