@@ -15,6 +15,7 @@ from garboid_pocketrocks.bots.fixed_bid import (
     ProfiledFixedBidBotBrain,
 )
 from garboid_pocketrocks.diagnostics.trace import (
+    BotResultMetric,
     ExplainedBotDecision,
     FixedObjectiveOverlayV3BidExplanation,
     FixedObjectiveOverlayV3Rule,
@@ -280,6 +281,11 @@ class FixedObjectiveOverlayV3Brain(FixedObjectiveOverlayV2Brain):
                 planned_bid=choice.planned_bid,
                 chosen_bid=chosen_bid,
             ),
+            result_metrics=_v3_result_metrics(
+                rule=choice.rule,
+                planned_bid=choice.planned_bid,
+                chosen_bid=chosen_bid,
+            ),
         )
 
     def _choose(
@@ -318,6 +324,37 @@ class FixedObjectiveOverlayV3Brain(FixedObjectiveOverlayV2Brain):
 
 def _bid_decision(bid: int) -> BotDecision:
     return BotDecision.pass_turn() if bid == 0 else BotDecision.submit_bid(bid)
+
+
+def _v3_result_metrics(
+    *,
+    rule: FixedObjectiveOverlayV3Rule,
+    planned_bid: int,
+    chosen_bid: int,
+) -> tuple[BotResultMetric, ...]:
+    namespace = "fixed_objective_overlay_v3_rules"
+    metrics = [
+        BotResultMetric(namespace, ("bid_decisions",), "sum", 1),
+        BotResultMetric(namespace, ("rule_counts", rule), "sum", 1),
+    ]
+    if rule in ("baseline", "guaranteed_win"):
+        applied = int(rule == "guaranteed_win")
+        adjusted = int(chosen_bid != planned_bid)
+        metrics.extend(
+            (
+                BotResultMetric(namespace, ("resource_auction_decisions",), "sum", 1),
+                BotResultMetric(namespace, ("rule_application_rate",), "mean", applied),
+                BotResultMetric(namespace, ("adjusted_bid_decisions",), "sum", adjusted),
+                BotResultMetric(namespace, ("adjusted_bid_rate",), "mean", adjusted),
+                BotResultMetric(
+                    namespace,
+                    ("total_bid_reduction",),
+                    "sum",
+                    planned_bid - chosen_bid,
+                ),
+            )
+        )
+    return tuple(metrics)
 
 
 def _guaranteed_bid_cap(context: DecisionContext, planned_bid: int) -> int | None:

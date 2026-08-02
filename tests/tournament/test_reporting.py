@@ -14,7 +14,7 @@ from diagnostics.test_analysis import _build as build_decision_report_fixture
 from diagnostics.test_analysis import _game as decision_game_fixture
 from diagnostics.test_analysis import _trace as decision_trace_fixture
 from garboid_pocketrocks.diagnostics.trace import (
-    FixedObjectiveOverlayV3BidExplanation,
+    BotResultMetric,
     RecordedAction,
 )
 from garboid_pocketrocks.simulator.monte_carlo import MonteCarloResult
@@ -189,24 +189,30 @@ def test_decision_report_adds_sanitized_artifacts_summary_and_html_links(tmp_pat
     assert '<a href="decision-slices.csv">Decision slices</a>' in html
 
 
-def test_decision_report_summarizes_v3_rule_applications(tmp_path: Path) -> None:
+def test_decision_report_aggregates_bot_emitted_result_metrics(tmp_path: Path) -> None:
     config, plan, fit, analysis, bootstrap = _report_inputs()
     game = decision_game_fixture(decision_counts=(3, 0, 0))
     traces = (
         replace(
             decision_trace_fixture(game, seat=0, step_index=0),
-            explanation=FixedObjectiveOverlayV3BidExplanation(
-                rule="not_applicable",
-                planned_bid=3,
-                chosen_bid=3,
+            result_metrics=(
+                BotResultMetric("auction_cap", ("decisions",), "sum", 1),
+                BotResultMetric("auction_cap", ("rule_counts", "baseline"), "sum", 1),
+                BotResultMetric("auction_cap", ("application_rate",), "mean", 0),
             ),
         ),
         replace(
             decision_trace_fixture(game, seat=0, step_index=1),
-            explanation=FixedObjectiveOverlayV3BidExplanation(
-                rule="baseline",
-                planned_bid=3,
-                chosen_bid=3,
+            result_metrics=(
+                BotResultMetric("auction_cap", ("decisions",), "sum", 1),
+                BotResultMetric(
+                    "auction_cap",
+                    ("rule_counts", "guaranteed_win"),
+                    "sum",
+                    1,
+                ),
+                BotResultMetric("auction_cap", ("application_rate",), "mean", 1),
+                BotResultMetric("auction_cap", ("bid_reduction",), "sum", 1),
             ),
         ),
         replace(
@@ -216,10 +222,16 @@ def test_decision_report_summarizes_v3_rule_applications(tmp_path: Path) -> None
                 step_index=2,
                 selected_action=RecordedAction("submitBid", 2),
             ),
-            explanation=FixedObjectiveOverlayV3BidExplanation(
-                rule="guaranteed_win",
-                planned_bid=3,
-                chosen_bid=2,
+            result_metrics=(
+                BotResultMetric("auction_cap", ("decisions",), "sum", 1),
+                BotResultMetric(
+                    "auction_cap",
+                    ("rule_counts", "guaranteed_win"),
+                    "sum",
+                    1,
+                ),
+                BotResultMetric("auction_cap", ("application_rate",), "mean", 1),
+                BotResultMetric("auction_cap", ("bid_reduction",), "sum", 2),
             ),
         ),
     )
@@ -237,23 +249,50 @@ def test_decision_report_summarizes_v3_rule_applications(tmp_path: Path) -> None
     )
 
     payload = json.loads(artifacts.summary_json.read_text(encoding="utf-8"))
-    assert payload["decision_diagnostics"]["fixed_objective_overlay_v3_rules"] == {
-        "bid_decisions": 3,
-        "resource_auction_decisions": 2,
-        "rule_counts": {
-            "not_applicable": 1,
-            "baseline": 1,
-            "guaranteed_win": 1,
-        },
-        "rule_application_rate": pytest.approx(1 / 2),
-        "adjusted_bid_decisions": 1,
-        "adjusted_bid_rate": pytest.approx(1 / 2),
-        "total_bid_reduction": 1,
+    assert payload["decision_diagnostics"]["bot_metrics"] == {
+        "auction_cap": {
+            "application_rate": pytest.approx(2 / 3),
+            "bid_reduction": 3,
+            "decisions": 3,
+            "rule_counts": {
+                "baseline": 1,
+                "guaranteed_win": 2,
+            },
+        }
     }
     html = artifacts.report_html.read_text(encoding="utf-8")
-    assert "exact guarantee cap applied 1 times" in html
-    assert "across 2 resource auctions" in html
-    assert "reducing submitted bids by 1 units" in html
+    assert "Bot result metrics" in html
+    assert "auction_cap" in html
+    assert "rule_counts.guaranteed_win" in html
+    assert "0.666667" in html
+
+
+def test_decision_report_rejects_inconsistent_metric_aggregations(tmp_path: Path) -> None:
+    config, plan, fit, analysis, bootstrap = _report_inputs()
+    game = decision_game_fixture(decision_counts=(2, 0, 0))
+    traces = (
+        replace(
+            decision_trace_fixture(game, seat=0, step_index=0),
+            result_metrics=(BotResultMetric("policy", ("value",), "sum", 1),),
+        ),
+        replace(
+            decision_trace_fixture(game, seat=0, step_index=1),
+            result_metrics=(BotResultMetric("policy", ("value",), "mean", 1),),
+        ),
+    )
+    decision_report = build_decision_report_fixture(traces, (game,))
+
+    with pytest.raises(ValueError, match="aggregation changed"):
+        write_tournament_artifacts(
+            output_dir=tmp_path,
+            overwrite=False,
+            config=config,
+            plan=plan,
+            fit=fit,
+            analysis=analysis,
+            bootstrap=bootstrap,
+            decision_report=decision_report,
+        )
 
 
 def test_csv_follows_rating_order_and_round_trips_values(tmp_path: Path) -> None:

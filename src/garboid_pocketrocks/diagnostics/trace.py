@@ -21,6 +21,7 @@ from garboid_pocketrocks.adapters.public_history import (
 
 type RecordedActionKind = Literal["pass", "submitBid", "selectInfoToReveal"]
 type SelectionSource = Literal["policy", "fault_fallback"]
+type BotResultMetricAggregation = Literal["sum", "mean"]
 type FixedObjectiveOverlayV3Rule = Literal[
     "not_applicable",
     "baseline",
@@ -46,7 +47,7 @@ _PUBLIC_CONTEXT_FIELDS = frozenset(
         "revealable_count",
     }
 )
-_TRACE_FIELDS = frozenset(
+_TRACE_FIELDS_V1 = frozenset(
     {
         "schema_version",
         "game_index",
@@ -67,6 +68,7 @@ _TRACE_FIELDS = frozenset(
         "outcome",
     }
 )
+_TRACE_FIELDS_V2 = _TRACE_FIELDS_V1 | {"result_metrics"}
 
 
 @dataclass(frozen=True, slots=True)
@@ -244,6 +246,19 @@ class NeuralPolicyExplanation:
         _validate_explanation(self)
 
 
+@dataclass(frozen=True, slots=True)
+class BotResultMetric:
+    """One public numeric measurement a bot wants aggregated into results."""
+
+    namespace: str
+    path: tuple[str, ...]
+    aggregation: BotResultMetricAggregation
+    value: int | float
+
+    def __post_init__(self) -> None:
+        _validate_result_metric(self)
+
+
 type DecisionExplanation = (
     HeuristicBidExplanation | FixedObjectiveOverlayV3BidExplanation | NeuralPolicyExplanation
 )
@@ -251,14 +266,16 @@ type DecisionExplanation = (
 
 @dataclass(frozen=True, slots=True)
 class ExplainedBotDecision:
-    """A selected SDK decision and optional explanation computed in the same call."""
+    """A decision plus optional explanation and public result metrics from one call."""
 
     decision: BotDecision
     explanation: DecisionExplanation | None = None
+    result_metrics: tuple[BotResultMetric, ...] = ()
 
     def __post_init__(self) -> None:
         if self.explanation is not None:
             _validate_explanation(self.explanation)
+        _validate_result_metrics(self.result_metrics)
 
 
 @dataclass(frozen=True, slots=True)
@@ -280,6 +297,7 @@ class PendingDecisionTrace:
     selected_action: RecordedAction
     explanation: DecisionExplanation | None
     selection_source: SelectionSource
+    result_metrics: tuple[BotResultMetric, ...] = ()
 
     def __post_init__(self) -> None:
         _validate_pending(self)
@@ -314,6 +332,7 @@ class DecisionTrace:
     explanation: DecisionExplanation | None
     selection_source: SelectionSource
     outcome: PublicDecisionOutcome
+    result_metrics: tuple[BotResultMetric, ...] = ()
 
     def __post_init__(self) -> None:
         _validate_pending(self)
@@ -341,6 +360,7 @@ class DecisionTrace:
             explanation=pending.explanation,
             selection_source=pending.selection_source,
             outcome=outcome,
+            result_metrics=pending.result_metrics,
         )
 
 
@@ -353,6 +373,9 @@ def _validate_pending(trace: PendingDecisionTrace | DecisionTrace) -> None:
         raise ValueError("selection source is unknown")
     if trace.selection_source == "fault_fallback" and trace.explanation is not None:
         raise ValueError("fault fallback cannot have a policy explanation")
+    if trace.selection_source == "fault_fallback" and trace.result_metrics:
+        raise ValueError("fault fallback cannot have bot result metrics")
+    _validate_result_metrics(trace.result_metrics)
     if trace.explanation is not None:
         _validate_explanation(trace.explanation)
         if isinstance(
@@ -468,13 +491,57 @@ def _validate_explanation(explanation: DecisionExplanation) -> None:
         raise ValueError("neural legal action probabilities must be a finite normalized tuple")
 
 
+def _validate_result_metrics(metrics: tuple[BotResultMetric, ...]) -> None:
+    if not isinstance(metrics, tuple):
+        raise ValueError("bot result metrics must be a tuple")
+    keys: set[tuple[str, tuple[str, ...]]] = set()
+    for metric in metrics:
+        if not isinstance(metric, BotResultMetric):
+            raise ValueError("bot result metrics must contain BotResultMetric values")
+        _validate_result_metric(metric)
+        key = (metric.namespace, metric.path)
+        if key in keys:
+            raise ValueError("a decision cannot emit the same bot result metric twice")
+        keys.add(key)
+
+
+def _validate_result_metric(metric: BotResultMetric) -> None:
+    if not _is_metric_component(metric.namespace):
+        raise ValueError("bot result metric namespace is invalid")
+    if not isinstance(metric.path, tuple) or not metric.path:
+        raise ValueError("bot result metric path must be a nonempty tuple")
+    if not all(_is_metric_component(component) for component in metric.path):
+        raise ValueError("bot result metric path is invalid")
+    if metric.aggregation not in ("sum", "mean"):
+        raise ValueError("bot result metric aggregation is unknown")
+    if not _is_finite_number(metric.value):
+        raise ValueError("bot result metric value must be a finite number")
+
+
+def _is_metric_component(value: object) -> bool:
+    return (
+        isinstance(value, str)
+        and bool(value)
+        and value[0].isalpha()
+        and value[0].isascii()
+        and all(
+            character.isascii() and (character.islower() or character.isdigit() or character == "_")
+            for character in value
+        )
+    )
+
+
 def decision_trace_payload(trace: DecisionTrace) -> dict[str, object]:
     """Encode a complete trace without recursively inspecting foreign objects."""
 
-    return {
-        "schema_version": (
-            2 if isinstance(trace.explanation, FixedObjectiveOverlayV3BidExplanation) else 1
-        ),
+    schema_version = (
+        2
+        if trace.result_metrics
+        or isinstance(trace.explanation, FixedObjectiveOverlayV3BidExplanation)
+        else 1
+    )
+    payload: dict[str, object] = {
+        "schema_version": schema_version,
         "game_index": trace.game_index,
         "chart": trace.chart,
         "step_index": trace.step_index,
@@ -492,15 +559,24 @@ def decision_trace_payload(trace: DecisionTrace) -> dict[str, object]:
         "selection_source": trace.selection_source,
         "outcome": _outcome_payload(trace.outcome),
     }
+    if schema_version == 2:
+        payload["result_metrics"] = [
+            _result_metric_payload(metric) for metric in trace.result_metrics
+        ]
+    return payload
 
 
 def decision_trace_from_payload(payload: Mapping[str, object]) -> DecisionTrace:
     """Strictly decode a trace, rejecting every unrecognized schema field."""
 
-    _require_exact_fields(payload, _TRACE_FIELDS, "decision trace")
-    schema_version = _integer(payload["schema_version"], "schema_version")
+    schema_version = _integer(payload.get("schema_version"), "schema_version")
     if schema_version not in (1, 2):
         raise ValueError("unsupported decision trace schema version")
+    _require_exact_fields(
+        payload,
+        _TRACE_FIELDS_V1 if schema_version == 1 else _TRACE_FIELDS_V2,
+        "decision trace",
+    )
     context = _public_context_from_payload(_mapping(payload["context"], "context"))
     return DecisionTrace(
         game_index=_optional_integer(payload["game_index"], "game_index"),
@@ -530,6 +606,14 @@ def decision_trace_from_payload(payload: Mapping[str, object]) -> DecisionTrace:
         ),
         selection_source=_selection_source(payload["selection_source"]),
         outcome=_outcome_from_payload(_mapping(payload["outcome"], "outcome")),
+        result_metrics=(
+            ()
+            if schema_version == 1
+            else tuple(
+                _result_metric_from_payload(_mapping(item, "bot result metric"))
+                for item in _sequence(payload["result_metrics"], "result_metrics")
+            )
+        ),
     )
 
 
@@ -707,14 +791,35 @@ def _explanation_payload(explanation: DecisionExplanation | None) -> dict[str, o
     }
 
 
+def _result_metric_payload(metric: BotResultMetric) -> dict[str, object]:
+    return {
+        "namespace": metric.namespace,
+        "path": list(metric.path),
+        "aggregation": metric.aggregation,
+        "value": metric.value,
+    }
+
+
+def _result_metric_from_payload(payload: Mapping[str, object]) -> BotResultMetric:
+    fields = frozenset({"namespace", "path", "aggregation", "value"})
+    _require_exact_fields(payload, fields, "bot result metric")
+    aggregation = payload["aggregation"]
+    if aggregation not in ("sum", "mean"):
+        raise ValueError("bot result metric aggregation is unknown")
+    return BotResultMetric(
+        namespace=_string(payload["namespace"], "bot result metric namespace"),
+        path=_string_tuple(payload["path"], "bot result metric path"),
+        aggregation=aggregation,
+        value=_number(payload["value"], "bot result metric value"),
+    )
+
+
 def _explanation_from_payload(
     payload: object,
     *,
     schema_version: int,
 ) -> DecisionExplanation | None:
     if payload is None:
-        if schema_version == 2:
-            raise ValueError("decision trace schema v2 requires a v3 rule explanation")
         return None
     explanation = _mapping(payload, "explanation")
     kind = explanation.get("kind")
@@ -734,8 +839,6 @@ def _explanation_from_payload(
         _validate_explanation(v3_explanation)
         return v3_explanation
     if kind == "heuristic_bid":
-        if schema_version != 1:
-            raise ValueError("heuristic explanation requires decision trace schema v1")
         fields = frozenset(
             {
                 "kind",
@@ -777,8 +880,6 @@ def _explanation_from_payload(
         _validate_explanation(heuristic_explanation)
         return heuristic_explanation
     if kind == "neural_policy":
-        if schema_version != 1:
-            raise ValueError("neural explanation requires decision trace schema v1")
         fields = frozenset(
             {
                 "kind",

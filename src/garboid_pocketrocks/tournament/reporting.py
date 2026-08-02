@@ -8,7 +8,6 @@ import math
 import os
 import statistics
 import tempfile
-from collections import Counter
 from collections.abc import Collection, Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -21,7 +20,7 @@ from garboid_pocketrocks.diagnostics.reporting import (
     GAME_SUMMARIES_NAME,
     render_decision_artifacts,
 )
-from garboid_pocketrocks.diagnostics.trace import FixedObjectiveOverlayV3BidExplanation
+from garboid_pocketrocks.diagnostics.trace import BotResultMetricAggregation
 from garboid_pocketrocks.tournament.analysis import (
     BootstrapSummary,
     TournamentAnalysis,
@@ -61,6 +60,17 @@ class _RollbackFailure:
     target: Path
     backup: Path | None
     error: OSError
+
+
+@dataclass(slots=True)
+class _BotResultMetricAccumulator:
+    aggregation: BotResultMetricAggregation
+    total: int | float = 0
+    observations: int = 0
+
+    def add(self, value: int | float) -> None:
+        self.total += value
+        self.observations += 1
 
 
 def write_tournament_artifacts(
@@ -202,9 +212,9 @@ def _summary_payload(
             "seed_disclosure": "withheld_for_privacy",
             "reconciliation": asdict(decision_report.reconciliation),
         }
-        v3_rules = _fixed_objective_overlay_v3_rule_diagnostics(decision_report)
-        if v3_rules is not None:
-            payload["decision_diagnostics"]["fixed_objective_overlay_v3_rules"] = v3_rules
+        bot_metrics = _bot_result_metrics(decision_report)
+        if bot_metrics:
+            payload["decision_diagnostics"]["bot_metrics"] = bot_metrics
         payload["artifacts"].update(
             {
                 "game_summaries_jsonl": GAME_SUMMARIES_NAME,
@@ -358,23 +368,12 @@ players {", ".join(map(str, config.player_counts))} · {seed_text}</p>
 
 def _decision_diagnostics_html(report: DecisionReport) -> str:
     reconciliation = report.reconciliation
-    v3_rules = _fixed_objective_overlay_v3_rule_diagnostics(report)
-    v3_html = ""
-    if v3_rules is not None:
-        rule_counts = v3_rules["rule_counts"]
-        assert isinstance(rule_counts, dict)
-        v3_html = (
-            "<h3>fixed-objective-overlay-v3 rules</h3>"
-            f"<p>The exact guarantee cap applied {rule_counts['guaranteed_win']:,} times "
-            f"across {v3_rules['resource_auction_decisions']:,} resource auctions. "
-            f"The selected bid changed {v3_rules['adjusted_bid_decisions']:,} times, "
-            f"reducing submitted bids by {v3_rules['total_bid_reduction']:,} units.</p>"
-        )
+    bot_metrics_html = _bot_result_metrics_html(_bot_result_metrics(report))
     return (
         "<h2>Decision diagnostics</h2>"
         f"<p>Validated {reconciliation.trace_decision_count:,} decisions across "
         f"{reconciliation.game_count:,} games.</p>"
-        f"{v3_html}"
+        f"{bot_metrics_html}"
         "<ul>"
         f'<li><a href="{GAME_SUMMARIES_NAME}">Game summaries</a></li>'
         f'<li><a href="{GAME_DETAILS_NAME}">Game details</a></li>'
@@ -384,39 +383,91 @@ def _decision_diagnostics_html(report: DecisionReport) -> str:
     )
 
 
-def _fixed_objective_overlay_v3_rule_diagnostics(
-    report: DecisionReport,
-) -> dict[str, Any] | None:
-    explanations = tuple(
-        explanation
-        for trace in report.decision_traces
-        if isinstance(
-            (explanation := trace.explanation),
-            FixedObjectiveOverlayV3BidExplanation,
-        )
+def _bot_result_metrics(report: DecisionReport) -> dict[str, Any]:
+    accumulators: dict[
+        tuple[str, tuple[str, ...]],
+        _BotResultMetricAccumulator,
+    ] = {}
+    for trace in report.decision_traces:
+        for metric in trace.result_metrics:
+            key = (metric.namespace, metric.path)
+            accumulator = accumulators.get(key)
+            if accumulator is None:
+                accumulator = _BotResultMetricAccumulator(metric.aggregation)
+                accumulators[key] = accumulator
+            elif accumulator.aggregation != metric.aggregation:
+                raise ValueError(
+                    "bot result metric aggregation changed for "
+                    f"{metric.namespace}.{'.'.join(metric.path)}"
+                )
+            accumulator.add(metric.value)
+
+    result: dict[str, Any] = {}
+    for (namespace, path), accumulator in sorted(accumulators.items()):
+        value: int | float
+        if accumulator.aggregation == "sum":
+            value = accumulator.total
+        else:
+            value = accumulator.total / accumulator.observations
+        namespace_result = result.setdefault(namespace, {})
+        assert isinstance(namespace_result, dict)
+        _set_nested_metric(namespace_result, path, value)
+    return result
+
+
+def _set_nested_metric(
+    target: dict[str, Any],
+    path: tuple[str, ...],
+    value: int | float,
+) -> None:
+    current = target
+    for component in path[:-1]:
+        existing = current.setdefault(component, {})
+        if not isinstance(existing, dict):
+            raise ValueError("bot result metric paths cannot overlap")
+        current = existing
+    leaf = path[-1]
+    if leaf in current:
+        raise ValueError("bot result metric paths cannot overlap")
+    current[leaf] = value
+
+
+def _bot_result_metrics_html(metrics: dict[str, Any]) -> str:
+    if not metrics:
+        return ""
+    rows = []
+    for namespace, values in sorted(metrics.items()):
+        assert isinstance(values, dict)
+        for path, value in _flatten_metric_values(values):
+            display_value = f"{value:,}" if isinstance(value, int) else f"{value:.6g}"
+            rows.append(
+                "<tr>"
+                f"<td>{html.escape(namespace)}</td>"
+                f"<td>{html.escape('.'.join(path))}</td>"
+                f"<td>{display_value}</td>"
+                "</tr>"
+            )
+    return (
+        "<h3>Bot result metrics</h3>"
+        "<table><thead><tr><th>Namespace</th><th>Metric</th><th>Value</th></tr></thead>"
+        f"<tbody>{''.join(rows)}</tbody></table>"
     )
-    if not explanations:
-        return None
-    counts = Counter(explanation.rule for explanation in explanations)
-    eligible = counts["baseline"] + counts["guaranteed_win"]
-    applied = counts["guaranteed_win"]
-    adjusted = sum(
-        explanation.chosen_bid != explanation.planned_bid for explanation in explanations
-    )
-    reduction = sum(
-        explanation.planned_bid - explanation.chosen_bid for explanation in explanations
-    )
-    return {
-        "bid_decisions": len(explanations),
-        "resource_auction_decisions": eligible,
-        "rule_counts": {
-            rule: counts[rule] for rule in ("not_applicable", "baseline", "guaranteed_win")
-        },
-        "rule_application_rate": applied / eligible if eligible else 0.0,
-        "adjusted_bid_decisions": adjusted,
-        "adjusted_bid_rate": adjusted / eligible if eligible else 0.0,
-        "total_bid_reduction": reduction,
-    }
+
+
+def _flatten_metric_values(
+    values: dict[str, Any],
+    prefix: tuple[str, ...] = (),
+) -> tuple[tuple[tuple[str, ...], int | float], ...]:
+    flattened: list[tuple[tuple[str, ...], int | float]] = []
+    for name, value in sorted(values.items()):
+        path = (*prefix, name)
+        if isinstance(value, dict):
+            flattened.extend(_flatten_metric_values(value, path))
+        else:
+            if not isinstance(value, (int, float)) or isinstance(value, bool):
+                raise ValueError("bot result metric aggregate must be numeric")
+            flattened.append((path, value))
+    return tuple(flattened)
 
 
 def _rating_svg(

@@ -25,7 +25,10 @@ from garboid_pocketrocks.bots.fixed_objective_overlay import (
     FixedObjectiveOverlayV3Brain,
     _public_only_expected_prices,
 )
-from garboid_pocketrocks.diagnostics.trace import FixedObjectiveOverlayV3BidExplanation
+from garboid_pocketrocks.diagnostics.trace import (
+    BotResultMetric,
+    FixedObjectiveOverlayV3BidExplanation,
+)
 
 from .helpers import make_context, make_knowledge
 
@@ -377,6 +380,25 @@ def test_v3_explanation_classifies_guaranteed_and_inapplicable_bids() -> None:
         rule="baseline",
         planned_bid=10,
         chosen_bid=10,
+    )
+    namespace = "fixed_objective_overlay_v3_rules"
+    assert guaranteed.result_metrics == (
+        BotResultMetric(namespace, ("bid_decisions",), "sum", 1),
+        BotResultMetric(namespace, ("rule_counts", "guaranteed_win"), "sum", 1),
+        BotResultMetric(namespace, ("resource_auction_decisions",), "sum", 1),
+        BotResultMetric(namespace, ("rule_application_rate",), "mean", 1),
+        BotResultMetric(namespace, ("adjusted_bid_decisions",), "sum", 1),
+        BotResultMetric(namespace, ("adjusted_bid_rate",), "mean", 1),
+        BotResultMetric(namespace, ("total_bid_reduction",), "sum", 2),
+    )
+    assert baseline.result_metrics == (
+        BotResultMetric(namespace, ("bid_decisions",), "sum", 1),
+        BotResultMetric(namespace, ("rule_counts", "baseline"), "sum", 1),
+        BotResultMetric(namespace, ("resource_auction_decisions",), "sum", 1),
+        BotResultMetric(namespace, ("rule_application_rate",), "mean", 0),
+        BotResultMetric(namespace, ("adjusted_bid_decisions",), "sum", 0),
+        BotResultMetric(namespace, ("adjusted_bid_rate",), "mean", 0),
+        BotResultMetric(namespace, ("total_bid_reduction",), "sum", 0),
     )
 
 

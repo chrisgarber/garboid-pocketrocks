@@ -40,13 +40,16 @@ execution. It does not change the schedule, actions, summaries, ratings,
 analysis, or bootstrap results. Explanation-aware policies are invoked only
 when the flag is present.
 
-For `fixed-objective-overlay-v3`, the diagnostic summary and HTML report count
+Bots can emit public numeric result metrics from the same opt-in explained
+decision call. Each metric declares a namespace, nested result path, and a
+generic `sum` or `mean` aggregation; tournament reporting does not need
+bot-specific logic. `fixed-objective-overlay-v3` uses that interface to count
 resource auctions, exact guarantee-cap applications, decisions whose bid
-changed, and total submitted-bid reduction. Inspect the machine-readable
-totals with:
+changed, and total submitted-bid reduction. Inspect its machine-readable totals
+with:
 
 ```bash
-jq '.decision_diagnostics.fixed_objective_overlay_v3_rules' \
+jq '.decision_diagnostics.bot_metrics.fixed_objective_overlay_v3_rules' \
   artifacts/tournaments/diagnostics/summary.json
 ```
 
