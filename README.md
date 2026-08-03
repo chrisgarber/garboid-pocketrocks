@@ -162,13 +162,14 @@ and the [bot-versioning workflow](.agents/skills/versioning-bots/SKILL.md)
 before changing strategy behavior.
 
 The local-only `surplus` heuristic alias currently selects immutable
-`surplus-v11`. Generations v1-v11 remain explicitly selectable for deterministic
+`surplus-v12`. Generations v1-v12 remain explicitly selectable for deterministic
 simulation. The [initial development ladder](docs/benchmarks/2026-08-02-surplus-heuristic-ladder.md),
 the [objective-tuning report](docs/benchmarks/2026-08-02-surplus-v7-objective-tuning.md),
 the [opponent-threat report](docs/benchmarks/2026-08-02-surplus-v8-opponent-objective-threat.md),
 the [liquidity and objective-progress report](docs/benchmarks/2026-08-02-surplus-v9-liquidity-objective-progress.md),
 the [action-aware liquidity report](docs/benchmarks/2026-08-02-surplus-v10-action-aware-liquidity.md),
-and the [net-loan valuation report](docs/benchmarks/2026-08-03-surplus-v11-net-loan-valuation.md)
+the [net-loan valuation report](docs/benchmarks/2026-08-03-surplus-v11-net-loan-valuation.md),
+and the [objective-reachability report](docs/benchmarks/2026-08-03-surplus-v12-objective-reachability.md)
 record the hypotheses, fixed-seed comparisons, ablations, and negative experiments.
 
 ### Surplus research backlog
@@ -180,8 +181,8 @@ including both expected upside and how often the feature should affect play.
 | Candidate feature | Estimated effectiveness | Why it may help |
 |---|---:|---|
 | Net loan proceeds and marginal liquidity value | 5/5 | Score each legal loan bid using post-win cash (`cash + principal - bid`) and the projected shortfall it removes. V10 can legally bid from the proceeds, but its fixed principal fraction pays the same fee for a small or large shortage. Selected for v11. |
-| Opponent-specific clearing-price and win-probability model | 4.5/5 | Replace the pooled upper-quartile price with seat-aware bid distributions conditioned on action, cash, game phase, and observed behavior; bid only when marginal win probability justifies the next dollar. |
-| Objective reachability and race probability | 4.5/5 | Discount objective progress when too few matching resources remain and increase completion or denial value when a rival is likely to claim first. |
+| Opponent-specific clearing-price and win-probability model | 4.5/5 | Replace the pooled upper-quartile price with seat-aware bid distributions conditioned on action, cash, game phase, and observed behavior; bid only when marginal win probability justifies the next dollar. An investment-only first attempt was rejected after it overbought investments, so a future version needs the richer conditioning described here. |
+| Objective reachability and race probability | 4.5/5 | Discount objective progress when too few matching resources remain and increase completion or denial value when a rival is likely to claim first. The reachability half was selected for v12; the tested race discounts were not. |
 | Short-horizon bundle lookahead | 4/5 | Compare buying now with the expected marginal value and cash cost of plausible remaining Auction1/Auction2 bundles instead of valuing each offer mostly in isolation. |
 | Strategic information reveal selection | 4/5 | Stop always revealing the first private card; reveal information that leaks the least about valuable suits and objective plans while accounting for information already public. |
 | Endgame cash and action-deck conversion | 3.5/5 | Reduce reserves when too few useful auctions remain, price investments by remaining horizon, and stop borrowing when the remaining deck cannot productively use the proceeds. |

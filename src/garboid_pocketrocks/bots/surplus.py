@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from fractions import Fraction
+from functools import lru_cache
 from math import comb
 
 from pocketrocks import OBJECTIVES, ActionId, BotDecision, DecisionContext
@@ -12,6 +13,7 @@ from garboid_pocketrocks.adapters.public_history import (
     PublicTurnOpened,
 )
 from garboid_pocketrocks.bots.base import BotSpec
+from garboid_pocketrocks.heuristics.objectives import requirement_vectors
 from garboid_pocketrocks.knowledge import RulesetKnowledge
 
 
@@ -23,6 +25,7 @@ class SurplusPolicy:
     use_objective_values: bool = False
     use_opponent_objective_threat: bool = False
     use_objective_progress: bool = False
+    use_objective_reachability: bool = False
     bid_investments: bool = False
     bid_liquidity_loans: bool = False
     manage_liquidity: bool = False
@@ -37,6 +40,10 @@ class SurplusPolicy:
     opponent_objective_denominator: int = 1
     objective_progress_numerator: int = 0
     objective_progress_denominator: int = 1
+    objective_reachability_floor_numerator: int = 1
+    objective_reachability_floor_denominator: int = 1
+    objective_race_discount_numerator: int = 0
+    objective_race_discount_denominator: int = 1
     resource_reserve_numerator: int = 0
     resource_reserve_denominator: int = 1
     investment_reserve_numerator: int = 0
@@ -68,6 +75,11 @@ class SurplusPolicy:
                 "objective progress",
                 self.objective_progress_numerator,
                 self.objective_progress_denominator,
+            ),
+            (
+                "objective race discount",
+                self.objective_race_discount_numerator,
+                self.objective_race_discount_denominator,
             ),
             (
                 "resource reserve",
@@ -111,6 +123,12 @@ class SurplusPolicy:
             raise ValueError("fallback auction prices must be nonnegative")
         if not 0 <= self.market_quantile_numerator <= self.market_quantile_denominator:
             raise ValueError("market quantile must be between zero and one")
+        if not (
+            0
+            <= self.objective_reachability_floor_numerator
+            <= self.objective_reachability_floor_denominator
+        ):
+            raise ValueError("objective reachability floor must be between zero and one")
 
 
 class SurplusBrain:
@@ -201,10 +219,16 @@ class SurplusBrain:
                 self._policy.opponent_objective_denominator,
             )
         if self._policy.use_objective_progress:
-            estimated_value += self._objective_progress_value(
-                context,
-                awarded_resource_ids,
-            ) * Fraction(
+            progress_value = (
+                self._reachable_objective_progress_value(
+                    context,
+                    ruleset,
+                    awarded_resource_ids,
+                )
+                if self._policy.use_objective_reachability
+                else self._objective_progress_value(context, awarded_resource_ids)
+            )
+            estimated_value += progress_value * Fraction(
                 self._policy.objective_progress_numerator,
                 self._policy.objective_progress_denominator,
             )
@@ -393,6 +417,158 @@ class SurplusBrain:
             requirement_size = cls._objective_requirement_size(objective_id)
             value += Fraction(objective.payout * (before - after), requirement_size)
         return value
+
+    def _reachable_objective_progress_value(
+        self,
+        context: DecisionContext,
+        ruleset: RulesetKnowledge,
+        awarded_suits: tuple[int, ...],
+    ) -> Fraction:
+        """Discount partial progress by completion odds and public race pressure."""
+
+        claimed = {
+            objective_id
+            for owned_ids in context.owned_objective_ids_by_seat
+            for objective_id in owned_ids
+        }
+        counts_before = context.won_resource_counts_by_seat[context.bot_seat]
+        counts_after_list = list(counts_before)
+        for suit_id in awarded_suits:
+            counts_after_list[suit_id - 1] += 1
+        counts_after = tuple(counts_after_list)
+
+        reachability_floor = Fraction(
+            self._policy.objective_reachability_floor_numerator,
+            self._policy.objective_reachability_floor_denominator,
+        )
+        race_discount = Fraction(
+            self._policy.objective_race_discount_numerator,
+            self._policy.objective_race_discount_denominator,
+        )
+        value = Fraction()
+        for objective_id in context.objective_ids:
+            if objective_id in claimed:
+                continue
+            before = self._objective_distance(objective_id, counts_before)
+            after = self._objective_distance(objective_id, counts_after)
+            if before <= 0 or after <= 0 or after >= before:
+                continue
+
+            reachability = self._objective_reachability_probability(
+                context,
+                ruleset,
+                objective_id,
+                counts_after,
+            )
+            reachability_factor = reachability_floor + ((1 - reachability_floor) * reachability)
+            opponents_at_or_closer = sum(
+                self._objective_distance(objective_id, counts) <= after
+                for seat, counts in enumerate(context.won_resource_counts_by_seat)
+                if seat != context.bot_seat
+            )
+            race_factor = Fraction(1, 1) / (1 + (race_discount * opponents_at_or_closer))
+            objective = OBJECTIVES[objective_id]
+            base_progress = Fraction(
+                objective.payout * (before - after),
+                self._objective_requirement_size(objective_id),
+            )
+            value += base_progress * reachability_factor * race_factor
+        return value
+
+    @classmethod
+    def _objective_reachability_probability(
+        cls,
+        context: DecisionContext,
+        ruleset: RulesetKnowledge,
+        objective_id: int,
+        owned_counts: tuple[int, ...],
+    ) -> Fraction:
+        """Estimate whether one viable objective route remains in the future deck."""
+
+        known_information = tuple(
+            context.current_hand_suit_ids.count(suit_id)
+            + context.revealed_info_counts_by_suit[suit_id - 1]
+            for suit_id in range(1, 6)
+        )
+        seen_resources = tuple(
+            context.won_resource_counts_by_suit[suit_id - 1]
+            + context.current_resource_ids.count(suit_id)
+            for suit_id in range(1, 6)
+        )
+        unknown_counts = tuple(
+            total - known - seen
+            for total, known, seen in zip(
+                ruleset.resource_counts,
+                known_information,
+                seen_resources,
+                strict=True,
+            )
+        )
+        opponent_hidden_cards = sum(
+            max(0, ruleset.private_cards_per_player - sum(revealed_counts))
+            for seat, revealed_counts in enumerate(context.revealed_info_counts_by_seat)
+            if seat != context.bot_seat
+        )
+        unknown_total = sum(unknown_counts)
+        future_cards = unknown_total - opponent_hidden_cards
+        if (
+            any(count < 0 for count in unknown_counts)
+            or future_cards < 0
+            or future_cards > unknown_total
+        ):
+            return Fraction(1, 1)
+
+        return max(
+            (
+                cls._route_reachability_probability(
+                    unknown_counts,
+                    future_cards,
+                    tuple(
+                        max(0, required - owned)
+                        for required, owned in zip(vector, owned_counts, strict=True)
+                    ),
+                )
+                for vector in requirement_vectors(objective_id)
+            ),
+            default=Fraction(),
+        )
+
+    @staticmethod
+    @lru_cache(maxsize=4096)
+    def _route_reachability_probability(
+        unknown_counts: tuple[int, ...],
+        future_cards: int,
+        deficits: tuple[int, ...],
+    ) -> Fraction:
+        """Hypergeometric chance that the future deck covers one fixed route."""
+
+        unknown_total = sum(unknown_counts)
+        if (
+            future_cards < 0
+            or future_cards > unknown_total
+            or any(
+                deficit > available
+                for deficit, available in zip(deficits, unknown_counts, strict=True)
+            )
+            or sum(deficits) > future_cards
+        ):
+            return Fraction()
+        denominator = comb(unknown_total, future_cards)
+        if denominator == 0:
+            return Fraction(int(not any(deficits)), 1)
+
+        ways_by_count = [0] * (future_cards + 1)
+        ways_by_count[0] = 1
+        for available, minimum in zip(unknown_counts, deficits, strict=True):
+            next_ways = [0] * (future_cards + 1)
+            for selected_so_far, ways in enumerate(ways_by_count):
+                if ways == 0:
+                    continue
+                maximum = min(available, future_cards - selected_so_far)
+                for selected in range(minimum, maximum + 1):
+                    next_ways[selected_so_far + selected] += ways * comb(available, selected)
+            ways_by_count = next_ways
+        return Fraction(ways_by_count[future_cards], denominator)
 
     @staticmethod
     def _objective_requirement_size(objective_id: int) -> int:
@@ -829,6 +1005,45 @@ SURPLUS_V11_POLICY = SurplusPolicy(
     auction1_fallback_price=5,
     auction2_fallback_price=10,
 )
+SURPLUS_V12_POLICY = SurplusPolicy(
+    use_posterior_values=True,
+    use_objective_values=True,
+    use_opponent_objective_threat=True,
+    use_objective_progress=True,
+    use_objective_reachability=True,
+    bid_investments=True,
+    bid_liquidity_loans=True,
+    manage_liquidity=True,
+    use_action_liquidity_demand=True,
+    use_net_loan_value=True,
+    use_market_prices=True,
+    resource_value_numerator=3,
+    resource_value_denominator=4,
+    objective_value_numerator=3,
+    objective_value_denominator=8,
+    opponent_objective_numerator=1,
+    opponent_objective_denominator=32,
+    objective_progress_numerator=1,
+    objective_progress_denominator=8,
+    objective_reachability_floor_numerator=1,
+    objective_reachability_floor_denominator=2,
+    resource_reserve_numerator=1,
+    resource_reserve_denominator=8,
+    investment_reserve_numerator=2,
+    investment_reserve_denominator=5,
+    objective_reserve_release_numerator=5,
+    objective_reserve_release_denominator=8,
+    loan_trigger_numerator=7,
+    loan_trigger_denominator=8,
+    loan_fee_numerator=2,
+    loan_fee_denominator=5,
+    loan_opening_fee_numerator=2,
+    loan_opening_fee_denominator=5,
+    loan_liquidity_value_numerator=2,
+    loan_liquidity_value_denominator=3,
+    auction1_fallback_price=5,
+    auction2_fallback_price=10,
+)
 
 
 class SurplusV1Brain(SurplusBrain):
@@ -886,6 +1101,11 @@ class SurplusV11Brain(SurplusBrain):
         super().__init__(SURPLUS_V11_POLICY)
 
 
+class SurplusV12Brain(SurplusBrain):
+    def __init__(self) -> None:
+        super().__init__(SURPLUS_V12_POLICY)
+
+
 def _surplus_v1_factory(seed: int | None) -> SurplusV1Brain:
     del seed
     return SurplusV1Brain()
@@ -941,6 +1161,11 @@ def _surplus_v11_factory(seed: int | None) -> SurplusV11Brain:
     return SurplusV11Brain()
 
 
+def _surplus_v12_factory(seed: int | None) -> SurplusV12Brain:
+    del seed
+    return SurplusV12Brain()
+
+
 SURPLUS_V1_BOT_SPEC = BotSpec.for_simulation("surplus-v1", _surplus_v1_factory)
 SURPLUS_V2_BOT_SPEC = BotSpec.for_simulation("surplus-v2", _surplus_v2_factory)
 SURPLUS_V3_BOT_SPEC = BotSpec.for_simulation("surplus-v3", _surplus_v3_factory)
@@ -952,4 +1177,5 @@ SURPLUS_V8_BOT_SPEC = BotSpec.for_simulation("surplus-v8", _surplus_v8_factory)
 SURPLUS_V9_BOT_SPEC = BotSpec.for_simulation("surplus-v9", _surplus_v9_factory)
 SURPLUS_V10_BOT_SPEC = BotSpec.for_simulation("surplus-v10", _surplus_v10_factory)
 SURPLUS_V11_BOT_SPEC = BotSpec.for_simulation("surplus-v11", _surplus_v11_factory)
-SURPLUS_BOT_SPEC = BotSpec.for_simulation("surplus", _surplus_v11_factory)
+SURPLUS_V12_BOT_SPEC = BotSpec.for_simulation("surplus-v12", _surplus_v12_factory)
+SURPLUS_BOT_SPEC = BotSpec.for_simulation("surplus", _surplus_v12_factory)
