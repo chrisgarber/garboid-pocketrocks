@@ -43,6 +43,19 @@ from garboid_pocketrocks.bots.registry import (
     registered_bot_specs,
 )
 from garboid_pocketrocks.bots.sdk_samples import SdkGreedyValueV1Brain
+from garboid_pocketrocks.bots.surplus import (
+    SurplusBrain,
+    SurplusV1Brain,
+    SurplusV2Brain,
+    SurplusV3Brain,
+    SurplusV4Brain,
+    SurplusV5Brain,
+    SurplusV6Brain,
+    SurplusV7Brain,
+    SurplusV8Brain,
+    SurplusV9Brain,
+    SurplusV10Brain,
+)
 from garboid_pocketrocks.neural.live_bot import PpoLargeTeenBot
 from garboid_pocketrocks.neural.tournament_bot import (
     VectorPpoLargeV1G350kBrain,
@@ -84,6 +97,17 @@ __all__ = [
     "RandomBot",
     "RandomBotBrain",
     "SdkGreedyValueV1Brain",
+    "SurplusBrain",
+    "SurplusV1Brain",
+    "SurplusV2Brain",
+    "SurplusV3Brain",
+    "SurplusV4Brain",
+    "SurplusV5Brain",
+    "SurplusV6Brain",
+    "SurplusV7Brain",
+    "SurplusV8Brain",
+    "SurplusV9Brain",
+    "SurplusV10Brain",
     "VectorPpoLargeV1G350kBrain",
     "VectorPpoSmallV1G1500Brain",
     "registered_bot_specs",
