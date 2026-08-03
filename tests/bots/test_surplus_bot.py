@@ -804,10 +804,13 @@ def test_v13_uses_expected_profit_for_investments_without_changing_v12() -> None
     invest5 = _context(action_id=5, legal_max=5)
     invest10 = _context(action_id=6, legal_max=10)
 
-    assert SurplusV12Brain().choose_decision(
-        invest5,
-        canonical_knowledge(3),
-    ) == BotDecision.pass_turn()
+    assert (
+        SurplusV12Brain().choose_decision(
+            invest5,
+            canonical_knowledge(3),
+        )
+        == BotDecision.pass_turn()
+    )
     assert SurplusV13Brain().choose_decision(
         invest5,
         canonical_knowledge(3),
@@ -859,18 +862,24 @@ def test_v14_shades_resource_bids_down_early_and_up_late() -> None:
     brain = SurplusV14Brain()
     ruleset = canonical_knowledge(3)
 
-    assert brain._phase_resource_bid(
-        10,
-        early,
-        ruleset,
-        awarded_resource_count=1,
-    ) == 7
-    assert brain._phase_resource_bid(
-        10,
-        late,
-        ruleset,
-        awarded_resource_count=1,
-    ) == 13
+    assert (
+        brain._phase_resource_bid(
+            10,
+            early,
+            ruleset,
+            awarded_resource_count=1,
+        )
+        == 7
+    )
+    assert (
+        brain._phase_resource_bid(
+            10,
+            late,
+            ruleset,
+            awarded_resource_count=1,
+        )
+        == 13
+    )
 
 
 def test_v14_identity_preserves_v13_and_advances_latest_alias() -> None:
