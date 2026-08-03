@@ -14,9 +14,12 @@ behavior remain unchanged.
 ## Policy source and versioning
 
 `GreedyValueBot` comes from
-`pocketrocks.sim.sample_bots` in the already-pinned SDK dependency at commit
-`51cad378ee1e70a78e39ebbb25957ea003444873`. The class was originally published
-in upstream SDK commit `48373524c61665c3b73ca91a2ae6420127f7da81`.
+`pocketrocks.sim.sample_bots` in the canonical upstream SDK dependency at
+commit `538c577b01bdadf5e6d7ce66547021a006f9c5ca`. This revision includes the
+vectorized engine and verifies that its optimized context builder produces the
+same decision contexts as production wire reconstruction. The class was
+originally published in upstream SDK commit
+`48373524c61665c3b73ca91a2ae6420127f7da81`.
 
 Garboid imports the SDK class rather than copying its bid and reveal formulas.
 The versioned simulation name remains immutable. Reproducibility tests pin:

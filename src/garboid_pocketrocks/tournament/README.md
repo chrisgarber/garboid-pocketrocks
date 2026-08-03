@@ -18,13 +18,14 @@ omitted. Use `--bots` or `--exclude-bots` for an explicit field,
 `--bootstrap-samples 0` for a quick run, and `--overwrite` only when replacing
 an existing known artifact generation.
 
-The curated default field is the top ten from the 15-bot
-`fixed-objective-overlay-v2` benchmark: both objective-aware overlay
-generations, all three fixed-bid policies, aggressive-v2, balanced-v2,
-passive-v2, passive-v1, and the frozen large neural policy. The five lower
-finishers remain registered and explicitly selectable; pruning the default
+The curated default field retains the released `fixed-objective-overlay-v1`
+and v2 generations and adds the cash- and tiebreak-aware
+`fixed-objective-overlay-v3`. It also includes the strongest fixed-bid,
+heuristic-personality, and frozen large-neural comparisons. Bots outside the
+curated field remain registered and explicitly selectable; pruning the default
 does not delete their immutable identities or historical evidence. Moving
-unversioned heuristic aliases are omitted because they duplicate v2 behavior.
+unversioned heuristic aliases are omitted because they duplicate versioned
+behavior.
 
 Decision diagnostics are opt-in:
 
@@ -38,6 +39,19 @@ The flag records each already-selected public decision while retaining batch
 execution. It does not change the schedule, actions, summaries, ratings,
 analysis, or bootstrap results. Explanation-aware policies are invoked only
 when the flag is present.
+
+Bots can emit public numeric result metrics from the same opt-in explained
+decision call. Each metric declares a namespace, nested result path, and a
+generic `sum` or `mean` aggregation; tournament reporting does not need
+bot-specific logic. `fixed-objective-overlay-v3` uses that interface to count
+resource auctions, exact guarantee-cap applications, decisions whose bid
+changed, and total submitted-bid reduction. Inspect its machine-readable totals
+with:
+
+```bash
+jq '.decision_diagnostics.bot_metrics.fixed_objective_overlay_v3_rules' \
+  artifacts/tournaments/diagnostics/summary.json
+```
 
 When decision diagnostics are enabled and `--seed` is omitted, the CLI uses a
 fresh, private 63-bit root seed. Pass an explicit `--seed` only when a fixed,

@@ -18,9 +18,12 @@ uv run garboid-simulate \
 ```
 
 Registered bot names include the live aliases and explicit released
-generations. `--format json` emits structured summaries. `--replay-dir PATH`
-writes one deterministic replay per game and uses scalar execution so every
-decision is captured.
+generations, including the immutable `fixed-objective-overlay-v1` and v2 plus
+the cash- and tiebreak-aware `fixed-objective-overlay-v3`. These overlay bots
+are local simulation identities rather than live service wrappers.
+`--format json` emits structured summaries. `--replay-dir PATH` writes one
+deterministic replay per game and uses scalar execution so every decision is
+captured.
 
 ## Execution contract
 
@@ -29,7 +32,7 @@ at a time. A bid phase requests one decision from every seat. A choice reveal
 requests only the winning seat; automatic reveals never invoke a bot.
 
 `MatchRunner` constructs fresh brains in seat order from a per-game RNG,
-passes exact public history to history-aware brains, validates every decision,
+passes exact public history to every brain, validates every decision,
 and records replay steps in encounter order.
 
 Monte Carlo planning derives each game seed and lineup from the root seed.

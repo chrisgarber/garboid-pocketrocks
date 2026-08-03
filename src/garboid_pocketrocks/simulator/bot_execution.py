@@ -10,10 +10,12 @@ from typing import Protocol, runtime_checkable
 from pocketrocks import BotDecision, DecisionContext
 
 from garboid_pocketrocks.adapters.public_history import PublicHistory
-from garboid_pocketrocks.bots.base import BotBrain, BotSpec, HistoryAwareBotBrain
+from garboid_pocketrocks.bots.base import BotBrain, BotSpec
 from garboid_pocketrocks.diagnostics.trace import (
+    BotResultMetric,
     DecisionExplanation,
     ExplainedBotDecision,
+    FixedObjectiveOverlayV3BidExplanation,
     HeuristicBidExplanation,
     NeuralPolicyExplanation,
     RecordedAction,
@@ -43,12 +45,13 @@ class DecisionExecution:
 
     decision: BotDecision
     explanation: DecisionExplanation | None
+    result_metrics: tuple[BotResultMetric, ...]
     selection_source: SelectionSource
 
 
 @runtime_checkable
 class ExplanationAwareBotBrain(Protocol):
-    """Optional brain interface that returns its decision and explanation together."""
+    """Optional interface returning a decision with explanation and result metrics."""
 
     def choose_explained_decision(
         self,
@@ -56,7 +59,7 @@ class ExplanationAwareBotBrain(Protocol):
         ruleset: RulesetKnowledge,
         history: PublicHistory,
     ) -> ExplainedBotDecision:
-        """Return one decision and its optional live-compatible explanation."""
+        """Return one decision and its optional live-compatible diagnostics."""
 
 
 def initialize_brains(
@@ -127,12 +130,13 @@ def execute_brain_decision(
     bot_name: str,
     request_explanation: bool = False,
 ) -> DecisionExecution:
-    """Invoke one brain once and retain any explanation from that same call."""
+    """Invoke one brain once and retain diagnostics from that same call."""
 
     if brain is None:
         return DecisionExecution(
             decision=_fallback_decision(context),
             explanation=None,
+            result_metrics=(),
             selection_source="fault_fallback",
         )
     try:
@@ -144,25 +148,21 @@ def execute_brain_decision(
             )
             decision = explained.decision
             explanation = explained.explanation
+            result_metrics = explained.result_metrics
             _validate_explanation_agrees_with_decision(
                 context,
                 decision,
                 explanation,
             )
-        elif isinstance(brain, HistoryAwareBotBrain):
-            decision = brain.choose_decision_with_history(
-                context,
-                knowledge,
-                history,
-            )
-            explanation = None
         else:
-            decision = brain.choose_decision(context, knowledge)
+            decision = brain.choose_decision(context, knowledge, history)
             explanation = None
+            result_metrics = ()
         context.validate(decision)
         return DecisionExecution(
             decision=decision,
             explanation=explanation,
+            result_metrics=result_metrics,
             selection_source="policy",
         )
     except Exception as error:
@@ -178,6 +178,7 @@ def execute_brain_decision(
         return DecisionExecution(
             decision=_fallback_decision(context),
             explanation=None,
+            result_metrics=(),
             selection_source="fault_fallback",
         )
 
@@ -201,7 +202,10 @@ def _validate_explanation_agrees_with_decision(
         ):
             raise ValueError("neural selected probability must match the selected legal action")
         return
-    if not isinstance(explanation, HeuristicBidExplanation):
+    if not isinstance(
+        explanation,
+        (HeuristicBidExplanation, FixedObjectiveOverlayV3BidExplanation),
+    ):
         return
     selected_bid = 0 if recorded.action_kind == "pass" else recorded.value
     if recorded.action_kind not in ("pass", "submitBid") or selected_bid != explanation.chosen_bid:

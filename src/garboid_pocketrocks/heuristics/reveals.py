@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+from dataclasses import dataclass
 
 from pocketrocks import DecisionContext, Suit
 
@@ -10,6 +11,17 @@ from garboid_pocketrocks.knowledge import RulesetKnowledge
 
 _CHART_BUCKET_COUNT = 6
 _SUIT_COUNT = len(Suit)
+
+
+@dataclass(frozen=True, slots=True)
+class _ObserverState:
+    """Validated seat-scoped inputs reused within one reveal decision."""
+
+    hand_suit_ids: tuple[int, ...]
+    value_chart: tuple[int, ...]
+    known_reveals: tuple[int, ...]
+    unseen_by_suit: tuple[int, ...]
+    hidden_slots: int
 
 
 def _probability(
@@ -56,13 +68,11 @@ def _expected_price(
     return expected
 
 
-def build_observer_price_vector(
+def _prepare_observer_state(
     context: DecisionContext,
     ruleset: RulesetKnowledge,
-    *,
-    revealed_suit: Suit | None = None,
-) -> tuple[float, ...]:
-    """Return expected prices for an observer who cannot see the actor's hand."""
+) -> _ObserverState:
+    """Validate once and retain only this actor's seat-scoped reveal inputs."""
 
     if context.decision_kind != "selectInfoToReveal":
         raise HeuristicInputError("observer prices require a reveal decision context")
@@ -72,8 +82,6 @@ def build_observer_price_vector(
     build_belief(context, ruleset)
     if not context.current_hand_suit_ids:
         raise HeuristicInputError("reveal decision requires a nonempty hand")
-    if revealed_suit is not None and int(revealed_suit) not in context.current_hand_suit_ids:
-        raise HeuristicInputError("candidate reveal suit is not present in the hand")
 
     try:
         revealed_by_suit = tuple(
@@ -97,14 +105,6 @@ def build_observer_price_vector(
             ruleset.private_cards_per_player - sum(row)
             for row in context.revealed_info_counts_by_seat
         )
-        known_reveals = list(revealed_by_suit)
-
-        if revealed_suit is not None:
-            candidate_index = int(revealed_suit) - 1
-            unseen_by_suit[candidate_index] -= 1
-            hidden_slots -= 1
-            known_reveals[candidate_index] += 1
-
         unseen_population = sum(unseen_by_suit)
         if any(count < 0 for count in unseen_by_suit):
             raise HeuristicInputError("known card counts exceed ruleset resources")
@@ -121,14 +121,47 @@ def build_observer_price_vector(
             raise HeuristicInputError(
                 "public card counts violate observer finite-population conservation"
             )
+        return _ObserverState(
+            hand_suit_ids=context.current_hand_suit_ids,
+            value_chart=context.value_chart,
+            known_reveals=revealed_by_suit,
+            unseen_by_suit=tuple(unseen_by_suit),
+            hidden_slots=hidden_slots,
+        )
+    except HeuristicInputError:
+        raise
+    except (IndexError, OverflowError, TypeError, ValueError, ZeroDivisionError) as error:
+        raise HeuristicInputError(str(error)) from error
 
+
+def _observer_price_vector(
+    state: _ObserverState,
+    *,
+    revealed_suit: Suit | None = None,
+) -> tuple[float, ...]:
+    """Price one candidate from validated inputs private to the current actor."""
+
+    if revealed_suit is not None and int(revealed_suit) not in state.hand_suit_ids:
+        raise HeuristicInputError("candidate reveal suit is not present in the hand")
+
+    unseen_by_suit = list(state.unseen_by_suit)
+    known_reveals = list(state.known_reveals)
+    hidden_slots = state.hidden_slots
+    if revealed_suit is not None:
+        candidate_index = int(revealed_suit) - 1
+        unseen_by_suit[candidate_index] -= 1
+        hidden_slots -= 1
+        known_reveals[candidate_index] += 1
+
+    unseen_population = sum(unseen_by_suit)
+    try:
         prices = tuple(
             _expected_price(
                 known_reveals=known,
                 unseen_suit_count=unseen,
                 unseen_population=unseen_population,
                 hidden_slots=hidden_slots,
-                value_chart=context.value_chart,
+                value_chart=state.value_chart,
             )
             for known, unseen in zip(
                 known_reveals,
@@ -146,13 +179,26 @@ def build_observer_price_vector(
     return prices
 
 
+def build_observer_price_vector(
+    context: DecisionContext,
+    ruleset: RulesetKnowledge,
+    *,
+    revealed_suit: Suit | None = None,
+) -> tuple[float, ...]:
+    """Return expected prices for an observer who cannot see the actor's hand."""
+
+    state = _prepare_observer_state(context, ruleset)
+    return _observer_price_vector(state, revealed_suit=revealed_suit)
+
+
 def choose_reveal(
     context: DecisionContext,
     ruleset: RulesetKnowledge,
 ) -> int:
     """Choose the legal hand index exposing the least value to opponents."""
 
-    before = build_observer_price_vector(context, ruleset)
+    state = _prepare_observer_state(context, ruleset)
+    before = _observer_price_vector(state)
     first_index_by_suit: dict[Suit, int] = {}
     for index, suit_id in enumerate(context.current_hand_suit_ids):
         first_index_by_suit.setdefault(Suit(suit_id), index)
@@ -167,11 +213,7 @@ def choose_reveal(
     )
     candidates: list[tuple[float, int]] = []
     for suit, first_index in first_index_by_suit.items():
-        after = build_observer_price_vector(
-            context,
-            ruleset,
-            revealed_suit=suit,
-        )
+        after = _observer_price_vector(state, revealed_suit=suit)
         influence = sum(
             held * (post_price - pre_price)
             for held, post_price, pre_price in zip(

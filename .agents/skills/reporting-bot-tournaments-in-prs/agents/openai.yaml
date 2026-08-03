@@ -1,0 +1,4 @@
+interface:
+  display_name: "Report Bot Tournaments in PRs"
+  short_description: "Put new bot tournament results in PR bodies"
+  default_prompt: "Use $reporting-bot-tournaments-in-prs to prepare a PR that introduces a new bot version."

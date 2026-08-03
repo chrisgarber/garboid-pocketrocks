@@ -26,8 +26,9 @@ class RaisingBrain:
         self,
         context: DecisionContext,
         ruleset: RulesetKnowledge,
+        history: PublicHistory,
     ) -> BotDecision:
-        del context, ruleset
+        del context, ruleset, history
         raise RuntimeError("brain exploded")
 
 
@@ -62,14 +63,6 @@ class HistoryRecordingBrain:
         self,
         context: DecisionContext,
         ruleset: RulesetKnowledge,
-    ) -> BotDecision:
-        del context, ruleset
-        raise RuntimeError("runner omitted public history")
-
-    def choose_decision_with_history(
-        self,
-        context: DecisionContext,
-        ruleset: RulesetKnowledge,
         history: PublicHistory,
     ) -> BotDecision:
         del ruleset
@@ -89,8 +82,9 @@ class IllegalDecisionBrain:
         self,
         context: DecisionContext,
         ruleset: RulesetKnowledge,
+        history: PublicHistory,
     ) -> BotDecision:
-        del ruleset
+        del ruleset, history
         if context.decision_kind == "selectInfoToReveal":
             return BotDecision.select_info_to_reveal(context.revealable_count)
         assert context.legal_max_amount is not None
@@ -110,8 +104,9 @@ class AlwaysPassBrain:
         self,
         context: DecisionContext,
         ruleset: RulesetKnowledge,
+        history: PublicHistory,
     ) -> BotDecision:
-        del ruleset
+        del ruleset, history
         if context.decision_kind == "selectInfoToReveal":
             return BotDecision.select_info_to_reveal(0)
         return BotDecision.submit_bid(0)

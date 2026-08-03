@@ -83,30 +83,25 @@ class MonteCarloBotBrain:
 
     # -- BotBrain ---------------------------------------------------------
 
-    def choose_decision(self, context: DecisionContext, ruleset: RulesetKnowledge) -> BotDecision:
-        """No-history fallback: garboid's deterministic valuator."""
-        if context.decision_kind == "selectInfoToReveal":
-            return self._reveal(context, ruleset)
-        try:
-            return BotDecision.submit_bid(self._valuator.evaluate_bid(context, ruleset).chosen_bid)
-        except HeuristicInputError:
-            return BotDecision.pass_turn()
-
-    # -- HistoryAwareBotBrain ---------------------------------------------
-
-    def choose_decision_with_history(
+    def choose_decision(
         self,
         context: DecisionContext,
         ruleset: RulesetKnowledge,
-        history: PublicHistory,
+        history: PublicHistory = (),
     ) -> BotDecision:
+        """Use public history when available, with a deterministic live fallback."""
         if context.decision_kind == "selectInfoToReveal":
             return self._reveal(context, ruleset)
+        if history:
+            try:
+                return self._monte_carlo_bid(context, ruleset, history)
+            except HeuristicInputError:
+                # Same degradation garboid's heuristic uses: a context that contradicts
+                # public knowledge means pass rather than guess.
+                return BotDecision.pass_turn()
         try:
-            return self._monte_carlo_bid(context, ruleset, history)
+            return BotDecision.submit_bid(self._valuator.evaluate_bid(context, ruleset).chosen_bid)
         except HeuristicInputError:
-            # Same degradation garboid's heuristic uses: a context that contradicts
-            # public knowledge means pass rather than guess.
             return BotDecision.pass_turn()
 
     # -- internals ---------------------------------------------------------

@@ -87,8 +87,8 @@ def test_frozen_neural_brains_return_deterministic_legal_decisions(
     knowledge = canonical_knowledge(3, value_chart="B")
     brain = brain_type(seed=7)
 
-    first = brain.choose_decision_with_history(context, knowledge, history)
-    second = brain.choose_decision_with_history(context, knowledge, history)
+    first = brain.choose_decision(context, knowledge, history)
+    second = brain.choose_decision(context, knowledge, history)
 
     assert first == second
     context.validate(first)
@@ -153,7 +153,7 @@ def test_ordinary_neural_choice_does_not_construct_an_explanation(
     history = public_history_from_sdk_events(session.events)
     knowledge = canonical_knowledge(3, value_chart="B")
     brain = VectorPpoSmallV1G1500Brain(seed=7)
-    expected = brain.choose_decision_with_history(context, knowledge, history)
+    expected = brain.choose_decision(context, knowledge, history)
 
     def reject_explanation(**_values: object) -> None:
         raise RuntimeError("explanation construction is disabled")
@@ -163,7 +163,7 @@ def test_ordinary_neural_choice_does_not_construct_an_explanation(
         reject_explanation,
     )
 
-    assert brain.choose_decision_with_history(context, knowledge, history) == expected
+    assert brain.choose_decision(context, knowledge, history) == expected
     with pytest.raises(RuntimeError, match="explanation construction"):
         brain.choose_explained_decision(context, knowledge, history)
 

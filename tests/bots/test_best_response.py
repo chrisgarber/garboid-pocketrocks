@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import inspect
+
 import pytest
 
-from garboid_pocketrocks.bots.base import HistoryAwareBotBrain
 from garboid_pocketrocks.bots.best_response import (
     MONTE_CARLO_V1_BOT_SPEC,
     MonteCarloV1Brain,
@@ -51,8 +52,7 @@ def test_brain_is_history_aware() -> None:
     """The opponent model needs resolved bids, which only public history carries."""
 
     brain = MONTE_CARLO_V1_BOT_SPEC.make_brain(seed=3)
-    assert isinstance(brain, HistoryAwareBotBrain)
-    assert callable(getattr(brain, "choose_decision", None))
+    assert "history" in inspect.signature(brain.choose_decision).parameters
 
 
 def test_seed_reproducible() -> None:

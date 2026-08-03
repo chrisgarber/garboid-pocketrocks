@@ -101,6 +101,7 @@ def test_bot_filters_use_curated_defaults_when_include_is_omitted() -> None:
     )
 
     assert tuple(spec.name for spec in selected) == (
+        "fixed-objective-overlay-v3",
         "fixed-objective-overlay-v2",
         "fixed-objective-overlay-v1",
         "fixed-bid-tuned-v1",

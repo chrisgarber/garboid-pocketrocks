@@ -6,6 +6,7 @@ from typing import Any, cast
 from pocketrocks import BotDecision, DecisionContext
 from pocketrocks.sim.sample_bots import GreedyValueBot
 
+from garboid_pocketrocks.adapters.public_history import PublicHistory
 from garboid_pocketrocks.bots.base import BotSpec
 from garboid_pocketrocks.knowledge import RulesetKnowledge
 
@@ -32,8 +33,9 @@ class SdkGreedyValueV1Brain:
         self,
         context: DecisionContext,
         ruleset: RulesetKnowledge,
+        history: PublicHistory = (),
     ) -> BotDecision:
-        del ruleset
+        del ruleset, history
         return _run_immediate_decision(self._bot.choose_decision(context))
 
 
