@@ -40,6 +40,7 @@ from garboid_pocketrocks.heuristics.ledger import (
 )
 from garboid_pocketrocks.heuristics.montecarlo import (
     MONTE_CARLO_V1,
+    MONTE_CARLO_V2,
     MonteCarloSettings,
 )
 from garboid_pocketrocks.heuristics.objectives import evaluate_objectives
@@ -324,4 +325,17 @@ class MonteCarloV1Brain(MonteCarloBotBrain):
 MONTE_CARLO_V1_BOT_SPEC = BotSpec.for_simulation(
     "monte-the-bookie-v1",
     MonteCarloV1Brain,
+)
+
+
+class MonteCarloV2Brain(MonteCarloBotBrain):
+    """Second Monte Carlo best-response generation, retuned for the current field."""
+
+    def __init__(self, seed: int | None = None) -> None:
+        super().__init__(seed, settings=MONTE_CARLO_V2)
+
+
+MONTE_CARLO_V2_BOT_SPEC = BotSpec.for_simulation(
+    "monte-the-bookie-v2",
+    MonteCarloV2Brain,
 )

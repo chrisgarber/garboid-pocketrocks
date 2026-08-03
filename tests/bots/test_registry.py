@@ -46,6 +46,7 @@ def test_registered_bot_specs_have_unique_names_and_ids() -> None:
         "vector_ppo_small_v1_g1500",
         "vector_ppo_large_v1_g350k",
         "monte-the-bookie-v1",
+        "monte-the-bookie-v2",
     )
     assert len({spec.name for spec in specs}) == len(specs)
     assert len({spec.bot_id for spec in specs}) == len(specs)
@@ -72,20 +73,29 @@ def test_default_tournament_specs_include_curated_field_and_v3_personalities() -
         "balanced-v3",
         "passive-v3",
         "monte-the-bookie-v1",
+        "monte-the-bookie-v2",
     )
 
 
 def test_monte_carlo_brain_is_exported_from_bots_package() -> None:
-    from garboid_pocketrocks.bots import MonteCarloBotBrain, MonteCarloV1Brain
+    from garboid_pocketrocks.bots import (
+        MonteCarloBotBrain,
+        MonteCarloV1Brain,
+        MonteCarloV2Brain,
+    )
     from garboid_pocketrocks.bots.best_response import (
         MonteCarloBotBrain as DefinedEngine,
     )
     from garboid_pocketrocks.bots.best_response import (
         MonteCarloV1Brain as DefinedGeneration,
     )
+    from garboid_pocketrocks.bots.best_response import (
+        MonteCarloV2Brain as DefinedSecondGeneration,
+    )
 
     assert MonteCarloBotBrain is DefinedEngine
     assert MonteCarloV1Brain is DefinedGeneration
+    assert MonteCarloV2Brain is DefinedSecondGeneration
 
 
 def test_fixed_bid_brain_is_exported_from_bots_package() -> None:
