@@ -119,10 +119,13 @@ def test_v1_uses_public_reveals_and_respects_legal_maximum() -> None:
 def test_v1_passes_non_resource_actions_and_reveals_first_card() -> None:
     brain = SurplusV1Brain()
 
-    assert brain.choose_decision(
-        _context(action_id=5),
-        canonical_knowledge(3),
-    ) == BotDecision.pass_turn()
+    assert (
+        brain.choose_decision(
+            _context(action_id=5),
+            canonical_knowledge(3),
+        )
+        == BotDecision.pass_turn()
+    )
     assert brain.choose_decision(
         _context(decision_kind="selectInfoToReveal", legal_max=None),
         canonical_knowledge(3),
@@ -203,10 +206,13 @@ def test_v4_bids_the_guaranteed_bonus_for_investments_but_not_loans() -> None:
         _context(action_id=6, legal_max=7),
         canonical_knowledge(3),
     ) == BotDecision.submit_bid(7)
-    assert brain.choose_decision(
-        _context(action_id=4, legal_max=50),
-        canonical_knowledge(3),
-    ) == BotDecision.pass_turn()
+    assert (
+        brain.choose_decision(
+            _context(action_id=4, legal_max=50),
+            canonical_knowledge(3),
+        )
+        == BotDecision.pass_turn()
+    )
 
 
 def test_v4_branches_from_v2_and_preserves_all_prior_identities() -> None:
@@ -549,10 +555,13 @@ def test_v9_preserves_cash_for_future_resources_before_buying_investments() -> N
         context,
         canonical_knowledge(3),
     ) == BotDecision.submit_bid(5)
-    assert SurplusV9Brain().choose_decision(
-        context,
-        canonical_knowledge(3),
-    ) == BotDecision.pass_turn()
+    assert (
+        SurplusV9Brain().choose_decision(
+            context,
+            canonical_knowledge(3),
+        )
+        == BotDecision.pass_turn()
+    )
 
 
 def test_v9_borrows_only_while_future_resource_demand_exceeds_cash() -> None:
@@ -568,10 +577,13 @@ def test_v9_borrows_only_while_future_resource_demand_exceeds_cash() -> None:
         low_cash,
         canonical_knowledge(3),
     ) == BotDecision.submit_bid(3)
-    assert SurplusV9Brain().choose_decision(
-        exhausted_resources,
-        canonical_knowledge(3),
-    ) == BotDecision.pass_turn()
+    assert (
+        SurplusV9Brain().choose_decision(
+            exhausted_resources,
+            canonical_knowledge(3),
+        )
+        == BotDecision.pass_turn()
+    )
 
 
 def test_v9_identity_preserves_all_prior_generations() -> None:
@@ -626,11 +638,14 @@ def test_v10_stops_borrowing_when_observed_resource_prices_make_cash_sufficient(
         canonical_knowledge(3),
         history,
     ) == BotDecision.submit_bid(3)
-    assert SurplusV10Brain().choose_decision(
-        context,
-        canonical_knowledge(3),
-        history,
-    ) == BotDecision.pass_turn()
+    assert (
+        SurplusV10Brain().choose_decision(
+            context,
+            canonical_knowledge(3),
+            history,
+        )
+        == BotDecision.pass_turn()
+    )
 
 
 def test_v10_identity_preserves_all_prior_generations() -> None:

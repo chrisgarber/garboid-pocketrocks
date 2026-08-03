@@ -58,10 +58,7 @@ class SurplusPolicy:
             raise ValueError("resource value multiplier must be nonnegative")
         if self.objective_value_numerator < 0 or self.objective_value_denominator <= 0:
             raise ValueError("objective value multiplier must be nonnegative")
-        if (
-            self.opponent_objective_numerator < 0
-            or self.opponent_objective_denominator <= 0
-        ):
+        if self.opponent_objective_numerator < 0 or self.opponent_objective_denominator <= 0:
             raise ValueError("opponent objective multiplier must be nonnegative")
         for name, numerator, denominator in (
             (
@@ -264,9 +261,7 @@ class SurplusBrain:
             for candidate in range(1, 6)
         )
         remaining_cards = (
-            sum(ruleset.resource_counts)
-            - sum(known_info_counts)
-            - sum(seen_resource_counts)
+            sum(ruleset.resource_counts) - sum(known_info_counts) - sum(seen_resource_counts)
         )
         opponent_hidden_cards = sum(
             max(0, ruleset.private_cards_per_player - sum(revealed_counts))
@@ -285,15 +280,11 @@ class SurplusBrain:
             or remaining_suit_cards < 0
             or remaining_suit_cards > remaining_cards
         ):
-            return Fraction(
-                context.value_chart[min(known_info_counts[suit_id - 1], 5)]
-            )
+            return Fraction(context.value_chart[min(known_info_counts[suit_id - 1], 5)])
 
         denominator = comb(remaining_cards, opponent_hidden_cards)
         if denominator == 0:
-            return Fraction(
-                context.value_chart[min(known_info_counts[suit_id - 1], 5)]
-            )
+            return Fraction(context.value_chart[min(known_info_counts[suit_id - 1], 5)])
         minimum = max(0, opponent_hidden_cards - (remaining_cards - remaining_suit_cards))
         maximum = min(remaining_suit_cards, opponent_hidden_cards)
         numerator = sum(
@@ -302,9 +293,7 @@ class SurplusBrain:
                 remaining_cards - remaining_suit_cards,
                 opponent_hidden_cards - hidden_count,
             )
-            * context.value_chart[
-                min(known_info_counts[suit_id - 1] + hidden_count, 5)
-            ]
+            * context.value_chart[min(known_info_counts[suit_id - 1] + hidden_count, 5)]
             for hidden_count in range(minimum, maximum + 1)
         )
         return Fraction(numerator, denominator)
@@ -443,8 +432,7 @@ class SurplusBrain:
             return sum(count >= 2 for count in counts) >= 2
         assert objective.requirement is not None
         return all(
-            count >= required
-            for count, required in zip(counts, objective.requirement, strict=True)
+            count >= required for count, required in zip(counts, objective.requirement, strict=True)
         )
 
     def _market_price_cap(self, context: DecisionContext, history: PublicHistory) -> int:
@@ -600,9 +588,7 @@ class SurplusBrain:
             history,
             awarded_resource_count=awarded_resource_count,
         )
-        reserve = self._ceil_fraction(
-            basis * Fraction(reserve_numerator, reserve_denominator)
-        )
+        reserve = self._ceil_fraction(basis * Fraction(reserve_numerator, reserve_denominator))
         cash = context.cash_by_seat[context.bot_seat]
         return max(0, cash - reserve)
 
@@ -631,10 +617,7 @@ class SurplusBrain:
                 self._policy.loan_fee_denominator,
             )
         )
-        if (
-            self._policy.use_action_liquidity_demand
-            and self._policy.loan_opening_fee_numerator > 0
-        ):
+        if self._policy.use_action_liquidity_demand and self._policy.loan_opening_fee_numerator > 0:
             opening_amount = int(
                 principal
                 * Fraction(
