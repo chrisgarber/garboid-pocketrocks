@@ -106,6 +106,70 @@ is favorable but not statistically decisive. Against v12, v14 scored 53.41%
 over 2,639 shared games (51.53%-55.29%); their bootstrap rating intervals do
 not overlap.
 
+## Wide-field robustness check
+
+A post-release robustness run used fresh root `2026081699`, 30,000 games,
+players 3-5, charts A-E, 200 bootstrap resamples, and decision diagnostics.
+The 20-bot field added all three overlay generations, three fixed-bid variants,
+three neural generations, three v3 personality bots, and the SDK greedy bot to
+the elite field. Every bot appeared in 6,000 games, all 2,201,551 decisions
+reconciled, and no bot faulted.
+
+| Bot | Rank | PL rating | 95% interval | Mean money | Win rate | Faults |
+|---|---:|---:|---:|---:|---:|---:|
+| monte-the-bookie-v2 | 1/20 | 1681.46 | 1674.7-1688.6 | 57.50 | 47.9% | 0 |
+| monte-the-bookie-v1 | 2/20 | 1615.87 | 1608.5-1623.3 | 53.70 | 38.1% | 0 |
+| surplus-v11 | 3/20 | 1606.40 | 1599.6-1613.3 | 53.46 | 38.4% | 0 |
+| surplus-v12 | 4/20 | 1602.53 | 1594.9-1610.2 | 53.33 | 37.3% | 0 |
+| surplus-v14 | 5/20 | 1600.71 | 1594.8-1607.8 | 52.88 | 34.9% | 0 |
+| surplus-v13 | 6/20 | 1598.83 | 1593.2-1605.8 | 52.95 | 37.7% | 0 |
+| fixed-objective-overlay-v3 | 7/20 | 1583.39 | 1577.5-1588.6 | 51.78 | 30.8% | 0 |
+
+This confirms the user's earlier observation: v12 clearly outranked overlay v3
+in a diverse field. Their bootstrap rating intervals do not overlap. Across
+999 games containing both bots, v12's direct score was 56.86% with an
+approximate normal 95% interval of 53.83%-59.89%; its mean-money advantage in
+those shared games was $3.35 ($2.30-$4.40). V12 scored above 50% in 13 of 15
+chart/player-count cells.
+
+The reversal from the nine-bot elite field is a multiplayer interaction, not a
+contradiction in arithmetic. In that elite field v12's direct score against
+overlay v3 was 48.94% (47.06%-50.82%) with a statistically unresolved $0.24
+money edge. Adding diverse co-opponents changed auction prices, objective
+competition, and which strategies benefited from the other seats.
+
+In the wide field, v12 earned $8.56 more item value and $3.78 more objective
+payout per game than overlay v3, while overlay earned $3.97 more investment
+value and carried $6.41 less loan liability. V12 won 4.739 resource cards and
+claimed 1.350 objectives per game, compared with overlay's 4.022 cards and
+0.884 objectives. The resource/objective advantage outweighed overlay's
+investment and debt advantage by $1.55 in marginal mean score and $3.35 when
+the bots shared a game.
+
+This run does not establish v12 as stronger than v14: their point estimates
+differ by only 1.82 rating and their bootstrap intervals substantially overlap.
+It does establish that field composition matters and that overlay v3 should
+not be described as generally ahead of v12.
+
+- Wide-field summary SHA-256:
+  `81f508c1ad5b9d2f5c4aa092d0544c9f03c48a26242a7c4af53ede3a6cfd23db`
+- Machine-readable evidence:
+  [summary.json](tournaments/2026-08-03-surplus-v12-overlay-v3-wide-field/summary.json)
+
+```bash
+uv run --extra neural garboid-tournament \
+  --games 30000 \
+  --players 3,4,5 \
+  --charts A,B,C,D,E \
+  --seed 2026081699 \
+  --workers 8 \
+  --batch-size 64 \
+  --bootstrap-samples 200 \
+  --decision-reports \
+  --bots monte-the-bookie-v2,monte-the-bookie-v1,surplus-v14,surplus-v13,surplus-v12,surplus-v11,fixed-objective-overlay-v3,fixed-objective-overlay-v2,fixed-objective-overlay-v1,fixed-bid-tuned-v1,fixed-bid-diverse-v1,fixed-bid-tuned-normal-v1,vector_ppo_large_v2_g1750k,vector_ppo_large_v1_g350k,vector_ppo_small_v1_g1500,aggressive-v3,balanced-v3,passive-v3,sdk-greedy-value-v1,fixed-bid \
+  --output-dir artifacts/tournaments/surplus-v12-overlay-v3-wide-field
+```
+
 ## Advanced diagnostics
 
 | Measure per game | surplus-v12 | surplus-v13 | surplus-v14 | Monte v2 |
