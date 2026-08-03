@@ -22,6 +22,8 @@ def main() -> None:
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--games", type=int, required=True)
     parser.add_argument("--bootstrap-samples", type=int, default=0)
+    parser.add_argument("--workers", type=int, default=1)
+    parser.add_argument("--decision-reports", action="store_true")
     parser.add_argument("--seed", type=int, required=True)
     arguments = parser.parse_args()
 
@@ -43,8 +45,9 @@ def main() -> None:
             root_seed=arguments.seed,
             batch_size=64,
             bootstrap_samples=arguments.bootstrap_samples,
+            decision_reports=arguments.decision_reports,
         ),
-        workers=1,
+        workers=arguments.workers,
         output_dir=arguments.output_dir,
     )
     for row in run.analysis.rows:
