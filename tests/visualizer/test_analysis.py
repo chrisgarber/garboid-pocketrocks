@@ -109,6 +109,13 @@ def _dataset(tmp_path: Path) -> TournamentDataset:
                     "bundle_suits": [],
                     "claimed_objective_ids": [],
                 },
+                {
+                    "action": "Invest5",
+                    "winner_seat": 0,
+                    "paid": 4,
+                    "bundle_suits": [],
+                    "claimed_objective_ids": [],
+                },
             ],
             "scores": [
                 {
@@ -156,7 +163,22 @@ def test_bot_engine_explains_objectives_profit_loans_and_cash(tmp_path: Path) ->
     assert alpha["opponents"][0]["score"] == 1.0
     assert alpha["objectives"][0]["game_rate"] == 1.0
     assert alpha["objectives"][0]["objectives_per_100_games"] == 100
+    assert [row["action"] for row in alpha["auction_profit"]] == ["Auction 1 resource"]
     assert alpha["auction_profit"][0]["mean"] == 2
+    assert alpha["investment_prices"] == [
+        {
+            "action": "Invest $5",
+            "count": 1,
+            "fixed_profit": 5,
+            "mean": 4,
+            "median": 4,
+            "p10": 4,
+            "p25": 4,
+            "p75": 4,
+            "p90": 4,
+            "positive_rate": 1,
+        }
+    ]
     assert alpha["loans"][0]["mean"] == 2
     assert alpha["loans"][0]["mean_upfront_liquidity"] == 8
     assert alpha["cash_by_phase"][0]["cash_zero_rate"] == 1.0

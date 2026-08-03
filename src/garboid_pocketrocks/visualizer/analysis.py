@@ -66,6 +66,7 @@ class _BotAccumulator:
         default_factory=lambda: defaultdict(_ObjectiveAccumulator)
     )
     profits: dict[str, list[int]] = field(default_factory=lambda: defaultdict(list))
+    investment_prices: dict[str, list[int]] = field(default_factory=lambda: defaultdict(list))
     loans: dict[str, list[int]] = field(default_factory=lambda: defaultdict(list))
     action_wins: dict[str, int] = field(default_factory=lambda: defaultdict(int))
     cash_by_phase: dict[str, _CashAccumulator] = field(
@@ -220,6 +221,14 @@ class BotInsightsEngine:
                 {"action": _DISPLAY_ACTION.get(action, action), **_distribution(values)}
                 for action, values in sorted(accumulator.profits.items())
             ],
+            "investment_prices": [
+                {
+                    "action": _DISPLAY_ACTION.get(action, action),
+                    "fixed_profit": _INVESTMENT_VALUE[action],
+                    **_distribution(values),
+                }
+                for action, values in sorted(accumulator.investment_prices.items())
+            ],
             "loans": [
                 {
                     "action": _DISPLAY_ACTION.get(action, action),
@@ -297,7 +306,7 @@ class BotInsightsEngine:
                     gross_value = sum(chart[int(suit) - 1] for suit in turn["bundle_suits"])
                     accumulator.profits[action].append(gross_value - paid)
                 elif action in _INVESTMENT_VALUE:
-                    accumulator.profits[action].append(_INVESTMENT_VALUE[action] - paid)
+                    accumulator.investment_prices[action].append(paid)
 
             for seat, bot_id in enumerate(bot_ids):
                 if bot_id not in self._bots:
