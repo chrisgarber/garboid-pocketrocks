@@ -123,6 +123,10 @@ uv run --extra neural garboid-train train \
 uv run --extra neural garboid-train train \
   --config configs/neural/cold-mixed-mps-5m-v1.json \
   --output-dir artifacts/cold-mixed-mps-5m-v1
+
+uv run --extra neural garboid-train train \
+  --config configs/neural/cold-mixed-mps-15m-preflight-v2.json \
+  --output-dir artifacts/cold-mixed-mps-15m-preflight-v2
 ```
 
 The profiles use different model shapes and start separate lineages. Wall-time
@@ -142,6 +146,8 @@ RUN/
   resolved-config.json
   benchmark.json
   metrics.jsonl
+  checkpoints/periodic/
+    update-NNNNNNNN/
   checkpoints/latest/
     manifest.json
     metrics.json
@@ -154,7 +160,9 @@ Each completed update atomically replaces `checkpoints/latest`. The manifest
 contains configuration, progress, lineage, repository provenance, tensor
 metadata, parameter digest, and payload checksums. Loading fails closed on
 missing or extra files, checksum mismatch, incompatible schemas or tensors,
-and non-finite state.
+and non-finite state. When `checkpoint_interval_seconds` is configured,
+validated copies are retained under `checkpoints/periodic` and rotated down to
+`keep_periodic_checkpoints` entries.
 
 Inspect or resume:
 
@@ -170,12 +178,13 @@ uv run --extra neural garboid-train resume \
 ```
 
 Resume starts at the next update boundary in a new output directory. Compatible
-run controls may be overridden, but the root seed and model profile may not.
+run controls may be overridden, but the root seed, model profile, and bot
+generation may not.
 
 Historical checkpoint configurations remain readable. Training rejects
-non-default interval checkpoints, checkpoint retention, start/periodic/final
-evaluation, and checkpoint-league mixing before creating an output directory
-because those controls are not implemented by the current runtime.
+start/periodic/final evaluation and checkpoint-league mixing before creating an
+output directory because those controls are not implemented by the current
+runtime.
 
 ## Completed evaluation and promotion
 
@@ -194,11 +203,12 @@ does not claim that the large policy is the best bot overall.
 ## Metrics and extension points
 
 Per-update JSON records collection throughput, inference batching and queue
-timing, worker timing, reward totals, PPO losses, entropy, approximate KL,
-clip fraction, gradient norms, and optimizer steps. Value diagnostics include
-error, bias, explained variance, correlation, and calibration globally and by
-chart, player count, and game phase. Undefined statistics serialize as `null`,
-never NaN.
+timing, worker timing, reward totals, scalar PPO losses, approximate KL, clip
+fraction, optimizer steps, and compact distribution summaries. Raw transition
+advantages, ratios, values, entropies, and gradient norms are discarded after
+the update instead of being persisted. Value diagnostics include error, bias,
+explained variance, correlation, and calibration globally and by chart, player
+count, and game phase. Undefined statistics serialize as `null`, never NaN.
 
 Current extension seams include leagues, new model profiles, and additional
 remote neural wrappers. Activating one requires real runtime behavior, tests,
