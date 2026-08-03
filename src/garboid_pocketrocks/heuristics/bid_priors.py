@@ -1,0 +1,462 @@
+"""Empirical opponent-bid prior, fitted offline from recorded decision traces.
+
+An opponent model built only from the current game has nothing to work with on the
+opening turns -- which is exactly when the largest lots are contested. This table
+supplies the missing prior: what a table actually pays, expressed as a fraction of the
+bidder's available cash so it transfers across player counts and cash levels.
+
+Provenance: 66,260 bidding decisions captured with
+``MonteCarloConfig(capture_decision_traces=True)`` over 900 games of the registered
+field at every player count and value chart, root seed 31337. Each bucket is stored as
+25 quantiles of the observed bid/cash ratio. Passes count as a zero bid, because a
+rival declining to compete is as informative as a large one.
+
+Regenerate with ``scripts/analysis/fit_bid_prior.py``.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+import numpy as np
+from pocketrocks import ActionId
+
+#: Phase boundaries on the one-based turn, matching the bands used by
+#: ``diagnostics.analysis`` and ``scripts/analysis/late_resource_auctions.py``.
+EARLY_MAX = 5
+MIDDLE_MAX = 12
+
+ACTION_CLASSES = ("auction1", "auction2", "loan", "invest")
+PHASES = ("early", "middle", "late")
+
+_ACTION_CLASS = {
+    int(ActionId.AUCTION1): "auction1",
+    int(ActionId.AUCTION2): "auction2",
+    int(ActionId.LOAN10): "loan",
+    int(ActionId.LOAN20): "loan",
+    int(ActionId.INVEST5): "invest",
+    int(ActionId.INVEST10): "invest",
+}
+
+
+def action_class(action_id: int | None) -> str | None:
+    """Group a bidding action by how differently rivals price it."""
+
+    return _ACTION_CLASS.get(int(action_id)) if action_id is not None else None
+
+
+def phase_for(turn_index: int) -> str:
+    """Bucket a zero-based turn index into an early/middle/late band."""
+
+    turn = turn_index + 1
+    if turn <= EARLY_MAX:
+        return "early"
+    if turn <= MIDDLE_MAX:
+        return "middle"
+    return "late"
+
+
+def prior_key(action: str, phase: str) -> str:
+    return f"{action}/{phase}"
+
+
+@dataclass(frozen=True, slots=True)
+class BidPrior:
+    """Bid-as-fraction-of-cash quantiles, keyed by ``action/phase``."""
+
+    samples: dict[str, tuple[float, ...]]
+    fallback: tuple[float, ...]
+
+    def draw(
+        self,
+        action_id: int | None,
+        turn_index: int,
+        cap: int,
+        count: int,
+        rng: np.random.Generator,
+    ) -> np.ndarray:
+        """Sample ``count`` absolute bids for a seat that can afford up to ``cap``."""
+
+        pool = self.pool(action_id, turn_index)
+        if not pool or cap <= 0:
+            return np.zeros(count, dtype=np.int64)
+        fractions = rng.choice(np.asarray(pool, dtype=np.float64), size=count)
+        return np.clip(np.rint(fractions * cap).astype(np.int64), 0, cap)
+
+    def mean_fraction(self, action_id: int | None, turn_index: int) -> float:
+        pool = self.pool(action_id, turn_index)
+        return float(np.mean(pool)) if pool else 0.0
+
+    def pool(self, action_id: int | None, turn_index: int) -> tuple[float, ...]:
+        action = action_class(action_id)
+        if action is None:
+            return self.fallback
+        return self.samples.get(prior_key(action, phase_for(turn_index)), self.fallback)
+
+
+_SAMPLES: dict[str, tuple[float, ...]] = {
+    "auction1/early": (
+        0,
+        0,
+        0.06667,
+        0.1,
+        0.12195,
+        0.15,
+        0.16,
+        0.16667,
+        0.2,
+        0.2,
+        0.2,
+        0.2,
+        0.24,
+        0.25,
+        0.25,
+        0.26667,
+        0.3,
+        0.3,
+        0.33333,
+        0.4,
+        0.47789,
+        0.6,
+        0.7,
+        0.86667,
+        1,
+    ),
+    "auction1/late": (
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0.04,
+        0.08333,
+        0.17518,
+        0.27833,
+        0.33333,
+        0.4,
+        0.5,
+        0.5,
+        0.5,
+        0.5,
+        0.5,
+        0.6,
+        0.66667,
+        0.66667,
+        0.75,
+        1,
+        1,
+        1,
+    ),
+    "auction1/middle": (
+        0,
+        0,
+        0,
+        0.03571,
+        0.07143,
+        0.125,
+        0.16667,
+        0.2,
+        0.25,
+        0.26667,
+        0.3,
+        0.33333,
+        0.375,
+        0.41667,
+        0.45967,
+        0.5,
+        0.5,
+        0.54545,
+        0.6,
+        0.66667,
+        0.66667,
+        0.75,
+        0.85714,
+        1,
+        1,
+    ),
+    "auction2/early": (
+        0,
+        0.03333,
+        0.13333,
+        0.2069,
+        0.25,
+        0.3,
+        0.32,
+        0.33333,
+        0.36,
+        0.4,
+        0.4,
+        0.43333,
+        0.45,
+        0.46667,
+        0.5,
+        0.5,
+        0.5,
+        0.55,
+        0.6,
+        0.64,
+        0.68,
+        0.73684,
+        0.8,
+        0.92857,
+        1,
+    ),
+    "auction2/late": (
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0.04545,
+        0.125,
+        0.28571,
+        0.38462,
+        0.42857,
+        0.5,
+        0.5,
+        0.5,
+        0.5,
+        0.6,
+        0.66667,
+        0.66667,
+        0.68421,
+        0.75,
+        0.83333,
+        1,
+        1,
+        1,
+    ),
+    "auction2/middle": (
+        0,
+        0,
+        0,
+        0.04348,
+        0.15,
+        0.25641,
+        0.33333,
+        0.4,
+        0.45,
+        0.5,
+        0.5,
+        0.5,
+        0.52632,
+        0.6,
+        0.6,
+        0.66667,
+        0.66667,
+        0.66667,
+        0.71429,
+        0.75,
+        0.77778,
+        0.86207,
+        1,
+        1,
+        1,
+    ),
+    "invest/early": (
+        0,
+        0,
+        0.05,
+        0.1,
+        0.14286,
+        0.16,
+        0.2,
+        0.2,
+        0.24,
+        0.26667,
+        0.3,
+        0.32,
+        0.35,
+        0.4,
+        0.45,
+        0.48,
+        0.5,
+        0.5,
+        0.56125,
+        0.65,
+        0.71429,
+        0.75,
+        0.8,
+        0.93399,
+        1,
+    ),
+    "invest/late": (
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0.03962,
+        0.09091,
+        0.2,
+        0.33333,
+        0.4,
+        0.46154,
+        0.5,
+        0.5,
+        0.5,
+        0.5,
+        0.6,
+        0.66667,
+        0.66667,
+        0.66667,
+        0.75,
+        0.8,
+        1,
+        1,
+        1,
+    ),
+    "invest/middle": (
+        0,
+        0,
+        0,
+        0.05263,
+        0.11765,
+        0.1875,
+        0.24,
+        0.27778,
+        0.33333,
+        0.375,
+        0.42857,
+        0.46154,
+        0.5,
+        0.5,
+        0.5,
+        0.52,
+        0.6,
+        0.63636,
+        0.66667,
+        0.66667,
+        0.75,
+        0.75,
+        0.88889,
+        1,
+        1,
+    ),
+    "loan/early": (
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0.05882,
+        0.08,
+        0.1,
+        0.12,
+        0.15385,
+        0.2,
+        0.24,
+        0.28,
+        0.32,
+        0.4,
+        0.61538,
+        1.1163,
+        1.5,
+        1.5,
+    ),
+    "loan/late": (
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0.04364,
+        0.13333,
+        0.28571,
+        0.44444,
+        0.66667,
+        1,
+        1.22883,
+        1.5,
+        1.5,
+        1.5,
+        1.5,
+    ),
+    "loan/middle": (
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0.05,
+        0.1,
+        0.15,
+        0.2,
+        0.25,
+        0.3,
+        0.375,
+        0.5,
+        0.66667,
+        1,
+        1,
+        1.5,
+        1.5,
+        1.5,
+        1.5,
+    ),
+}
+
+_FALLBACK: tuple[float, ...] = (
+    0,
+    0,
+    0,
+    0,
+    0,
+    0.05882,
+    0.12,
+    0.16,
+    0.2,
+    0.24,
+    0.26667,
+    0.30769,
+    0.35,
+    0.4,
+    0.45455,
+    0.5,
+    0.5,
+    0.55,
+    0.6,
+    0.66667,
+    0.71429,
+    0.76923,
+    1,
+    1,
+    1.5,
+)
+
+#: The fitted table the released Monte Carlo brain plays with. Immutable, like any
+#: other released coefficient set: fit a new one under a new name rather than
+#: editing these numbers.
+BID_PRIOR_V1 = BidPrior(samples=_SAMPLES, fallback=_FALLBACK)
+
+#: Deliberately wide, used only when no fitted table applies. An uninformative prior
+#: is safer than a confidently wrong one.
+UNINFORMED_BID_PRIOR = BidPrior(
+    samples={},
+    fallback=tuple(round(0.02 * step, 4) for step in range(1, 16)),
+)
