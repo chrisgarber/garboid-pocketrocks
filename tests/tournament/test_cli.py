@@ -145,7 +145,7 @@ def test_cli_runs_all_conditions_with_current_registry(tmp_path: Path) -> None:
             "--bootstrap-samples",
             "0",
             "--exclude-bots",
-            "vector_ppo_small_v1_g1500,vector_ppo_large_v1_g350k",
+            ("vector_ppo_small_v1_g1500,vector_ppo_large_v1_g350k,vector_ppo_large_v2_g1750k"),
             "--output-dir",
             str(tmp_path),
         ],
@@ -183,7 +183,7 @@ def test_cli_writes_and_prints_decision_reports_only_when_requested(
         "--bootstrap-samples",
         "0",
         "--exclude-bots",
-        "vector_ppo_small_v1_g1500,vector_ppo_large_v1_g350k",
+        ("vector_ppo_small_v1_g1500,vector_ppo_large_v1_g350k,vector_ppo_large_v2_g1750k"),
     ]
 
     ordinary = subprocess.run(

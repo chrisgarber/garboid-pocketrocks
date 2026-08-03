@@ -45,6 +45,7 @@ def test_registered_bot_specs_have_unique_names_and_ids() -> None:
         "surplus-v10",
         "vector_ppo_small_v1_g1500",
         "vector_ppo_large_v1_g350k",
+        "vector_ppo_large_v2_g1750k",
         "monte-the-bookie-v1",
     )
     assert len({spec.name for spec in specs}) == len(specs)

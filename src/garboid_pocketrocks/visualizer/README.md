@@ -47,9 +47,12 @@ small aggregate payload in HTML rather than copying millions of raw decisions.
 - **Games with an objective claim** is the share of games where the focal bot
   claimed at least one objective, conditioned on the named opponent appearing.
   The report also retains objectives per 100 games.
-- **Auction profit** for resource auctions is terminal chart value of the won
-  bundle minus its winning payment. For investments it is face payout minus
-  payment. Loans are excluded because principal is repaid at scoring.
+- **Resource-auction profit** is terminal chart value of the won bundle minus
+  its winning payment.
+- **Investment purchase price** is the liquidity locked by the winning bid.
+  That principal is returned at scoring, so net profit is always the card's
+  fixed $5 or $10 payout regardless of purchase price.
+- **Loans** are excluded from profit because principal is repaid at scoring.
 - **Loan valuation** shows the distributions of prices a bot was willing to
   win at. `principal - payment` is labeled up-front liquidity, not profit.
 - **Cash-starved** means a bid request with zero liquid cash. A separate

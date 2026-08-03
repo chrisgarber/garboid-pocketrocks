@@ -25,3 +25,6 @@ def test_report_is_self_contained_and_escapes_script_terminators() -> None:
     assert "https://" not in html
     assert "<\\/script><script>alert(1)<\\/script>" in html
     assert html.count("</script>") == 2
+    assert "Profit on won resource auctions" in html
+    assert "Winning prices for investments" in html
+    assert "Net profit is always $5 for Invest $5 and $10 for Invest $10." in html

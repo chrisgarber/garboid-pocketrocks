@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
+from fractions import Fraction
 
-from garboid_pocketrocks.knowledge import ruleset_name
+from garboid_pocketrocks.knowledge import ruleset_name, value_chart_from_ruleset_name
+from garboid_pocketrocks.neural.opponent_pool import STRONG_FIELD_POOL_V1
 
 _UNSIGNED_63_BIT_MASK = (1 << 63) - 1
 
@@ -115,6 +117,100 @@ def plan_mirror_episodes(
                     )
                 )
     return tuple(plans)
+
+
+def plan_strong_field_episodes(
+    *,
+    root_seed: int,
+    update_index: int,
+    games_per_cell: int,
+    policy_identity: str,
+    fixed_opponent_share: Fraction,
+) -> tuple[SelfPlayEpisodePlan, ...]:
+    """Plan focal-seat learning against a fixed/self-play opponent mix."""
+
+    if not isinstance(fixed_opponent_share, Fraction) or not 0 <= fixed_opponent_share <= 1:
+        raise ValueError("fixed_opponent_share must be an exact Fraction from zero to one")
+    base = plan_mirror_episodes(
+        root_seed=root_seed,
+        update_index=update_index,
+        games_per_cell=games_per_cell,
+        policy_identity=policy_identity,
+    )
+    focal_seats = tuple(
+        (
+            plan.episode_index // 15
+            + _derive_seed(
+                root_seed,
+                "focal-seat",
+                update_index,
+                ord(value_chart_from_ruleset_name(plan.ruleset_name)),
+                plan.player_count,
+            )
+        )
+        % plan.player_count
+        for plan in base
+    )
+    opponent_slots = tuple(
+        (plan_index, seat)
+        for plan_index, plan in enumerate(base)
+        for seat in range(plan.player_count)
+        if seat != focal_seats[plan_index]
+    )
+    ordered_slots = sorted(
+        opponent_slots,
+        key=lambda slot: (
+            _derive_seed(
+                root_seed,
+                "fixed-opponent-kind",
+                update_index,
+                base[slot[0]].episode_index,
+                slot[1],
+            ),
+            slot,
+        ),
+    )
+    fixed_count = (
+        len(opponent_slots) * fixed_opponent_share.numerator // fixed_opponent_share.denominator
+    )
+    fixed_slots = frozenset(ordered_slots[:fixed_count])
+    ordered_fixed = sorted(
+        fixed_slots,
+        key=lambda slot: (
+            _derive_seed(
+                root_seed,
+                "fixed-opponent-identity",
+                update_index,
+                base[slot[0]].episode_index,
+                slot[1],
+            ),
+            slot,
+        ),
+    )
+    identity_by_slot = {
+        slot: STRONG_FIELD_POOL_V1[index % len(STRONG_FIELD_POOL_V1)].name
+        for index, slot in enumerate(ordered_fixed)
+    }
+    return tuple(
+        SelfPlayEpisodePlan(
+            update_index=plan.update_index,
+            episode_index=plan.episode_index,
+            ruleset_name=plan.ruleset_name,
+            player_count=plan.player_count,
+            engine_seed=plan.engine_seed,
+            seat_sampling_seeds=plan.seat_sampling_seeds,
+            seat_policies=tuple(
+                SeatPolicy(policy_identity, trainable=True)
+                if seat == focal_seats[plan_index]
+                else SeatPolicy(
+                    identity_by_slot.get((plan_index, seat), policy_identity),
+                    trainable=False,
+                )
+                for seat in range(plan.player_count)
+            ),
+        )
+        for plan_index, plan in enumerate(base)
+    )
 
 
 def decision_seed(

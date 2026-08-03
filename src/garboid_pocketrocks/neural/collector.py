@@ -8,10 +8,14 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 import torch
+from pocketrocks import BotDecision
+from pocketrocks.exceptions import InvalidBotDecision
 
+from garboid_pocketrocks.bots.base import BotBrain
 from garboid_pocketrocks.neural.config import NeuralEncoderConfig
 from garboid_pocketrocks.neural.encoding import batch_observations
 from garboid_pocketrocks.neural.model import NeuralPolicy
+from garboid_pocketrocks.neural.opponent_pool import FIXED_TRAINING_BOT_SPECS_BY_NAME
 from garboid_pocketrocks.neural.planning import SelfPlayEpisodePlan
 from garboid_pocketrocks.neural.policy import evaluate_row_seeded_policy
 from garboid_pocketrocks.neural.rollout import MultiSeatEpisode, RolloutBatch
@@ -54,7 +58,9 @@ class CollectorMetrics:
 
     @property
     def mean_inference_batch_size(self) -> float:
-        return self.decisions / self.inference_batches
+        if not self.inference_batches:
+            return 0.0
+        return sum(self.inference_batch_sizes) / self.inference_batches
 
 
 def collect_self_play(
@@ -86,6 +92,7 @@ def collect_self_play(
     decisions = 0
     inference_seconds = 0.0
     inference_batch_sizes: list[int] = []
+    fixed_brains: dict[tuple[int, int], BotBrain] = {}
 
     def fill_active() -> None:
         nonlocal remaining_index
@@ -112,6 +119,7 @@ def collect_self_play(
                 device=device,
                 max_inference_batch=max_inference_batch,
                 inference_batch_sizes=inference_batch_sizes,
+                fixed_brains=fixed_brains,
             )
             inference_seconds += elapsed
             for response in responses:
@@ -157,6 +165,7 @@ def _infer_policy_requests(
     device: torch.device,
     max_inference_batch: int,
     inference_batch_sizes: list[int],
+    fixed_brains: dict[tuple[int, int], BotBrain] | None = None,
 ) -> tuple[tuple[PolicyResponse, ...], float]:
     if not requests:
         return (), 0.0
@@ -176,6 +185,36 @@ def _infer_policy_requests(
                     request.decision_index,
                 ),
             )
+            fixed_spec = FIXED_TRAINING_BOT_SPECS_BY_NAME.get(identity)
+            if fixed_spec is not None:
+                for request in ordered:
+                    if request.trainable:
+                        raise CollectorError(
+                            "fixed opponent policies cannot produce trainable trajectories"
+                        )
+                    key = (request.episode_index, request.seat)
+                    if fixed_brains is None:
+                        brain = fixed_spec.make_brain(seed=request.sampling_seed)
+                    else:
+                        cached_brain = fixed_brains.get(key)
+                        if cached_brain is None:
+                            cached_brain = fixed_spec.make_brain(seed=request.sampling_seed)
+                            fixed_brains[key] = cached_brain
+                        brain = cached_brain
+                    decision = brain.choose_decision(
+                        request.context,
+                        request.ruleset,
+                        request.history,
+                    )
+                    responses.append(
+                        _validated_response(
+                            request,
+                            action=_encode_fixed_decision(request, decision),
+                            old_log_probability=0.0,
+                            old_value=0.0,
+                        )
+                    )
+                continue
             for offset in range(0, len(ordered), max_inference_batch):
                 chunk = ordered[offset : offset + max_inference_batch]
                 started = time.perf_counter()
@@ -194,10 +233,8 @@ def _infer_policy_requests(
                 inference_batch_sizes.append(len(chunk))
                 for row, request in enumerate(chunk):
                     responses.append(
-                        PolicyResponse(
-                            episode_index=request.episode_index,
-                            seat=request.seat,
-                            decision_index=request.decision_index,
+                        _validated_response(
+                            request,
                             action=int(selection.actions[row].item()),
                             old_log_probability=float(selection.log_probability[row].item()),
                             old_value=float(selection.value[row].item()),
@@ -206,6 +243,60 @@ def _infer_policy_requests(
     finally:
         _restore_policy_modes(prior_modes)
     return tuple(responses), elapsed
+
+
+def _encode_fixed_decision(
+    request: PendingPolicyRequest,
+    decision: BotDecision,
+) -> int:
+    """Encode a validated fixed-bot decision in the neural action space."""
+
+    try:
+        request.context.validate(decision)
+    except InvalidBotDecision as error:
+        raise CollectorError(
+            f"fixed opponent {request.policy_identity!r} returned an invalid decision"
+        ) from error
+    if decision.action_kind == "pass":
+        return 0
+    if decision.action_kind == "submitBid":
+        if decision.value is None:
+            raise CollectorError("fixed opponent bid omitted its amount")
+        return decision.value
+    if decision.action_kind == "selectInfoToReveal":
+        if decision.value is None:
+            raise CollectorError("fixed opponent reveal omitted its index")
+        reveal_actions = tuple(
+            action
+            for action, legal in enumerate(request.observation.action_mask)
+            if action > 0 and bool(legal)
+        )
+        try:
+            return reveal_actions[decision.value]
+        except IndexError as error:
+            raise CollectorError("fixed opponent reveal is outside the action mask") from error
+    raise CollectorError(f"unsupported fixed opponent action {decision.action_kind!r}")
+
+
+def _validated_response(
+    request: PendingPolicyRequest,
+    *,
+    action: int,
+    old_log_probability: float,
+    old_value: float,
+) -> PolicyResponse:
+    if not 0 <= action < len(request.observation.action_mask) or not bool(
+        request.observation.action_mask[action]
+    ):
+        raise CollectorError(f"policy {request.policy_identity!r} selected an illegal action")
+    return PolicyResponse(
+        episode_index=request.episode_index,
+        seat=request.seat,
+        decision_index=request.decision_index,
+        action=action,
+        old_log_probability=old_log_probability,
+        old_value=old_value,
+    )
 
 
 def _validate_collection(
@@ -233,10 +324,18 @@ def _validate_collection(
     required_identities = {
         assignment.identity for plan in plans for assignment in plan.seat_policies
     }
-    missing = required_identities - policies.keys()
+    fixed_identities = set(FIXED_TRAINING_BOT_SPECS_BY_NAME)
+    if any(
+        assignment.trainable and assignment.identity in fixed_identities
+        for plan in plans
+        for assignment in plan.seat_policies
+    ):
+        raise CollectorError("fixed opponent policies cannot produce trainable trajectories")
+    required_neural_identities = required_identities - fixed_identities
+    missing = required_neural_identities - policies.keys()
     if missing:
         raise CollectorError(f"missing policies for identities: {sorted(missing)!r}")
-    for identity in required_identities:
+    for identity in required_neural_identities:
         model = policies[identity]
         if model.encoder_config != encoder_config:
             raise CollectorError(f"policy {identity!r} has an incompatible encoder")

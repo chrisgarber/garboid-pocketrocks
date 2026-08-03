@@ -14,6 +14,12 @@ from garboid_pocketrocks.training.rewards import RewardConfig
 
 DeviceName = Literal["auto", "cpu", "cuda", "mps"]
 WorkerSetting = int | Literal["auto"]
+OpponentTrainingMode = Literal[
+    "mirror-self-play",
+    "strong-field-v1-75",
+    "strong-field-v1-50",
+    "strong-field-v1-25",
+]
 
 
 @dataclass(frozen=True, slots=True)
@@ -24,6 +30,8 @@ class ParallelConfig:
     active_games_per_worker: int = 128
     max_inference_batch: int = 1024
     max_queue_delay_ms: float = 1.0
+    max_stale_approximate_kl: float = 0.01
+    max_stale_clip_fraction: float = 0.15
 
     def __post_init__(self) -> None:
         if self.workers != "auto":
@@ -34,6 +42,16 @@ class ParallelConfig:
         )
         _require_positive_int("max_inference_batch", self.max_inference_batch)
         _require_positive_number("max_queue_delay_ms", self.max_queue_delay_ms)
+        _require_positive_number(
+            "max_stale_approximate_kl",
+            self.max_stale_approximate_kl,
+        )
+        if (
+            not isinstance(self.max_stale_clip_fraction, (int, float))
+            or isinstance(self.max_stale_clip_fraction, bool)
+            or not 0.0 < float(self.max_stale_clip_fraction) <= 1.0
+        ):
+            raise ValueError("max_stale_clip_fraction must be from zero through one")
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,6 +62,7 @@ class TrainingRunConfig:
     device: DeviceName = "auto"
     deterministic_algorithms: bool = True
     model_profile: ModelProfile = "small"
+    bot_generation: int = 1
     learner_threads: int = 1
     games_per_cell: int | None = 100
     max_updates: int | None = None
@@ -56,6 +75,7 @@ class TrainingRunConfig:
     evaluate_at_end: bool = False
     league_fraction: float = 0.0
     keep_periodic_checkpoints: int = 4
+    opponent_training: OpponentTrainingMode = "mirror-self-play"
     parallel: ParallelConfig = field(default_factory=ParallelConfig)
     ppo: PPOConfig = field(default_factory=PPOConfig)
     reward: RewardConfig = field(default_factory=RewardConfig)
@@ -68,6 +88,7 @@ class TrainingRunConfig:
             raise ValueError("deterministic_algorithms must be a boolean")
         if self.model_profile not in ("small", "medium", "large"):
             raise ValueError("model_profile must be small, medium, or large")
+        _require_positive_int("bot_generation", self.bot_generation)
         _require_positive_int("learner_threads", self.learner_threads)
         if (self.games_per_cell is None) == (self.target_decisions_per_update is None):
             raise ValueError(
@@ -112,6 +133,13 @@ class TrainingRunConfig:
             "keep_periodic_checkpoints",
             self.keep_periodic_checkpoints,
         )
+        if self.opponent_training not in (
+            "mirror-self-play",
+            "strong-field-v1-75",
+            "strong-field-v1-50",
+            "strong-field-v1-25",
+        ):
+            raise ValueError("opponent_training is not a supported immutable schedule")
         if not isinstance(self.parallel, ParallelConfig):
             raise ValueError("parallel must be a ParallelConfig")
         if not isinstance(self.ppo, PPOConfig):
@@ -135,6 +163,7 @@ class TrainingRunConfig:
                 "device",
                 "deterministic_algorithms",
                 "model_profile",
+                "bot_generation",
                 "learner_threads",
                 "games_per_cell",
                 "max_updates",
@@ -147,6 +176,7 @@ class TrainingRunConfig:
                 "evaluate_at_end",
                 "league_fraction",
                 "keep_periodic_checkpoints",
+                "opponent_training",
                 "parallel",
                 "ppo",
                 "reward",
@@ -169,6 +199,10 @@ class TrainingRunConfig:
             ),
             model_profile=_model_profile_value(
                 payload.get("model_profile", defaults.model_profile)
+            ),
+            bot_generation=_int_value(
+                payload.get("bot_generation", defaults.bot_generation),
+                "bot_generation",
             ),
             learner_threads=_int_value(
                 payload.get("learner_threads", defaults.learner_threads),
@@ -233,6 +267,9 @@ class TrainingRunConfig:
                 ),
                 "keep_periodic_checkpoints",
             ),
+            opponent_training=_opponent_training_value(
+                payload.get("opponent_training", defaults.opponent_training)
+            ),
             parallel=_read_parallel(payload.get("parallel", defaults.parallel)),
             ppo=_read_ppo(payload.get("ppo", defaults.ppo)),
             reward=_read_reward(payload.get("reward", defaults.reward)),
@@ -252,9 +289,10 @@ def validate_runtime_support(config: TrainingRunConfig) -> None:
 
     defaults = TrainingRunConfig()
     unsupported: list[str] = []
-    if config.checkpoint_interval_seconds is not None:
-        unsupported.append("checkpoint_interval_seconds")
-    if config.keep_periodic_checkpoints != defaults.keep_periodic_checkpoints:
+    if (
+        config.checkpoint_interval_seconds is None
+        and config.keep_periodic_checkpoints != defaults.keep_periodic_checkpoints
+    ):
         unsupported.append("keep_periodic_checkpoints")
     if config.evaluation_interval_seconds is not None:
         unsupported.append("evaluation_interval_seconds")
@@ -306,6 +344,8 @@ def _read_parallel(value: object) -> ParallelConfig:
             "active_games_per_worker",
             "max_inference_batch",
             "max_queue_delay_ms",
+            "max_stale_approximate_kl",
+            "max_stale_clip_fraction",
         },
         "parallel",
     )
@@ -332,6 +372,20 @@ def _read_parallel(value: object) -> ParallelConfig:
         max_queue_delay_ms=_float_value(
             payload.get("max_queue_delay_ms", defaults.max_queue_delay_ms),
             "max_queue_delay_ms",
+        ),
+        max_stale_approximate_kl=_float_value(
+            payload.get(
+                "max_stale_approximate_kl",
+                defaults.max_stale_approximate_kl,
+            ),
+            "max_stale_approximate_kl",
+        ),
+        max_stale_clip_fraction=_float_value(
+            payload.get(
+                "max_stale_clip_fraction",
+                defaults.max_stale_clip_fraction,
+            ),
+            "max_stale_clip_fraction",
         ),
     )
 
@@ -457,6 +511,17 @@ def _device_value(value: object) -> DeviceName:
 def _model_profile_value(value: object) -> ModelProfile:
     if value not in ("small", "medium", "large"):
         raise ValueError("model_profile must be small, medium, or large")
+    return value
+
+
+def _opponent_training_value(value: object) -> OpponentTrainingMode:
+    if value not in (
+        "mirror-self-play",
+        "strong-field-v1-75",
+        "strong-field-v1-50",
+        "strong-field-v1-25",
+    ):
+        raise ValueError("opponent_training is not a supported immutable schedule")
     return value
 
 
