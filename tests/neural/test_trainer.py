@@ -68,6 +68,14 @@ def test_committed_profiles_have_exact_wall_envelopes() -> None:
     preflight = TrainingRunConfig.from_json(
         Path("configs/neural/cold-mixed-mps-15m-preflight-v2.json")
     )
+    stages = tuple(
+        TrainingRunConfig.from_json(path)
+        for path in (
+            Path("configs/neural/cold-mixed-mps-3h-stage1-v2.json"),
+            Path("configs/neural/cold-mixed-mps-4h-stage2-v2.json"),
+            Path("configs/neural/cold-mixed-mps-3h-stage3-v2.json"),
+        )
+    )
 
     assert smoke.games_per_cell == 100
     assert smoke.max_updates == 1
@@ -88,6 +96,22 @@ def test_committed_profiles_have_exact_wall_envelopes() -> None:
     assert preflight.checkpoint_interval_seconds == 300.0
     assert preflight.keep_periodic_checkpoints == 2
     validate_runtime_support(preflight)
+    assert tuple(config.max_wall_seconds for config in stages) == (
+        10_800.0,
+        14_400.0,
+        10_800.0,
+    )
+    assert tuple(config.opponent_training for config in stages) == (
+        "strong-field-v1-75",
+        "strong-field-v1-50",
+        "strong-field-v1-25",
+    )
+    assert all(config.root_seed == 2026080203 for config in stages)
+    assert all(config.bot_generation == 2 for config in stages)
+    assert all(config.checkpoint_interval_seconds == 1800.0 for config in stages)
+    assert all(config.keep_periodic_checkpoints == 2 for config in stages)
+    for config in stages:
+        validate_runtime_support(config)
     for config in (initial, long):
         assert config.checkpoint_interval_seconds is None
         assert config.keep_periodic_checkpoints == 4
