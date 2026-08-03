@@ -18,6 +18,7 @@ def test_registered_bot_specs_have_unique_names_and_ids() -> None:
         "fixed-bid-tuned-normal-v1",
         "fixed-objective-overlay-v1",
         "fixed-objective-overlay-v2",
+        "fixed-objective-overlay-v3",
         "aggressive",
         "balanced",
         "passive",
@@ -55,6 +56,7 @@ def test_default_tournament_specs_include_curated_field_and_v3_personalities() -
     specs = registry_module.DEFAULT_TOURNAMENT_BOT_SPECS
 
     assert tuple(spec.name for spec in specs) == (
+        "fixed-objective-overlay-v3",
         "fixed-objective-overlay-v2",
         "fixed-objective-overlay-v1",
         "fixed-bid-tuned-v1",
@@ -86,6 +88,7 @@ def test_new_fixed_family_brains_are_exported_from_bots_package() -> None:
         FixedObjectiveOverlayBrain,
         FixedObjectiveOverlayV1Brain,
         FixedObjectiveOverlayV2Brain,
+        FixedObjectiveOverlayV3Brain,
     )
     from garboid_pocketrocks.bots.fixed_bid import (
         FixedBidDiverseV1Brain as DefinedDiverse,
@@ -103,6 +106,9 @@ def test_new_fixed_family_brains_are_exported_from_bots_package() -> None:
     from garboid_pocketrocks.bots.fixed_objective_overlay import (
         FixedObjectiveOverlayV2Brain as DefinedOverlayV2,
     )
+    from garboid_pocketrocks.bots.fixed_objective_overlay import (
+        FixedObjectiveOverlayV3Brain as DefinedOverlayV3,
+    )
 
     assert FixedBidTunedV1Brain is DefinedTuned
     assert FixedBidDiverseV1Brain is DefinedDiverse
@@ -110,6 +116,7 @@ def test_new_fixed_family_brains_are_exported_from_bots_package() -> None:
     assert FixedObjectiveOverlayBrain is DefinedOverlayEngine
     assert FixedObjectiveOverlayV1Brain is DefinedOverlay
     assert FixedObjectiveOverlayV2Brain is DefinedOverlayV2
+    assert FixedObjectiveOverlayV3Brain is DefinedOverlayV3
 
 
 def test_bottom_five_remain_registered_for_explicit_runs() -> None:

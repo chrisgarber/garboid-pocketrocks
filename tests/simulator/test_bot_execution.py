@@ -6,6 +6,7 @@ from pocketrocks import BotDecision, DecisionContext
 
 from garboid_pocketrocks.adapters.public_history import PublicHistory
 from garboid_pocketrocks.diagnostics.trace import (
+    BotResultMetric,
     ExplainedBotDecision,
     NeuralPolicyExplanation,
     legal_actions_for_context,
@@ -66,6 +67,7 @@ class _ExplainingBrain(_OrdinaryBrain):
                 entropy=0.5,
                 legal_action_probabilities=probabilities,
             ),
+            result_metrics=(BotResultMetric("test_policy", ("decisions",), "sum", 1),),
         )
 
 
@@ -110,6 +112,7 @@ def test_ordinary_brain_keeps_its_decision_without_an_explanation() -> None:
 
     assert execution.decision == BotDecision.submit_bid(2)
     assert execution.explanation is None
+    assert execution.result_metrics == ()
     assert execution.selection_source == "policy"
     assert brain.calls == 1
     assert faults == []
@@ -122,6 +125,7 @@ def test_explanation_aware_brain_uses_the_ordinary_protocol_by_default() -> None
 
     assert execution.decision == BotDecision.submit_bid(2)
     assert execution.explanation is None
+    assert execution.result_metrics == ()
     assert execution.selection_source == "policy"
     assert brain.calls == 1
     assert faults == []
@@ -136,6 +140,7 @@ def test_explanation_capture_must_be_explicitly_requested() -> None:
     assert execution.decision == BotDecision.submit_bid(2)
     assert isinstance(execution.explanation, NeuralPolicyExplanation)
     assert execution.explanation.selected_probability == 0.75
+    assert execution.result_metrics == (BotResultMetric("test_policy", ("decisions",), "sum", 1),)
     assert brain.calls == 1
     assert faults == []
 
@@ -145,6 +150,7 @@ def test_fault_mode_preserves_existing_fallback_and_marks_its_source() -> None:
 
     assert execution.decision == BotDecision.submit_bid(0)
     assert execution.explanation is None
+    assert execution.result_metrics == ()
     assert execution.selection_source == "fault_fallback"
     assert len(faults) == 1
     assert faults[0].error_type == "RuntimeError"

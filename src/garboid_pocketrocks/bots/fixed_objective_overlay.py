@@ -11,7 +11,14 @@ from garboid_pocketrocks.bots.base import BotSpec
 from garboid_pocketrocks.bots.fixed_bid import (
     FIXED_BID_PROFILE,
     FIXED_BID_TUNED_V1_PROFILE,
+    FixedBidProfile,
     ProfiledFixedBidBotBrain,
+)
+from garboid_pocketrocks.diagnostics.trace import (
+    BotResultMetric,
+    ExplainedBotDecision,
+    FixedObjectiveOverlayV3BidExplanation,
+    FixedObjectiveOverlayV3Rule,
 )
 from garboid_pocketrocks.heuristics.belief import (
     build_belief,
@@ -71,6 +78,7 @@ FIXED_OBJECTIVE_OVERLAY_V1_CONFIG = FixedObjectiveOverlayConfig(
     max_adjustment=2,
 )
 FIXED_OBJECTIVE_OVERLAY_V2_CONFIG = FIXED_OBJECTIVE_OVERLAY_V1_CONFIG
+FIXED_OBJECTIVE_OVERLAY_V3_PROFILE = FixedBidProfile((5, 10, 3, 6, 4, 7))
 
 
 def _count_resources(resource_ids: tuple[int, ...]) -> tuple[int, ...]:
@@ -232,6 +240,145 @@ class FixedObjectiveOverlayV2Brain(FixedObjectiveOverlayBrain):
     CONFIG = FIXED_OBJECTIVE_OVERLAY_V2_CONFIG
 
 
+@dataclass(frozen=True, slots=True)
+class _FixedObjectiveOverlayV3Choice:
+    decision: BotDecision
+    rule: FixedObjectiveOverlayV3Rule | None
+    planned_bid: int | None
+
+
+class FixedObjectiveOverlayV3Brain(FixedObjectiveOverlayV2Brain):
+    """Tuned overlay with an exact opponent-cash guarantee cap."""
+
+    PROFILE = FIXED_OBJECTIVE_OVERLAY_V3_PROFILE
+
+    def choose_decision(
+        self,
+        context: DecisionContext,
+        ruleset: RulesetKnowledge,
+        history: PublicHistory = (),
+    ) -> BotDecision:
+        return self._choose(context, ruleset, history).decision
+
+    def choose_explained_decision(
+        self,
+        context: DecisionContext,
+        ruleset: RulesetKnowledge,
+        history: PublicHistory,
+    ) -> ExplainedBotDecision:
+        """Choose once and expose the public rule classification for diagnostics."""
+
+        choice = self._choose(context, ruleset, history)
+        if choice.rule is None or choice.planned_bid is None:
+            return ExplainedBotDecision(decision=choice.decision)
+        chosen_bid = choice.decision.value if choice.decision.action_kind == "submitBid" else 0
+        if chosen_bid is None:
+            raise AssertionError("a v3 bid decision always has an effective amount")
+        return ExplainedBotDecision(
+            decision=choice.decision,
+            explanation=FixedObjectiveOverlayV3BidExplanation(
+                rule=choice.rule,
+                planned_bid=choice.planned_bid,
+                chosen_bid=chosen_bid,
+            ),
+            result_metrics=_v3_result_metrics(
+                rule=choice.rule,
+                planned_bid=choice.planned_bid,
+                chosen_bid=chosen_bid,
+            ),
+        )
+
+    def _choose(
+        self,
+        context: DecisionContext,
+        ruleset: RulesetKnowledge,
+        history: PublicHistory,
+    ) -> _FixedObjectiveOverlayV3Choice:
+        baseline = super().choose_decision(context, ruleset, history)
+        planned_bid = baseline.value if baseline.action_kind == "submitBid" else 0
+        if (
+            context.decision_kind != "submitBid"
+            or context.current_action_id is None
+            or context.legal_max_amount is None
+            or planned_bid is None
+        ):
+            return _FixedObjectiveOverlayV3Choice(baseline, None, None)
+        if planned_bid <= 0:
+            return _FixedObjectiveOverlayV3Choice(baseline, "not_applicable", planned_bid)
+        try:
+            action = ActionId(context.current_action_id)
+        except TypeError, ValueError:
+            return _FixedObjectiveOverlayV3Choice(baseline, "not_applicable", planned_bid)
+        if action not in _AUCTIONS:
+            return _FixedObjectiveOverlayV3Choice(baseline, "not_applicable", planned_bid)
+
+        guaranteed_bid = _guaranteed_bid_cap(context, planned_bid)
+        if guaranteed_bid is None:
+            return _FixedObjectiveOverlayV3Choice(baseline, "baseline", planned_bid)
+        return _FixedObjectiveOverlayV3Choice(
+            _bid_decision(guaranteed_bid),
+            "guaranteed_win",
+            planned_bid,
+        )
+
+
+def _bid_decision(bid: int) -> BotDecision:
+    return BotDecision.pass_turn() if bid == 0 else BotDecision.submit_bid(bid)
+
+
+def _v3_result_metrics(
+    *,
+    rule: FixedObjectiveOverlayV3Rule,
+    planned_bid: int,
+    chosen_bid: int,
+) -> tuple[BotResultMetric, ...]:
+    namespace = "fixed_objective_overlay_v3_rules"
+    metrics = [
+        BotResultMetric(namespace, ("bid_decisions",), "sum", 1),
+        BotResultMetric(namespace, ("rule_counts", rule), "sum", 1),
+    ]
+    if rule in ("baseline", "guaranteed_win"):
+        applied = int(rule == "guaranteed_win")
+        adjusted = int(chosen_bid != planned_bid)
+        metrics.extend(
+            (
+                BotResultMetric(namespace, ("resource_auction_decisions",), "sum", 1),
+                BotResultMetric(namespace, ("rule_application_rate",), "mean", applied),
+                BotResultMetric(namespace, ("adjusted_bid_decisions",), "sum", adjusted),
+                BotResultMetric(namespace, ("adjusted_bid_rate",), "mean", adjusted),
+                BotResultMetric(
+                    namespace,
+                    ("total_bid_reduction",),
+                    "sum",
+                    planned_bid - chosen_bid,
+                ),
+            )
+        )
+    return tuple(metrics)
+
+
+def _guaranteed_bid_cap(context: DecisionContext, planned_bid: int) -> int | None:
+    opponent_cash = tuple(
+        (seat, cash) for seat, cash in enumerate(context.cash_by_seat) if seat != context.bot_seat
+    )
+    if not opponent_cash:
+        return None
+    maximum_cash = max(cash for _, cash in opponent_cash)
+    if maximum_cash >= planned_bid:
+        return None
+
+    first_tiebreak_seat = (context.tiebreak_seat + 1) % context.player_count
+
+    def tiebreak_order(seat: int) -> int:
+        return (seat - first_tiebreak_seat) % context.player_count
+
+    own_order = tiebreak_order(context.bot_seat)
+    wins_maximum_tie = all(
+        own_order < tiebreak_order(seat) for seat, cash in opponent_cash if cash == maximum_cash
+    )
+    return maximum_cash if wins_maximum_tie else maximum_cash + 1
+
+
 FIXED_OBJECTIVE_OVERLAY_V1_BOT_SPEC = BotSpec.for_simulation(
     "fixed-objective-overlay-v1",
     FixedObjectiveOverlayV1Brain,
@@ -239,4 +386,8 @@ FIXED_OBJECTIVE_OVERLAY_V1_BOT_SPEC = BotSpec.for_simulation(
 FIXED_OBJECTIVE_OVERLAY_V2_BOT_SPEC = BotSpec.for_simulation(
     "fixed-objective-overlay-v2",
     FixedObjectiveOverlayV2Brain,
+)
+FIXED_OBJECTIVE_OVERLAY_V3_BOT_SPEC = BotSpec.for_simulation(
+    "fixed-objective-overlay-v3",
+    FixedObjectiveOverlayV3Brain,
 )

@@ -90,6 +90,11 @@ uv run --extra neural garboid-tournament \
 See the [tournament runbook](src/garboid_pocketrocks/tournament/README.md) for
 scheduling, rating semantics, artifacts, and reproduction.
 
+The curated field includes `fixed-objective-overlay-v3`, a tuned fixed-target
+bot that caps resource-auction bids at the exact cash-and-tiebreak amount needed
+to guarantee a win. Its development evidence and full-field result are recorded
+in the [dated benchmark report](docs/benchmarks/2026-08-02-fixed-objective-overlay-v3.md).
+
 Turn any tournament artifact directory into an interactive field and bot
 behavior report:
 

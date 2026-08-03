@@ -177,6 +177,7 @@ def _build_pending_decision_trace(
         selected_action=RecordedAction.from_decision(execution.decision),
         explanation=execution.explanation,
         selection_source=execution.selection_source,
+        result_metrics=execution.result_metrics,
     )
 
 

@@ -14,7 +14,9 @@ from garboid_pocketrocks.adapters.public_history import (
     PublicTurnOpened,
 )
 from garboid_pocketrocks.diagnostics.trace import (
+    BotResultMetric,
     DecisionTrace,
+    FixedObjectiveOverlayV3BidExplanation,
     HeuristicBidExplanation,
     NeuralPolicyExplanation,
     PendingDecisionTrace,
@@ -90,7 +92,13 @@ def _history() -> PublicHistory:
 def _pending(
     *,
     selected_action: RecordedAction | None = None,
-    explanation: HeuristicBidExplanation | NeuralPolicyExplanation | None = None,
+    explanation: (
+        HeuristicBidExplanation
+        | FixedObjectiveOverlayV3BidExplanation
+        | NeuralPolicyExplanation
+        | None
+    ) = None,
+    result_metrics: tuple[BotResultMetric, ...] = (),
 ) -> PendingDecisionTrace:
     return PendingDecisionTrace(
         game_index=2,
@@ -108,6 +116,7 @@ def _pending(
         selected_action=selected_action or RecordedAction("submitBid", 3),
         explanation=explanation,
         selection_source="policy",
+        result_metrics=result_metrics,
     )
 
 
@@ -340,6 +349,100 @@ def test_typed_explanations_round_trip_without_arbitrary_metadata() -> None:
     explanation_payload["belief_state"] = {"opponent_hidden_slots": 4}
     with pytest.raises(ValueError, match="unknown heuristic explanation fields"):
         decision_trace_from_payload({**payload, "explanation": explanation_payload})
+
+
+def test_v3_rule_explanation_round_trips_and_requires_the_selected_bid() -> None:
+    explanation = FixedObjectiveOverlayV3BidExplanation(
+        rule="guaranteed_win",
+        planned_bid=5,
+        chosen_bid=3,
+    )
+    metric = BotResultMetric(
+        namespace="fixed_objective_overlay_v3_rules",
+        path=("rule_counts", "guaranteed_win"),
+        aggregation="sum",
+        value=1,
+    )
+    trace = DecisionTrace.from_pending(
+        _pending(explanation=explanation, result_metrics=(metric,)),
+        _outcome(),
+    )
+    payload = decision_trace_payload(trace)
+
+    assert decision_trace_from_payload(payload).explanation == explanation
+    assert decision_trace_from_payload(payload).result_metrics == (metric,)
+    assert payload["schema_version"] == 2
+    assert payload["explanation"] == {
+        "kind": "fixed_objective_overlay_v3_bid",
+        "rule": "guaranteed_win",
+        "planned_bid": 5,
+        "chosen_bid": 3,
+    }
+    assert payload["result_metrics"] == [
+        {
+            "namespace": "fixed_objective_overlay_v3_rules",
+            "path": ["rule_counts", "guaranteed_win"],
+            "aggregation": "sum",
+            "value": 1,
+        }
+    ]
+    with pytest.raises(ValueError, match="agree with selected action"):
+        _pending(
+            explanation=FixedObjectiveOverlayV3BidExplanation(
+                rule="guaranteed_win",
+                planned_bid=5,
+                chosen_bid=2,
+            )
+        )
+
+
+def test_v3_inactive_rule_cannot_change_the_bid() -> None:
+    with pytest.raises(ValueError, match="inactive"):
+        FixedObjectiveOverlayV3BidExplanation(
+            rule="baseline",
+            planned_bid=5,
+            chosen_bid=4,
+        )
+
+
+def test_bot_result_metrics_round_trip_without_a_bot_specific_explanation() -> None:
+    metrics = (
+        BotResultMetric("example_policy", ("decisions",), "sum", 1),
+        BotResultMetric("example_policy", ("confidence",), "mean", 0.75),
+    )
+    trace = DecisionTrace.from_pending(
+        _pending(result_metrics=metrics),
+        _outcome(),
+    )
+
+    payload = decision_trace_payload(trace)
+
+    assert payload["schema_version"] == 2
+    assert decision_trace_from_payload(payload).result_metrics == metrics
+    assert decision_trace_from_payload(payload).explanation is None
+
+
+@pytest.mark.parametrize(
+    "values",
+    (
+        {"namespace": "Invalid", "path": ("value",), "aggregation": "sum", "value": 1},
+        {"namespace": "valid", "path": (), "aggregation": "sum", "value": 1},
+        {"namespace": "valid", "path": ("value",), "aggregation": "last", "value": 1},
+        {"namespace": "valid", "path": ("value",), "aggregation": "sum", "value": float("nan")},
+    ),
+)
+def test_bot_result_metrics_reject_invalid_public_contract_values(
+    values: dict[str, object],
+) -> None:
+    with pytest.raises(ValueError, match="bot result metric"):
+        BotResultMetric(**values)  # type: ignore[arg-type]
+
+
+def test_one_decision_cannot_emit_the_same_result_metric_twice() -> None:
+    metric = BotResultMetric("example_policy", ("decisions",), "sum", 1)
+
+    with pytest.raises(ValueError, match="same bot result metric twice"):
+        _pending(result_metrics=(metric, metric))
 
 
 def test_neural_explanation_probabilities_round_trip_in_canonical_action_order() -> None:

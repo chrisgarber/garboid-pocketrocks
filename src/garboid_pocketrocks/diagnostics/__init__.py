@@ -1,6 +1,8 @@
 """Privacy-safe decision diagnostics."""
 
 from garboid_pocketrocks.diagnostics.trace import (
+    BotResultMetric,
+    BotResultMetricAggregation,
     DecisionExplanation,
     DecisionTrace,
     ExplainedBotDecision,
@@ -18,6 +20,8 @@ from garboid_pocketrocks.diagnostics.trace import (
 )
 
 __all__ = [
+    "BotResultMetric",
+    "BotResultMetricAggregation",
     "DecisionExplanation",
     "DecisionTrace",
     "ExplainedBotDecision",
