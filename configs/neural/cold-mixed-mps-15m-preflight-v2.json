@@ -1,15 +1,19 @@
 {
   "bot_generation": 2,
+  "checkpoint_interval_seconds": 300.0,
   "device": "mps",
   "deterministic_algorithms": false,
   "games_per_cell": 128,
-  "max_wall_seconds": 300.0,
+  "keep_periodic_checkpoints": 2,
+  "max_wall_seconds": 900.0,
   "model_profile": "large",
-  "opponent_training": "strong-field-v1-50",
+  "opponent_training": "strong-field-v1-75",
   "parallel": {
     "active_games_per_worker": 64,
     "max_inference_batch": 1024,
     "max_queue_delay_ms": 1.0,
+    "max_stale_approximate_kl": 0.01,
+    "max_stale_clip_fraction": 0.15,
     "workers": 8
   },
   "ppo": {

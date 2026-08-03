@@ -22,6 +22,10 @@ from garboid_pocketrocks.neural.config import (  # noqa: E402
 from garboid_pocketrocks.neural.model import NeuralPolicy  # noqa: E402
 from garboid_pocketrocks.neural.ppo import PPOConfig  # noqa: E402
 from garboid_pocketrocks.neural.run_config import TrainingRunConfig  # noqa: E402
+from garboid_pocketrocks.neural.tournament_bot import (  # noqa: E402
+    CheckpointNeuralBrain,
+    checkpoint_bot_spec,
+)
 from garboid_pocketrocks.neural.training_checkpoint import (  # noqa: E402
     TrainingCheckpointError,
     TrainingCheckpointManifest,
@@ -126,6 +130,41 @@ def test_training_checkpoint_loads_historical_unsupported_run_controls(
     loaded = load_training_checkpoint(checkpoint, device=torch.device("cpu"))
 
     assert loaded.manifest.run_config == historical_config
+
+
+def test_training_checkpoint_defaults_legacy_bot_generation_to_one(
+    tmp_path: Path,
+) -> None:
+    checkpoint = _save(tmp_path / "legacy-checkpoint")
+    manifest_path = checkpoint / "manifest.json"
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    del payload["run_config"]["bot_generation"]
+    manifest_path.write_text(
+        json.dumps(payload, allow_nan=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    loaded = load_training_checkpoint(checkpoint, device=torch.device("cpu"))
+
+    assert loaded.manifest.run_config.bot_generation == 1
+
+
+def test_exported_training_checkpoint_builds_tournament_bot(
+    tmp_path: Path,
+) -> None:
+    checkpoint = _save(tmp_path / "training-checkpoint")
+    inference = export_inference_checkpoint(
+        checkpoint,
+        tmp_path / "inference-checkpoint",
+        device=torch.device("cpu"),
+    )
+
+    spec = checkpoint_bot_spec("candidate-v2", inference)
+    brain = spec.make_brain(seed=9)
+
+    assert spec.name == "candidate-v2"
+    assert spec.bot_id == "candidate-v2"
+    assert isinstance(brain, CheckpointNeuralBrain)
 
 
 def test_failed_save_does_not_replace_last_valid_checkpoint(

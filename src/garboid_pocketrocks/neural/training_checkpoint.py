@@ -395,6 +395,7 @@ def _run_config(value: object) -> TrainingRunConfig:
         "learner_threads",
         "deterministic_algorithms",
         "model_profile",
+        "bot_generation",
         "opponent_training",
     }
     if not expected - legacy_optional <= set(payload) <= expected:
@@ -411,6 +412,10 @@ def _run_config(value: object) -> TrainingRunConfig:
         ),
         model_profile=_model_profile(
             payload.get("model_profile", "small"),
+        ),
+        bot_generation=_integer(
+            payload.get("bot_generation", 1),
+            "bot_generation",
         ),
         learner_threads=_integer(
             payload.get("learner_threads", 1),

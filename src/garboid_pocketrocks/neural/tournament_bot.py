@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from functools import cache
+from functools import cache, partial
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
@@ -160,6 +160,25 @@ class VectorPpoLargeV1G350kBrain(_FrozenNeuralBrain):
     """Frozen 349,860-game large policy."""
 
     checkpoint_path = LARGE_CHECKPOINT_PATH
+
+
+class CheckpointNeuralBrain(_FrozenNeuralBrain):
+    """Deterministic brain backed by an explicitly supplied inference bundle."""
+
+    def __init__(self, checkpoint_path: Path, seed: int | None = None) -> None:
+        del seed
+        self._runtime = _runtime(checkpoint_path)
+
+
+def checkpoint_bot_spec(name: str, checkpoint_path: Path) -> BotSpec:
+    """Build a spawn-safe tournament spec for an exported training candidate."""
+
+    if not name:
+        raise ValueError("checkpoint bot name must be nonempty")
+    return BotSpec.for_simulation(
+        name,
+        partial(CheckpointNeuralBrain, checkpoint_path.resolve()),
+    )
 
 
 VECTOR_PPO_SMALL_V1_G1500_BOT_SPEC = BotSpec.for_simulation(

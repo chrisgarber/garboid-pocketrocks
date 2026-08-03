@@ -62,6 +62,7 @@ class TrainingRunConfig:
     device: DeviceName = "auto"
     deterministic_algorithms: bool = True
     model_profile: ModelProfile = "small"
+    bot_generation: int = 1
     learner_threads: int = 1
     games_per_cell: int | None = 100
     max_updates: int | None = None
@@ -87,6 +88,7 @@ class TrainingRunConfig:
             raise ValueError("deterministic_algorithms must be a boolean")
         if self.model_profile not in ("small", "medium", "large"):
             raise ValueError("model_profile must be small, medium, or large")
+        _require_positive_int("bot_generation", self.bot_generation)
         _require_positive_int("learner_threads", self.learner_threads)
         if (self.games_per_cell is None) == (self.target_decisions_per_update is None):
             raise ValueError(
@@ -161,6 +163,7 @@ class TrainingRunConfig:
                 "device",
                 "deterministic_algorithms",
                 "model_profile",
+                "bot_generation",
                 "learner_threads",
                 "games_per_cell",
                 "max_updates",
@@ -196,6 +199,10 @@ class TrainingRunConfig:
             ),
             model_profile=_model_profile_value(
                 payload.get("model_profile", defaults.model_profile)
+            ),
+            bot_generation=_int_value(
+                payload.get("bot_generation", defaults.bot_generation),
+                "bot_generation",
             ),
             learner_threads=_int_value(
                 payload.get("learner_threads", defaults.learner_threads),
@@ -282,9 +289,10 @@ def validate_runtime_support(config: TrainingRunConfig) -> None:
 
     defaults = TrainingRunConfig()
     unsupported: list[str] = []
-    if config.checkpoint_interval_seconds is not None:
-        unsupported.append("checkpoint_interval_seconds")
-    if config.keep_periodic_checkpoints != defaults.keep_periodic_checkpoints:
+    if (
+        config.checkpoint_interval_seconds is None
+        and config.keep_periodic_checkpoints != defaults.keep_periodic_checkpoints
+    ):
         unsupported.append("keep_periodic_checkpoints")
     if config.evaluation_interval_seconds is not None:
         unsupported.append("evaluation_interval_seconds")

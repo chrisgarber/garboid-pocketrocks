@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import json
 import math
+import os
+import shutil
 import subprocess
 import time
+import uuid
 from collections import Counter
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import asdict, dataclass, replace
@@ -159,6 +162,8 @@ def resume(
         raise TrainerError("resume config cannot change the root seed")
     if training_model_config(config.model_profile) != loaded.model.model_config:
         raise TrainerError("resume config cannot change the model profile")
+    if config.bot_generation != checkpoint_config.bot_generation:
+        raise TrainerError("resume config cannot change the bot generation")
     validate_runtime_support(config)
     run_dir = _prepare_run_dir(output_dir)
     configure_torch_runtime(
@@ -222,6 +227,7 @@ def inspect_checkpoint(checkpoint: Path) -> dict[str, object]:
         or trained_neural_bot_id(
             manifest.run_config.model_profile,
             manifest.progress.completed_episodes,
+            generation=manifest.run_config.bot_generation,
         ),
         "repository_commit": manifest.repository_commit,
         "next_update_index": manifest.progress.next_update_index,
@@ -231,6 +237,7 @@ def inspect_checkpoint(checkpoint: Path) -> dict[str, object]:
         "cell_games": manifest.progress.cell_games,
         "device": manifest.run_config.device,
         "model_profile": manifest.run_config.model_profile,
+        "bot_generation": manifest.run_config.bot_generation,
         "learner_threads": manifest.run_config.learner_threads,
         "supported_ruleset_names": manifest.encoder_config.supported_ruleset_names,
         "supported_player_counts": manifest.encoder_config.supported_player_counts,
@@ -311,6 +318,7 @@ def _run_updates_with_pool(
     )
     durations: list[float] = []
     checkpoint = run_dir / "checkpoints" / "latest"
+    next_periodic_at = config.checkpoint_interval_seconds
 
     while True:
         if max_updates_this_run is not None and update_index >= max_updates_this_run:
@@ -384,12 +392,21 @@ def _run_updates_with_pool(
                 champion_identity=trained_neural_bot_id(
                     config.model_profile,
                     completed_episodes,
+                    generation=config.bot_generation,
                 ),
                 league_identities=(),
             ),
             generator_states={"torch": torch.get_rng_state()},
             metrics=metrics,
         )
+        next_periodic_at = _maybe_keep_periodic_checkpoint(
+            config,
+            checkpoint=checkpoint,
+            update_index=update_index - 1,
+            elapsed_seconds=time.perf_counter() - started,
+            next_periodic_at=next_periodic_at,
+        )
+        del collection, ppo
 
     if update_index == initial_progress.next_update_index:
         raise TrainerError("training budget did not permit one complete update")
@@ -427,6 +444,7 @@ def _run_pipelined_updates(
     durations: list[float] = []
     checkpoint = run_dir / "checkpoints" / "latest"
     pending: _PendingCollection | None = None
+    next_periodic_at = config.checkpoint_interval_seconds
 
     with ThreadPoolExecutor(max_workers=1, thread_name_prefix="rollout-prefetch") as executor:
         while True:
@@ -565,12 +583,21 @@ def _run_pipelined_updates(
                     champion_identity=trained_neural_bot_id(
                         config.model_profile,
                         completed_episodes,
+                        generation=config.bot_generation,
                     ),
                     league_identities=(),
                 ),
                 generator_states={"torch": torch.get_rng_state()},
                 metrics=metrics,
             )
+            next_periodic_at = _maybe_keep_periodic_checkpoint(
+                config,
+                checkpoint=checkpoint,
+                update_index=update_index - 1,
+                elapsed_seconds=time.perf_counter() - started,
+                next_periodic_at=next_periodic_at,
+            )
+            del collection, ppo
 
     if update_index == initial_progress.next_update_index:
         raise TrainerError("training budget did not permit one complete update")
@@ -600,6 +627,37 @@ def _budget_allows_new_collection(
     if remaining <= 0.0:
         return False
     return not durations or remaining >= max(durations[-5:])
+
+
+def _maybe_keep_periodic_checkpoint(
+    config: TrainingRunConfig,
+    *,
+    checkpoint: Path,
+    update_index: int,
+    elapsed_seconds: float,
+    next_periodic_at: float | None,
+) -> float | None:
+    if next_periodic_at is None or elapsed_seconds < next_periodic_at:
+        return next_periodic_at
+    periodic_root = checkpoint.parent / "periodic"
+    periodic_root.mkdir(exist_ok=True)
+    destination = periodic_root / f"update-{update_index:08d}"
+    temporary = periodic_root / f".{destination.name}.tmp-{uuid.uuid4().hex}"
+    try:
+        shutil.copytree(checkpoint, temporary)
+        os.replace(temporary, destination)
+    finally:
+        if temporary.exists():
+            shutil.rmtree(temporary)
+    retained = sorted(path for path in periodic_root.iterdir() if path.is_dir())
+    for expired in retained[: -config.keep_periodic_checkpoints]:
+        shutil.rmtree(expired)
+    assert config.checkpoint_interval_seconds is not None
+    elapsed_intervals = math.floor(
+        (elapsed_seconds - next_periodic_at) / config.checkpoint_interval_seconds
+    )
+    next_periodic_at += (elapsed_intervals + 1) * config.checkpoint_interval_seconds
+    return next_periodic_at
 
 
 def _stale_rollout_is_acceptable(
@@ -806,16 +864,66 @@ def _update_metrics(
     collection_payload["games_per_second"] = collection.games_per_second
     collection_payload["decisions_per_second"] = collection.decisions_per_second
     collection_payload["mean_inference_batch_size"] = collection.mean_inference_batch_size
+    ppo_payload: dict[str, object] = {
+        "epochs": ppo.epochs,
+        "optimizer_steps": ppo.optimizer_steps,
+        "transition_count": ppo.transition_count,
+        "total_loss": ppo.total_loss,
+        "policy_loss": ppo.policy_loss,
+        "value_loss": ppo.value_loss,
+        "entropy": ppo.entropy,
+        "approximate_kl": ppo.approximate_kl,
+        "clip_fraction": ppo.clip_fraction,
+        "value": asdict(ppo.value),
+        "value_slices": [asdict(value_slice) for value_slice in ppo.value_slices],
+        "distributions": {
+            "advantages": _distribution_summary(ppo.advantages),
+            "ratios": _distribution_summary(ppo.ratios),
+            "values": _distribution_summary(ppo.values),
+            "entropies": _distribution_summary(ppo.entropies),
+            "pre_clip_gradient_norms": _distribution_summary(
+                ppo.pre_clip_gradient_norms
+            ),
+            "post_clip_gradient_norms": _distribution_summary(
+                ppo.post_clip_gradient_norms
+            ),
+        },
+    }
     payload: dict[str, object] = {
         "update_index": update_index,
         "games_per_cell": games_per_cell,
         "duration_seconds": duration,
         "collection": collection_payload,
-        "ppo": asdict(ppo),
+        "ppo": ppo_payload,
     }
     if pipeline is not None:
         payload["pipeline"] = pipeline
     return payload
+
+
+def _distribution_summary(values: tuple[float, ...]) -> dict[str, float | int]:
+    if not values:
+        return {"count": 0}
+    ordered = sorted(values)
+    return {
+        "count": len(ordered),
+        "mean": math.fsum(ordered) / len(ordered),
+        "min": ordered[0],
+        "p05": _ordered_percentile(ordered, 0.05),
+        "p50": _ordered_percentile(ordered, 0.50),
+        "p95": _ordered_percentile(ordered, 0.95),
+        "max": ordered[-1],
+    }
+
+
+def _ordered_percentile(ordered: list[float], quantile: float) -> float:
+    position = (len(ordered) - 1) * quantile
+    lower = math.floor(position)
+    upper = math.ceil(position)
+    if lower == upper:
+        return ordered[lower]
+    weight = position - lower
+    return ordered[lower] * (1.0 - weight) + ordered[upper] * weight
 
 
 def _prepare_run_dir(path: Path) -> Path:
