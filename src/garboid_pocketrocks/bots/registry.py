@@ -45,6 +45,8 @@ from garboid_pocketrocks.bots.surplus import (
     SURPLUS_V10_BOT_SPEC,
     SURPLUS_V11_BOT_SPEC,
     SURPLUS_V12_BOT_SPEC,
+    SURPLUS_V13_BOT_SPEC,
+    SURPLUS_V14_BOT_SPEC,
 )
 from garboid_pocketrocks.neural.tournament_bot import (
     VECTOR_PPO_LARGE_V1_G350K_BOT_SPEC,
@@ -86,6 +88,8 @@ BOT_SPECS = (
     SURPLUS_V10_BOT_SPEC,
     SURPLUS_V11_BOT_SPEC,
     SURPLUS_V12_BOT_SPEC,
+    SURPLUS_V13_BOT_SPEC,
+    SURPLUS_V14_BOT_SPEC,
     VECTOR_PPO_SMALL_V1_G1500_BOT_SPEC,
     VECTOR_PPO_LARGE_V1_G350K_BOT_SPEC,
 )
