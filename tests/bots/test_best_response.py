@@ -6,13 +6,15 @@ import pytest
 
 from garboid_pocketrocks.bots.best_response import (
     MONTE_CARLO_V1_BOT_SPEC,
+    MONTE_CARLO_V2_BOT_SPEC,
     MonteCarloV1Brain,
 )
 from garboid_pocketrocks.bots.registry import BOT_SPECS_BY_NAME
-from garboid_pocketrocks.heuristics.montecarlo import MONTE_CARLO_V1
+from garboid_pocketrocks.heuristics.bid_priors import BID_PRIOR_V2
+from garboid_pocketrocks.heuristics.montecarlo import MONTE_CARLO_V1, MONTE_CARLO_V2
 from garboid_pocketrocks.simulator import MonteCarloConfig, MonteCarloRunner
 
-FIELD = ("aggressive-v3", "balanced-v3", "passive-v3", "fixed-objective-overlay-v2")
+FIELD = ("surplus-v10", "fixed-objective-overlay-v3", "aggressive-v3", "surplus-v9")
 
 
 def _run(
@@ -89,3 +91,38 @@ def test_released_generation_is_the_registered_one() -> None:
     spec = BOT_SPECS_BY_NAME["monte-the-bookie-v1"]
     assert spec.bot_id == "monte-the-bookie-v1"
     assert isinstance(spec.make_brain(seed=0), MonteCarloV1Brain)
+
+
+def test_v1_generation_stays_frozen() -> None:
+    """v1 is released. Its coefficients and prior must not drift when v2 lands."""
+
+    assert MONTE_CARLO_V1.profile.liquidity_strength == pytest.approx(3.62309)
+    assert MONTE_CARLO_V1.standings_weight == pytest.approx(0.39481)
+    assert MONTE_CARLO_V1.denial_weight == pytest.approx(0.45427)
+    assert MONTE_CARLO_V1.prior is None  # v1 uses the shipped BID_PRIOR_V1
+
+
+def test_v2_retunes_every_factor_and_carries_the_v2_prior() -> None:
+    assert MONTE_CARLO_V2.prior is BID_PRIOR_V2
+    # Retuning for placement rather than wins pulled the speculative terms down.
+    assert MONTE_CARLO_V2.denial_weight < MONTE_CARLO_V1.denial_weight
+    assert MONTE_CARLO_V2.pressure_weight < MONTE_CARLO_V1.pressure_weight
+    assert MONTE_CARLO_V2.standings_weight < MONTE_CARLO_V1.standings_weight
+    assert MONTE_CARLO_V2.profile.objective_progress_weight == 0.0
+    # And pushed the term that protects the floor up.
+    assert MONTE_CARLO_V2.profile.liquidity_strength > MONTE_CARLO_V1.profile.liquidity_strength
+    assert MONTE_CARLO_V2.profile.bid_shading == 0.0
+
+
+def test_v2_plays_the_current_strong_field_without_faults() -> None:
+    config = MonteCarloConfig(
+        bot_specs=(MONTE_CARLO_V2_BOT_SPEC,) + tuple(BOT_SPECS_BY_NAME[name] for name in FIELD[:3]),
+        games=48,
+        player_counts=(4,),
+        value_charts=("A", "E"),
+        objectives_enabled=(True,),
+        root_seed=4242,
+    )
+    result = MonteCarloRunner.run(config, workers=1)
+    for stats in result.bot_statistics:
+        assert stats.faults == 0

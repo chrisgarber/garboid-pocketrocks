@@ -9,6 +9,7 @@ from garboid_pocketrocks.bots.base import (
 from garboid_pocketrocks.bots.best_response import (
     MonteCarloBotBrain,
     MonteCarloV1Brain,
+    MonteCarloV2Brain,
 )
 from garboid_pocketrocks.bots.fixed_bid import (
     FixedBidBotBrain,
@@ -95,6 +96,7 @@ __all__ = [
     "HeuristicBotBrain",
     "MonteCarloBotBrain",
     "MonteCarloV1Brain",
+    "MonteCarloV2Brain",
     "PassiveHeuristicBot",
     "PassiveHeuristicBrain",
     "PassiveHeuristicV1Brain",
