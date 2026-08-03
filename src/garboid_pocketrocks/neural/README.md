@@ -93,8 +93,11 @@ RNG state.
 
 - One worker runs vector games and batched inference in one process.
 - Multiple CPU actors receive frozen model copies and perform local inference.
-- Multiple accelerator workers send requests to one centrally batched CUDA or
-  MPS policy.
+- Multiple CUDA workers send requests to one centrally batched policy.
+- MPS with multiple workers uses persistent one-thread CPU actors and a bounded
+  one-rollout prefetch. The MPS learner accepts at most one-update-old data,
+  measures policy drift before PPO, and recollects from the fresh policy when
+  approximate KL or clip fraction crosses the configured guardrail.
 
 Automatic calibration measures bounded device/worker candidates and writes
 `benchmark.json`. Set both device and worker count explicitly to skip
@@ -116,11 +119,21 @@ uv run --extra neural garboid-train train \
 uv run --extra neural garboid-train train \
   --config configs/neural/long-8h.json \
   --output-dir artifacts/neural-8h
+
+uv run --extra neural garboid-train train \
+  --config configs/neural/cold-mixed-mps-5m-v1.json \
+  --output-dir artifacts/cold-mixed-mps-5m-v1
 ```
 
 The profiles use different model shapes and start separate lineages. Wall-time
 budgets are checked between complete PPO updates; an update is never
 interrupted.
+
+The cold mixed MPS profile initializes a new large model from random weights.
+Every game has one trainable focal seat; the remaining seats are split evenly
+between frozen copies of the current policy and `strong-field-pool-v1`. Longer
+runs use the same versioned pool in three checkpoint-boundary stages: 75%, 50%,
+then 25% fixed opponents, with the balance supplied by current-policy self-play.
 
 Training writes:
 

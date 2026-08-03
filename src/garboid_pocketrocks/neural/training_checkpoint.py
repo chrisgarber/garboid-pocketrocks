@@ -395,6 +395,7 @@ def _run_config(value: object) -> TrainingRunConfig:
         "learner_threads",
         "deterministic_algorithms",
         "model_profile",
+        "opponent_training",
     }
     if not expected - legacy_optional <= set(payload) <= expected:
         raise TrainingCheckpointError("run_config fields do not match schema")
@@ -441,6 +442,7 @@ def _run_config(value: object) -> TrainingRunConfig:
             payload["keep_periodic_checkpoints"],
             "keep_periodic_checkpoints",
         ),
+        opponent_training=payload.get("opponent_training", "mirror-self-play"),  # type: ignore[arg-type]
         parallel=ParallelConfig(
             workers=_workers(parallel["workers"]),
             active_games_per_worker=_integer(
@@ -454,6 +456,14 @@ def _run_config(value: object) -> TrainingRunConfig:
             max_queue_delay_ms=_number(
                 parallel["max_queue_delay_ms"],
                 "max_queue_delay_ms",
+            ),
+            max_stale_approximate_kl=_number(
+                parallel.get("max_stale_approximate_kl", 0.01),
+                "max_stale_approximate_kl",
+            ),
+            max_stale_clip_fraction=_number(
+                parallel.get("max_stale_clip_fraction", 0.15),
+                "max_stale_clip_fraction",
             ),
         ),
         ppo=PPOConfig(

@@ -113,6 +113,15 @@ class PPOUpdateMetrics:
 
 
 @dataclass(frozen=True, slots=True)
+class PolicyShiftMetrics:
+    """Distance from stored behavior probabilities before a PPO update."""
+
+    approximate_kl: float
+    clip_fraction: float
+    transition_count: int
+
+
+@dataclass(frozen=True, slots=True)
 class _TrainingTargets:
     packed: PackedRollout
     advantages: Tensor
@@ -312,6 +321,60 @@ class PPOTrainer:
             accumulator,
             config=self.config,
             targets=targets,
+        )
+
+    def measure_policy_shift(self, rollout: RolloutBatch) -> PolicyShiftMetrics:
+        """Measure behavior/current-policy drift without changing model state."""
+
+        packed = PackedRollout.from_batch(rollout)
+        approximate_kl_sum = 0.0
+        clip_count = 0
+        prior_training = self.model.training
+        self.model.eval()
+        try:
+            with torch.no_grad():
+                for start in range(0, len(packed), self.config.minibatch_size):
+                    indices = np.arange(
+                        start,
+                        min(start + self.config.minibatch_size, len(packed)),
+                        dtype=np.int64,
+                    )
+                    batch = packed.batch(indices, self.device)
+                    output = self.model(batch)
+                    selection = evaluate_masked_policy(
+                        output,
+                        batch,
+                        generator=None,
+                        deterministic=True,
+                    )
+                    actions = torch.as_tensor(
+                        packed.actions[indices],
+                        dtype=torch.int64,
+                        device=self.device,
+                    )
+                    new_log_probability = torch.log_softmax(
+                        selection.masked_logits,
+                        dim=-1,
+                    ).gather(1, actions.unsqueeze(1)).squeeze(1)
+                    old_log_probability = torch.as_tensor(
+                        packed.old_log_probabilities[indices],
+                        dtype=new_log_probability.dtype,
+                        device=self.device,
+                    )
+                    log_ratio = new_log_probability - old_log_probability
+                    ratio = torch.exp(log_ratio)
+                    approximate_kl_sum += float(
+                        ((ratio - 1.0) - log_ratio).sum().item()
+                    )
+                    clip_count += int(
+                        (torch.abs(ratio - 1.0) > self.config.clip_ratio).sum().item()
+                    )
+        finally:
+            self.model.train(prior_training)
+        return PolicyShiftMetrics(
+            approximate_kl=approximate_kl_sum / len(packed),
+            clip_fraction=clip_count / len(packed),
+            transition_count=len(packed),
         )
 
 

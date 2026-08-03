@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from collections import Counter
+from fractions import Fraction
 from pathlib import Path
 
 import pytest
@@ -10,10 +11,14 @@ pytest.importorskip("torch")
 
 from garboid_pocketrocks.knowledge import canonical_knowledge  # noqa: E402
 from garboid_pocketrocks.neural.config import training_encoder_config  # noqa: E402
+from garboid_pocketrocks.neural.opponent_pool import (  # noqa: E402
+    FIXED_TRAINING_BOT_SPECS_BY_NAME,
+)
 from garboid_pocketrocks.neural.planning import (  # noqa: E402
     SeatPolicy,
     decision_seed,
     plan_mirror_episodes,
+    plan_strong_field_episodes,
 )
 from garboid_pocketrocks.neural.run_config import (  # noqa: E402
     ParallelConfig,
@@ -84,6 +89,33 @@ def test_plans_and_decision_seeds_are_named_stable() -> None:
     assert len(
         {decision_seed(plan, seat, 0) for plan in first for seat in range(plan.player_count)}
     ) == sum(plan.player_count for plan in first)
+
+
+def test_strong_field_plan_has_one_focal_seat_and_exact_mixed_opponents() -> None:
+    plans = plan_strong_field_episodes(
+        root_seed=42,
+        update_index=3,
+        games_per_cell=4,
+        policy_identity="current",
+        fixed_opponent_share=Fraction(1, 2),
+    )
+
+    assignments = [assignment for plan in plans for assignment in plan.seat_policies]
+    opponent_assignments = [assignment for assignment in assignments if not assignment.trainable]
+    assert len(plans) == 60
+    assert all(
+        sum(assignment.trainable for assignment in plan.seat_policies) == 1
+        for plan in plans
+    )
+    assert sum(
+        assignment.identity in FIXED_TRAINING_BOT_SPECS_BY_NAME
+        for assignment in opponent_assignments
+    ) == len(opponent_assignments) // 2
+    assert {
+        assignment.identity
+        for assignment in opponent_assignments
+        if assignment.identity != "current"
+    } == set(FIXED_TRAINING_BOT_SPECS_BY_NAME)
 
 
 @pytest.mark.parametrize(

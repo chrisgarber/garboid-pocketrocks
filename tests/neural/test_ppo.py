@@ -129,6 +129,26 @@ def test_update_does_not_change_global_torch_rng() -> None:
     assert torch.equal(torch.get_rng_state(), before)
 
 
+def test_policy_shift_detects_stale_rollout_without_changing_model_mode() -> None:
+    configure_torch_runtime(198, deterministic_algorithms=True)
+    model = _model(198)
+    _, rollout = _one_game_rollout(model, 198)
+    trainer = PPOTrainer(model, PPOConfig(minibatch_size=16))
+    model.train()
+
+    fresh = trainer.measure_policy_shift(rollout)
+    with torch.no_grad():
+        for parameter in model.parameters():
+            parameter.add_(0.05)
+    stale = trainer.measure_policy_shift(rollout)
+
+    assert fresh.approximate_kl == pytest.approx(0.0, abs=1e-6)
+    assert fresh.clip_fraction == 0.0
+    assert stale.approximate_kl > fresh.approximate_kl
+    assert stale.clip_fraction > fresh.clip_fraction
+    assert model.training is True
+
+
 def test_update_is_exactly_repeatable_for_metrics_parameters_and_optimizer() -> None:
     configure_torch_runtime(199, deterministic_algorithms=True)
     rollout_model = _model(199)

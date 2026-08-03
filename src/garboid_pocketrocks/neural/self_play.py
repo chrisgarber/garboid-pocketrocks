@@ -10,9 +10,11 @@ from pocketrocks import BotDecision, DecisionContext
 from pocketrocks.exceptions import InvalidBotDecision
 
 from garboid_pocketrocks.adapters.public_history import (
+    PublicHistory,
     public_history_from_sdk_events,
 )
 from garboid_pocketrocks.knowledge import (
+    RulesetKnowledge,
     canonical_knowledge,
     value_chart_from_ruleset_name,
 )
@@ -57,6 +59,9 @@ class PendingPolicyRequest:
     trainable: bool
     sampling_seed: int
     observation: NeuralObservation
+    context: DecisionContext
+    ruleset: RulesetKnowledge
+    history: PublicHistory
 
 
 @dataclass(frozen=True, slots=True)
@@ -277,6 +282,9 @@ class SelfPlayGame:
                         decision_index,
                     ),
                     observation=_immutable_observation(observation),
+                    context=context,
+                    ruleset=self.knowledge,
+                    history=history,
                 )
             )
         self._pending_contexts = contexts

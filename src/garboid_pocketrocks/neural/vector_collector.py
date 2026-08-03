@@ -25,6 +25,7 @@ from garboid_pocketrocks.adapters.public_history import (
     PublicInformationRevealed,
     PublicTurnOpened,
 )
+from garboid_pocketrocks.bots.base import BotBrain
 from garboid_pocketrocks.knowledge import (
     RulesetKnowledge,
     canonical_knowledge,
@@ -209,6 +210,7 @@ def _collect_engine_batch(
     previous_potential = _potential(engine)
     decisions = 0
     inference_seconds = 0.0
+    fixed_brains: dict[tuple[int, int], BotBrain] = {}
 
     while True:
         action_ids = engine.flip_actions()
@@ -245,6 +247,7 @@ def _collect_engine_batch(
             device=device,
             max_inference_batch=max_inference_batch,
             inference_batch_sizes=inference_sizes,
+            fixed_brains=fixed_brains,
         )
         inference_seconds += elapsed
         decisions += len(bid_responses)
@@ -305,6 +308,7 @@ def _collect_engine_batch(
             device=device,
             max_inference_batch=max_inference_batch,
             inference_batch_sizes=inference_sizes,
+            fixed_brains=fixed_brains,
         )
         inference_seconds += elapsed
         decisions += len(reveal_responses)
@@ -444,6 +448,9 @@ def _prepare_bid_requests(
                         knowledge[row],
                         tuple(histories[row]),
                     ),
+                    context=context,
+                    ruleset=knowledge[row],
+                    history=tuple(histories[row]),
                 )
             )
             contexts[(row, seat)] = context
@@ -530,6 +537,9 @@ def _prepare_reveal_requests(
                     knowledge[row],
                     tuple(histories[row]),
                 ),
+                context=context,
+                ruleset=knowledge[row],
+                history=tuple(histories[row]),
             )
         )
         contexts[(row, seat)] = context
@@ -660,6 +670,10 @@ def _request(
     seat: int,
     decision_index: int,
     observation: NeuralObservation,
+    *,
+    context: DecisionContext,
+    ruleset: RulesetKnowledge,
+    history: tuple[PublicEvent, ...],
 ) -> PendingPolicyRequest:
     assignment = plan.seat_policies[seat]
     return PendingPolicyRequest(
@@ -670,6 +684,9 @@ def _request(
         trainable=assignment.trainable,
         sampling_seed=decision_seed(plan, seat, decision_index),
         observation=_immutable_observation(observation),
+        context=context,
+        ruleset=ruleset,
+        history=history,
     )
 
 

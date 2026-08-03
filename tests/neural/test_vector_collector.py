@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from fractions import Fraction
+
 import numpy as np
 import pytest
 
@@ -14,7 +16,10 @@ from garboid_pocketrocks.neural.encoding import (  # noqa: E402
     NeuralObservationEncoder,
 )
 from garboid_pocketrocks.neural.model import NeuralPolicy  # noqa: E402
-from garboid_pocketrocks.neural.planning import plan_mirror_episodes  # noqa: E402
+from garboid_pocketrocks.neural.planning import (  # noqa: E402
+    plan_mirror_episodes,
+    plan_strong_field_episodes,
+)
 from garboid_pocketrocks.neural.rollout import RolloutBatch  # noqa: E402
 from garboid_pocketrocks.neural.vector_collector import (  # noqa: E402
     collect_self_play_vectorized,
@@ -183,3 +188,43 @@ def test_vector_collector_skips_redundant_external_input_validation(
 
     assert metrics.games == 1
     assert rollout.transitions
+
+
+def test_vector_collector_runs_fixed_and_neural_opponent_mix() -> None:
+    torch.manual_seed(109)
+    config = training_encoder_config()
+    model = NeuralPolicy(config, training_model_config("small"))
+    plans = plan_strong_field_episodes(
+        root_seed=109,
+        update_index=0,
+        games_per_cell=1,
+        policy_identity="current",
+        fixed_opponent_share=Fraction(1, 2),
+    )
+
+    scalar, _ = collect_self_play(
+        {"current": model},
+        plans,
+        encoder_config=config,
+        reward_config=RewardConfig(),
+        device=torch.device("cpu"),
+        active_games=64,
+        max_inference_batch=512,
+    )
+    rollout, metrics = collect_self_play_vectorized(
+        {"current": model},
+        plans,
+        encoder_config=config,
+        reward_config=RewardConfig(),
+        device=torch.device("cpu"),
+        engine_batch_size=64,
+        max_inference_batch=512,
+    )
+
+    assert metrics.games == 15
+    assert len(rollout.transitions) < metrics.decisions
+    _assert_rollouts_equal(rollout, scalar)
+    assert all(
+        sum(trajectory.trainable for trajectory in episode.trajectories) == 1
+        for episode in rollout.episodes
+    )

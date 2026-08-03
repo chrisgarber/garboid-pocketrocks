@@ -7,7 +7,9 @@ import math
 import subprocess
 import time
 from collections import Counter
+from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import asdict, dataclass, replace
+from fractions import Fraction
 from pathlib import Path
 from typing import cast
 
@@ -31,8 +33,13 @@ from garboid_pocketrocks.neural.parallel import collect_self_play_parallel
 from garboid_pocketrocks.neural.planning import (
     SelfPlayEpisodePlan,
     plan_mirror_episodes,
+    plan_strong_field_episodes,
 )
-from garboid_pocketrocks.neural.ppo import PPOTrainer, PPOUpdateMetrics
+from garboid_pocketrocks.neural.ppo import (
+    PolicyShiftMetrics,
+    PPOTrainer,
+    PPOUpdateMetrics,
+)
 from garboid_pocketrocks.neural.rollout import RolloutBatch
 from garboid_pocketrocks.neural.run_config import (
     DeviceName,
@@ -71,6 +78,14 @@ class TrainingRunResult:
     completed_episodes: int
     completed_decisions: int
     elapsed_seconds: float
+
+
+@dataclass(frozen=True, slots=True)
+class _PendingCollection:
+    update_index: int
+    policy_version: int
+    launched_at: float
+    future: Future[tuple[RolloutBatch, CollectorMetrics]]
 
 
 def train(
@@ -237,7 +252,8 @@ def _run_updates(
 ) -> TrainingRunResult:
     vector_pool: VectorActorPool | None = None
     workers = config.parallel.workers
-    if next(model.parameters()).device.type == "cpu" and isinstance(workers, int) and workers > 1:
+    model_device = next(model.parameters()).device
+    if model_device.type in ("cpu", "mps") and isinstance(workers, int) and workers > 1:
         vector_pool = VectorActorPool(
             encoder_config=model.encoder_config,
             reward_config=config.reward,
@@ -274,6 +290,18 @@ def _run_updates_with_pool(
     games_per_cell: int,
     vector_pool: VectorActorPool | None,
 ) -> TrainingRunResult:
+    if vector_pool is not None and trainer.device.type == "mps":
+        return _run_pipelined_updates(
+            config,
+            run_dir,
+            model=model,
+            trainer=trainer,
+            initial_progress=initial_progress,
+            lineage=lineage,
+            max_updates_this_run=max_updates_this_run,
+            games_per_cell=games_per_cell,
+            vector_pool=vector_pool,
+        )
     started = time.perf_counter()
     update_index = initial_progress.next_update_index
     completed_episodes = initial_progress.completed_episodes
@@ -295,11 +323,10 @@ def _run_updates_with_pool(
             if durations and remaining < max(durations[-5:]):
                 break
         update_started = time.perf_counter()
-        plans = plan_mirror_episodes(
-            root_seed=config.root_seed,
+        plans = _training_plans(
+            config,
             update_index=update_index,
             games_per_cell=games_per_cell,
-            policy_identity="current",
         )
         snapshot = NeuralPolicy(
             model.encoder_config,
@@ -376,6 +403,267 @@ def _run_updates_with_pool(
     )
 
 
+def _run_pipelined_updates(
+    config: TrainingRunConfig,
+    run_dir: Path,
+    *,
+    model: NeuralPolicy,
+    trainer: PPOTrainer,
+    initial_progress: TrainingProgress,
+    lineage: tuple[str, ...],
+    max_updates_this_run: int | None,
+    games_per_cell: int,
+    vector_pool: VectorActorPool,
+) -> TrainingRunResult:
+    """Overlap bounded CPU collection with one-update-stale MPS learning."""
+
+    started = time.perf_counter()
+    update_index = initial_progress.next_update_index
+    completed_episodes = initial_progress.completed_episodes
+    completed_decisions = initial_progress.completed_decisions
+    cells = Counter(
+        {(ruleset, players): games for ruleset, players, games in initial_progress.cell_games}
+    )
+    durations: list[float] = []
+    checkpoint = run_dir / "checkpoints" / "latest"
+    pending: _PendingCollection | None = None
+
+    with ThreadPoolExecutor(max_workers=1, thread_name_prefix="rollout-prefetch") as executor:
+        while True:
+            if pending is None:
+                if not _budget_allows_new_collection(
+                    config,
+                    started=started,
+                    update_index=update_index,
+                    max_updates_this_run=max_updates_this_run,
+                    durations=durations,
+                ):
+                    break
+                pending = _launch_collection(
+                    executor,
+                    config,
+                    vector_pool,
+                    model=model,
+                    update_index=update_index,
+                    policy_version=update_index,
+                    games_per_cell=games_per_cell,
+                )
+
+            update_started = time.perf_counter()
+            wait_started = time.perf_counter()
+            collection = pending.future.result()
+            collection_wait_seconds = time.perf_counter() - wait_started
+            collection_age_seconds = time.perf_counter() - pending.launched_at
+            policy_lag = update_index - pending.policy_version
+            if pending.update_index != update_index or policy_lag not in (0, 1):
+                raise TrainerError("pipelined rollout exceeded the one-update policy lag")
+            pending = None
+
+            shift_started = time.perf_counter()
+            stale_shift = (
+                trainer.measure_policy_shift(collection[0])
+                if policy_lag == 1
+                else PolicyShiftMetrics(0.0, 0.0, len(collection[0].transitions))
+            )
+            shift_measurement_seconds = time.perf_counter() - shift_started
+            discarded_stale_collection_seconds = 0.0
+            if not _stale_rollout_is_acceptable(config, stale_shift):
+                discarded_stale_collection_seconds = collection[1].elapsed_seconds
+                fresh = _launch_collection(
+                    executor,
+                    config,
+                    vector_pool,
+                    model=model,
+                    update_index=update_index,
+                    policy_version=update_index,
+                    games_per_cell=games_per_cell,
+                )
+                fresh_wait_started = time.perf_counter()
+                collection = fresh.future.result()
+                collection_wait_seconds += time.perf_counter() - fresh_wait_started
+                collection_age_seconds = time.perf_counter() - fresh.launched_at
+                policy_lag = 0
+
+            if _should_prefetch_next(
+                config,
+                started=started,
+                update_index=update_index,
+                max_updates_this_run=max_updates_this_run,
+                durations=durations,
+                collection=collection[1],
+            ):
+                pending = _launch_collection(
+                    executor,
+                    config,
+                    vector_pool,
+                    model=model,
+                    update_index=update_index + 1,
+                    policy_version=update_index,
+                    games_per_cell=games_per_cell,
+                )
+
+            learner_started = time.perf_counter()
+            ppo = trainer.update(
+                collection[0],
+                update_seed=derive_seed(config.root_seed, "minibatch", update_index),
+            )
+            learner_seconds = time.perf_counter() - learner_started
+            completed_episodes += collection[1].games
+            completed_decisions += collection[1].decisions
+            for ruleset, players, games in collection[1].cell_games:
+                cells[(ruleset, players)] += games
+            update_index += 1
+            duration = time.perf_counter() - update_started
+            durations.append(duration)
+            progress = TrainingProgress(
+                update_index,
+                completed_episodes,
+                completed_decisions,
+                tuple(
+                    (ruleset, players, games)
+                    for (ruleset, players), games in sorted(cells.items())
+                ),
+            )
+            metrics = _update_metrics(
+                update_index - 1,
+                games_per_cell,
+                duration,
+                collection[1],
+                ppo,
+                pipeline={
+                    "collection_age_seconds": collection_age_seconds,
+                    "collection_wait_seconds": collection_wait_seconds,
+                    "learner_seconds": learner_seconds,
+                    "overlap_seconds": max(
+                        0.0,
+                        collection[1].elapsed_seconds - collection_wait_seconds,
+                    ),
+                    "policy_lag_updates": policy_lag,
+                    "policy_version": update_index - 1 - policy_lag,
+                    "shift_measurement_seconds": shift_measurement_seconds,
+                    "stale_approximate_kl": stale_shift.approximate_kl,
+                    "stale_clip_fraction": stale_shift.clip_fraction,
+                    "stale_rollout_rejected": discarded_stale_collection_seconds > 0.0,
+                    "discarded_stale_collection_seconds": (
+                        discarded_stale_collection_seconds
+                    ),
+                },
+            )
+            _append_json_line(run_dir / "metrics.jsonl", metrics)
+            save_training_checkpoint(
+                checkpoint,
+                model=model,
+                optimizer=trainer.optimizer,
+                manifest=TrainingCheckpointManifest(
+                    schema_version=1,
+                    repository_commit=_repository_commit(),
+                    encoder_config=model.encoder_config,
+                    model_config=model.model_config,
+                    run_config=config,
+                    progress=progress,
+                    lineage=lineage,
+                    champion_identity=trained_neural_bot_id(
+                        config.model_profile,
+                        completed_episodes,
+                    ),
+                    league_identities=(),
+                ),
+                generator_states={"torch": torch.get_rng_state()},
+                metrics=metrics,
+            )
+
+    if update_index == initial_progress.next_update_index:
+        raise TrainerError("training budget did not permit one complete update")
+    return TrainingRunResult(
+        run_dir=run_dir,
+        final_checkpoint=checkpoint,
+        completed_updates=update_index,
+        completed_episodes=completed_episodes,
+        completed_decisions=completed_decisions,
+        elapsed_seconds=time.perf_counter() - started,
+    )
+
+
+def _budget_allows_new_collection(
+    config: TrainingRunConfig,
+    *,
+    started: float,
+    update_index: int,
+    max_updates_this_run: int | None,
+    durations: list[float],
+) -> bool:
+    if max_updates_this_run is not None and update_index >= max_updates_this_run:
+        return False
+    if config.max_wall_seconds is None:
+        return True
+    remaining = config.max_wall_seconds - (time.perf_counter() - started)
+    if remaining <= 0.0:
+        return False
+    return not durations or remaining >= max(durations[-5:])
+
+
+def _stale_rollout_is_acceptable(
+    config: TrainingRunConfig,
+    shift: PolicyShiftMetrics,
+) -> bool:
+    return (
+        shift.approximate_kl <= config.parallel.max_stale_approximate_kl
+        and shift.clip_fraction <= config.parallel.max_stale_clip_fraction
+    )
+
+
+def _should_prefetch_next(
+    config: TrainingRunConfig,
+    *,
+    started: float,
+    update_index: int,
+    max_updates_this_run: int | None,
+    durations: list[float],
+    collection: CollectorMetrics,
+) -> bool:
+    next_update = update_index + 1
+    if max_updates_this_run is not None and next_update >= max_updates_this_run:
+        return False
+    if config.max_wall_seconds is None:
+        return True
+    remaining = config.max_wall_seconds - (time.perf_counter() - started)
+    estimate = max(durations[-5:], default=collection.elapsed_seconds + 15.0)
+    return remaining >= estimate
+
+
+def _launch_collection(
+    executor: ThreadPoolExecutor,
+    config: TrainingRunConfig,
+    vector_pool: VectorActorPool,
+    *,
+    model: NeuralPolicy,
+    update_index: int,
+    policy_version: int,
+    games_per_cell: int,
+) -> _PendingCollection:
+    plans = _training_plans(
+        config,
+        update_index=update_index,
+        games_per_cell=games_per_cell,
+    )
+    snapshot = NeuralPolicy(model.encoder_config, model.model_config)
+    snapshot.load_state_dict(model.state_dict())
+    snapshot.eval()
+    launched_at = time.perf_counter()
+    return _PendingCollection(
+        update_index=update_index,
+        policy_version=policy_version,
+        launched_at=launched_at,
+        future=executor.submit(
+            _collect,
+            config,
+            snapshot,
+            plans,
+            vector_pool=vector_pool,
+        ),
+    )
+
+
 def _collect(
     config: TrainingRunConfig,
     model: NeuralPolicy,
@@ -423,6 +711,33 @@ def _collect(
     )
 
 
+def _training_plans(
+    config: TrainingRunConfig,
+    *,
+    update_index: int,
+    games_per_cell: int,
+) -> tuple[SelfPlayEpisodePlan, ...]:
+    if config.opponent_training == "mirror-self-play":
+        return plan_mirror_episodes(
+            root_seed=config.root_seed,
+            update_index=update_index,
+            games_per_cell=games_per_cell,
+            policy_identity="current",
+        )
+    share = {
+        "strong-field-v1-75": Fraction(3, 4),
+        "strong-field-v1-50": Fraction(1, 2),
+        "strong-field-v1-25": Fraction(1, 4),
+    }[config.opponent_training]
+    return plan_strong_field_episodes(
+        root_seed=config.root_seed,
+        update_index=update_index,
+        games_per_cell=games_per_cell,
+        policy_identity="current",
+        fixed_opponent_share=share,
+    )
+
+
 def _resolve_candidate(
     config: TrainingRunConfig,
 ) -> tuple[BenchmarkCandidate, tuple[BenchmarkResult, ...]]:
@@ -455,6 +770,8 @@ def _resolved_config(
             active_games_per_worker=candidate.active_games_per_worker,
             max_inference_batch=candidate.max_inference_batch,
             max_queue_delay_ms=config.parallel.max_queue_delay_ms,
+            max_stale_approximate_kl=config.parallel.max_stale_approximate_kl,
+            max_stale_clip_fraction=config.parallel.max_stale_clip_fraction,
         ),
     )
 
@@ -483,18 +800,22 @@ def _update_metrics(
     duration: float,
     collection: CollectorMetrics,
     ppo: PPOUpdateMetrics,
+    pipeline: dict[str, object] | None = None,
 ) -> dict[str, object]:
     collection_payload = asdict(collection)
     collection_payload["games_per_second"] = collection.games_per_second
     collection_payload["decisions_per_second"] = collection.decisions_per_second
     collection_payload["mean_inference_batch_size"] = collection.mean_inference_batch_size
-    return {
+    payload: dict[str, object] = {
         "update_index": update_index,
         "games_per_cell": games_per_cell,
         "duration_seconds": duration,
         "collection": collection_payload,
         "ppo": asdict(ppo),
     }
+    if pipeline is not None:
+        payload["pipeline"] = pipeline
+    return payload
 
 
 def _prepare_run_dir(path: Path) -> Path:
