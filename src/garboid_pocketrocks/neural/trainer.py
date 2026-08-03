@@ -538,8 +538,7 @@ def _run_pipelined_updates(
                 completed_episodes,
                 completed_decisions,
                 tuple(
-                    (ruleset, players, games)
-                    for (ruleset, players), games in sorted(cells.items())
+                    (ruleset, players, games) for (ruleset, players), games in sorted(cells.items())
                 ),
             )
             metrics = _update_metrics(
@@ -562,9 +561,7 @@ def _run_pipelined_updates(
                     "stale_approximate_kl": stale_shift.approximate_kl,
                     "stale_clip_fraction": stale_shift.clip_fraction,
                     "stale_rollout_rejected": discarded_stale_collection_seconds > 0.0,
-                    "discarded_stale_collection_seconds": (
-                        discarded_stale_collection_seconds
-                    ),
+                    "discarded_stale_collection_seconds": (discarded_stale_collection_seconds),
                 },
             )
             _append_json_line(run_dir / "metrics.jsonl", metrics)
@@ -881,12 +878,8 @@ def _update_metrics(
             "ratios": _distribution_summary(ppo.ratios),
             "values": _distribution_summary(ppo.values),
             "entropies": _distribution_summary(ppo.entropies),
-            "pre_clip_gradient_norms": _distribution_summary(
-                ppo.pre_clip_gradient_norms
-            ),
-            "post_clip_gradient_norms": _distribution_summary(
-                ppo.post_clip_gradient_norms
-            ),
+            "pre_clip_gradient_norms": _distribution_summary(ppo.pre_clip_gradient_norms),
+            "post_clip_gradient_norms": _distribution_summary(ppo.post_clip_gradient_norms),
         },
     }
     payload: dict[str, object] = {

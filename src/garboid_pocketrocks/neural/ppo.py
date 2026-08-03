@@ -352,10 +352,14 @@ class PPOTrainer:
                         dtype=torch.int64,
                         device=self.device,
                     )
-                    new_log_probability = torch.log_softmax(
-                        selection.masked_logits,
-                        dim=-1,
-                    ).gather(1, actions.unsqueeze(1)).squeeze(1)
+                    new_log_probability = (
+                        torch.log_softmax(
+                            selection.masked_logits,
+                            dim=-1,
+                        )
+                        .gather(1, actions.unsqueeze(1))
+                        .squeeze(1)
+                    )
                     old_log_probability = torch.as_tensor(
                         packed.old_log_probabilities[indices],
                         dtype=new_log_probability.dtype,
@@ -363,9 +367,7 @@ class PPOTrainer:
                     )
                     log_ratio = new_log_probability - old_log_probability
                     ratio = torch.exp(log_ratio)
-                    approximate_kl_sum += float(
-                        ((ratio - 1.0) - log_ratio).sum().item()
-                    )
+                    approximate_kl_sum += float(((ratio - 1.0) - log_ratio).sum().item())
                     clip_count += int(
                         (torch.abs(ratio - 1.0) > self.config.clip_ratio).sum().item()
                     )

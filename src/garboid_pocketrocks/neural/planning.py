@@ -138,13 +138,16 @@ def plan_strong_field_episodes(
         policy_identity=policy_identity,
     )
     focal_seats = tuple(
-        (plan.episode_index // 15 + _derive_seed(
-            root_seed,
-            "focal-seat",
-            update_index,
-            ord(value_chart_from_ruleset_name(plan.ruleset_name)),
-            plan.player_count,
-        ))
+        (
+            plan.episode_index // 15
+            + _derive_seed(
+                root_seed,
+                "focal-seat",
+                update_index,
+                ord(value_chart_from_ruleset_name(plan.ruleset_name)),
+                plan.player_count,
+            )
+        )
         % plan.player_count
         for plan in base
     )
@@ -168,9 +171,7 @@ def plan_strong_field_episodes(
         ),
     )
     fixed_count = (
-        len(opponent_slots)
-        * fixed_opponent_share.numerator
-        // fixed_opponent_share.denominator
+        len(opponent_slots) * fixed_opponent_share.numerator // fixed_opponent_share.denominator
     )
     fixed_slots = frozenset(ordered_slots[:fixed_count])
     ordered_fixed = sorted(

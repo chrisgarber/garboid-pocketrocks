@@ -104,13 +104,15 @@ def test_strong_field_plan_has_one_focal_seat_and_exact_mixed_opponents() -> Non
     opponent_assignments = [assignment for assignment in assignments if not assignment.trainable]
     assert len(plans) == 60
     assert all(
-        sum(assignment.trainable for assignment in plan.seat_policies) == 1
-        for plan in plans
+        sum(assignment.trainable for assignment in plan.seat_policies) == 1 for plan in plans
     )
-    assert sum(
-        assignment.identity in FIXED_TRAINING_BOT_SPECS_BY_NAME
-        for assignment in opponent_assignments
-    ) == len(opponent_assignments) // 2
+    assert (
+        sum(
+            assignment.identity in FIXED_TRAINING_BOT_SPECS_BY_NAME
+            for assignment in opponent_assignments
+        )
+        == len(opponent_assignments) // 2
+    )
     assert {
         assignment.identity
         for assignment in opponent_assignments

@@ -29,6 +29,4 @@ STRONG_FIELD_POOL_V1: tuple[BotSpec, ...] = (
     FIXED_BID_TUNED_V1_BOT_SPEC,
 )
 
-FIXED_TRAINING_BOT_SPECS_BY_NAME = {
-    spec.name: spec for spec in STRONG_FIELD_POOL_V1
-}
+FIXED_TRAINING_BOT_SPECS_BY_NAME = {spec.name: spec for spec in STRONG_FIELD_POOL_V1}
