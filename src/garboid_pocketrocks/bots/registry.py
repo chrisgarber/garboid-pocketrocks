@@ -30,6 +30,19 @@ from garboid_pocketrocks.bots.heuristic import (
 )
 from garboid_pocketrocks.bots.random_bot import RandomBot
 from garboid_pocketrocks.bots.sdk_samples import SDK_GREEDY_VALUE_V1_BOT_SPEC
+from garboid_pocketrocks.bots.surplus import (
+    SURPLUS_BOT_SPEC,
+    SURPLUS_V1_BOT_SPEC,
+    SURPLUS_V2_BOT_SPEC,
+    SURPLUS_V3_BOT_SPEC,
+    SURPLUS_V4_BOT_SPEC,
+    SURPLUS_V5_BOT_SPEC,
+    SURPLUS_V6_BOT_SPEC,
+    SURPLUS_V7_BOT_SPEC,
+    SURPLUS_V8_BOT_SPEC,
+    SURPLUS_V9_BOT_SPEC,
+    SURPLUS_V10_BOT_SPEC,
+)
 from garboid_pocketrocks.neural.tournament_bot import (
     VECTOR_PPO_LARGE_V1_G350K_BOT_SPEC,
     VECTOR_PPO_SMALL_V1_G1500_BOT_SPEC,
@@ -56,6 +69,17 @@ BOT_SPECS = (
     BALANCED_HEURISTIC_V3_BOT_SPEC,
     PASSIVE_HEURISTIC_V3_BOT_SPEC,
     SDK_GREEDY_VALUE_V1_BOT_SPEC,
+    SURPLUS_BOT_SPEC,
+    SURPLUS_V1_BOT_SPEC,
+    SURPLUS_V2_BOT_SPEC,
+    SURPLUS_V3_BOT_SPEC,
+    SURPLUS_V4_BOT_SPEC,
+    SURPLUS_V5_BOT_SPEC,
+    SURPLUS_V6_BOT_SPEC,
+    SURPLUS_V7_BOT_SPEC,
+    SURPLUS_V8_BOT_SPEC,
+    SURPLUS_V9_BOT_SPEC,
+    SURPLUS_V10_BOT_SPEC,
     VECTOR_PPO_SMALL_V1_G1500_BOT_SPEC,
     VECTOR_PPO_LARGE_V1_G350K_BOT_SPEC,
 )

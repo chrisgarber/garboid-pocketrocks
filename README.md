@@ -156,6 +156,15 @@ place. Read the [identity decision](docs/architecture/immutable-bot-identities.m
 and the [bot-versioning workflow](.agents/skills/versioning-bots/SKILL.md)
 before changing strategy behavior.
 
+The local-only `surplus` heuristic alias currently selects immutable
+`surplus-v10`. Generations v1-v10 remain explicitly selectable for deterministic
+simulation. The [initial development ladder](docs/benchmarks/2026-08-02-surplus-heuristic-ladder.md),
+the [objective-tuning report](docs/benchmarks/2026-08-02-surplus-v7-objective-tuning.md),
+the [opponent-threat report](docs/benchmarks/2026-08-02-surplus-v8-opponent-objective-threat.md),
+the [liquidity and objective-progress report](docs/benchmarks/2026-08-02-surplus-v9-liquidity-objective-progress.md),
+and the [action-aware liquidity report](docs/benchmarks/2026-08-02-surplus-v10-action-aware-liquidity.md)
+record the hypotheses, fixed-seed comparisons, ablations, and negative experiments.
+
 ## Documentation
 
 Start at the [documentation index](docs/README.md). Current operational
