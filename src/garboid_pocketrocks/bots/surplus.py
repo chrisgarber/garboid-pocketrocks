@@ -27,6 +27,7 @@ class SurplusPolicy:
     bid_liquidity_loans: bool = False
     manage_liquidity: bool = False
     use_action_liquidity_demand: bool = False
+    use_net_loan_value: bool = False
     use_market_prices: bool = False
     resource_value_numerator: int = 1
     resource_value_denominator: int = 1
@@ -48,6 +49,8 @@ class SurplusPolicy:
     loan_fee_denominator: int = 1
     loan_opening_fee_numerator: int = 0
     loan_opening_fee_denominator: int = 1
+    loan_liquidity_value_numerator: int = 0
+    loan_liquidity_value_denominator: int = 1
     auction1_fallback_price: int = 5
     auction2_fallback_price: int = 10
     market_quantile_numerator: int = 3
@@ -95,6 +98,11 @@ class SurplusPolicy:
                 "loan opening fee",
                 self.loan_opening_fee_numerator,
                 self.loan_opening_fee_denominator,
+            ),
+            (
+                "loan liquidity value",
+                self.loan_liquidity_value_numerator,
+                self.loan_liquidity_value_denominator,
             ),
         ):
             if numerator < 0 or denominator <= 0:
@@ -610,12 +618,23 @@ class SurplusBrain:
         cash = context.cash_by_seat[context.bot_seat]
         if cash >= target_cash:
             return BotDecision.pass_turn()
-        amount = int(
+        fee_cap = int(
             principal
             * Fraction(
                 self._policy.loan_fee_numerator,
                 self._policy.loan_fee_denominator,
             )
+        )
+        amount = (
+            self._net_loan_reservation_bid(
+                principal=principal,
+                cash=cash,
+                target_cash=target_cash,
+                legal_max=context.legal_max_amount or 0,
+                fee_cap=fee_cap,
+            )
+            if self._policy.use_net_loan_value
+            else fee_cap
         )
         if self._policy.use_action_liquidity_demand and self._policy.loan_opening_fee_numerator > 0:
             opening_amount = int(
@@ -638,6 +657,31 @@ class SurplusBrain:
             amount = min(amount, self._market_price_cap(context, history))
         amount = min(amount, context.legal_max_amount or 0)
         return BotDecision.submit_bid(amount) if amount > 0 else BotDecision.pass_turn()
+
+    def _net_loan_reservation_bid(
+        self,
+        *,
+        principal: int,
+        cash: int,
+        target_cash: int,
+        legal_max: int,
+        fee_cap: int,
+    ) -> int:
+        """Highest fee justified by the liquidity shortfall a loan removes."""
+
+        shortfall = max(0, target_cash - cash)
+        liquidity_value = Fraction(
+            self._policy.loan_liquidity_value_numerator,
+            self._policy.loan_liquidity_value_denominator,
+        )
+        reservation = 0
+        for bid in range(1, min(legal_max, fee_cap) + 1):
+            post_win_cash = cash + principal - bid
+            remaining_shortfall = max(0, target_cash - post_win_cash)
+            shortfall_reduction = shortfall - remaining_shortfall
+            if shortfall_reduction * liquidity_value >= bid:
+                reservation = bid
+        return reservation
 
     @staticmethod
     def _ceil_fraction(value: Fraction) -> int:
@@ -749,6 +793,42 @@ SURPLUS_V10_POLICY = SurplusPolicy(
     auction1_fallback_price=5,
     auction2_fallback_price=10,
 )
+SURPLUS_V11_POLICY = SurplusPolicy(
+    use_posterior_values=True,
+    use_objective_values=True,
+    use_opponent_objective_threat=True,
+    use_objective_progress=True,
+    bid_investments=True,
+    bid_liquidity_loans=True,
+    manage_liquidity=True,
+    use_action_liquidity_demand=True,
+    use_net_loan_value=True,
+    use_market_prices=True,
+    resource_value_numerator=3,
+    resource_value_denominator=4,
+    objective_value_numerator=3,
+    objective_value_denominator=8,
+    opponent_objective_numerator=1,
+    opponent_objective_denominator=32,
+    objective_progress_numerator=1,
+    objective_progress_denominator=8,
+    resource_reserve_numerator=1,
+    resource_reserve_denominator=8,
+    investment_reserve_numerator=2,
+    investment_reserve_denominator=5,
+    objective_reserve_release_numerator=1,
+    objective_reserve_release_denominator=2,
+    loan_trigger_numerator=7,
+    loan_trigger_denominator=8,
+    loan_fee_numerator=2,
+    loan_fee_denominator=5,
+    loan_opening_fee_numerator=2,
+    loan_opening_fee_denominator=5,
+    loan_liquidity_value_numerator=2,
+    loan_liquidity_value_denominator=3,
+    auction1_fallback_price=5,
+    auction2_fallback_price=10,
+)
 
 
 class SurplusV1Brain(SurplusBrain):
@@ -801,6 +881,11 @@ class SurplusV10Brain(SurplusBrain):
         super().__init__(SURPLUS_V10_POLICY)
 
 
+class SurplusV11Brain(SurplusBrain):
+    def __init__(self) -> None:
+        super().__init__(SURPLUS_V11_POLICY)
+
+
 def _surplus_v1_factory(seed: int | None) -> SurplusV1Brain:
     del seed
     return SurplusV1Brain()
@@ -851,6 +936,11 @@ def _surplus_v10_factory(seed: int | None) -> SurplusV10Brain:
     return SurplusV10Brain()
 
 
+def _surplus_v11_factory(seed: int | None) -> SurplusV11Brain:
+    del seed
+    return SurplusV11Brain()
+
+
 SURPLUS_V1_BOT_SPEC = BotSpec.for_simulation("surplus-v1", _surplus_v1_factory)
 SURPLUS_V2_BOT_SPEC = BotSpec.for_simulation("surplus-v2", _surplus_v2_factory)
 SURPLUS_V3_BOT_SPEC = BotSpec.for_simulation("surplus-v3", _surplus_v3_factory)
@@ -861,4 +951,5 @@ SURPLUS_V7_BOT_SPEC = BotSpec.for_simulation("surplus-v7", _surplus_v7_factory)
 SURPLUS_V8_BOT_SPEC = BotSpec.for_simulation("surplus-v8", _surplus_v8_factory)
 SURPLUS_V9_BOT_SPEC = BotSpec.for_simulation("surplus-v9", _surplus_v9_factory)
 SURPLUS_V10_BOT_SPEC = BotSpec.for_simulation("surplus-v10", _surplus_v10_factory)
-SURPLUS_BOT_SPEC = BotSpec.for_simulation("surplus", _surplus_v10_factory)
+SURPLUS_V11_BOT_SPEC = BotSpec.for_simulation("surplus-v11", _surplus_v11_factory)
+SURPLUS_BOT_SPEC = BotSpec.for_simulation("surplus", _surplus_v11_factory)

@@ -30,6 +30,8 @@ from garboid_pocketrocks.bots.surplus import (
     SURPLUS_V9_POLICY,
     SURPLUS_V10_BOT_SPEC,
     SURPLUS_V10_POLICY,
+    SURPLUS_V11_BOT_SPEC,
+    SURPLUS_V11_POLICY,
     SurplusBrain,
     SurplusPolicy,
     SurplusV1Brain,
@@ -42,6 +44,7 @@ from garboid_pocketrocks.bots.surplus import (
     SurplusV8Brain,
     SurplusV9Brain,
     SurplusV10Brain,
+    SurplusV11Brain,
 )
 from garboid_pocketrocks.knowledge import canonical_knowledge
 
@@ -317,7 +320,7 @@ def test_v6_identity_preserves_v5() -> None:
 def test_unversioned_alias_selects_latest_validated_generation() -> None:
     assert SURPLUS_BOT_SPEC.name == "surplus"
     assert SURPLUS_BOT_SPEC.bot_id == "surplus"
-    assert type(SURPLUS_BOT_SPEC.make_brain(seed=1)) is SurplusV10Brain
+    assert type(SURPLUS_BOT_SPEC.make_brain(seed=1)) is SurplusV11Brain
 
 
 def test_released_generation_policies_remain_exact() -> None:
@@ -653,3 +656,47 @@ def test_v10_identity_preserves_all_prior_generations() -> None:
     assert SURPLUS_V10_BOT_SPEC.bot_id == "surplus-v10"
     assert type(SURPLUS_V10_BOT_SPEC.make_brain(seed=1)) is SurplusV10Brain
     assert type(SURPLUS_V9_BOT_SPEC.make_brain()) is SurplusV9Brain
+
+
+def test_v11_uses_loan_proceeds_to_support_a_bid_with_no_cash() -> None:
+    context = _context(action_id=3, legal_max=10, cash=(0, 30, 30))
+
+    assert SurplusV11Brain().choose_decision(
+        context,
+        canonical_knowledge(3),
+    ) == BotDecision.submit_bid(4)
+
+
+def test_v11_reduces_loan_fee_when_only_a_small_shortfall_remains() -> None:
+    brain = SurplusV11Brain()
+
+    assert (
+        brain._net_loan_reservation_bid(
+            principal=10,
+            cash=18,
+            target_cash=20,
+            legal_max=28,
+            fee_cap=4,
+        )
+        == 1
+    )
+    assert (
+        brain._net_loan_reservation_bid(
+            principal=10,
+            cash=5,
+            target_cash=20,
+            legal_max=15,
+            fee_cap=4,
+        )
+        == 4
+    )
+
+
+def test_v11_identity_preserves_v10_and_advances_latest_alias() -> None:
+    assert SURPLUS_V11_BOT_SPEC.name == "surplus-v11"
+    assert SURPLUS_V11_BOT_SPEC.bot_id == "surplus-v11"
+    assert type(SURPLUS_V11_BOT_SPEC.make_brain(seed=1)) is SurplusV11Brain
+    assert type(SURPLUS_V10_BOT_SPEC.make_brain()) is SurplusV10Brain
+    assert type(SURPLUS_BOT_SPEC.make_brain()) is SurplusV11Brain
+    assert SURPLUS_V11_POLICY.use_net_loan_value is True
+    assert SURPLUS_V10_POLICY.use_net_loan_value is False
