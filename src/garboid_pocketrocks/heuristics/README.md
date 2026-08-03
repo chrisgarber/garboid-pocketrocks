@@ -37,6 +37,32 @@ Reveal selection conditions the public belief on each candidate reveal and
 chooses the card with the smallest weighted benefit to opponents; ties use the
 lowest hand index.
 
+## Opponent modelling and Monte Carlo best response
+
+`monte-the-bookie-v1` keeps the belief, cash, objective and reveal engines above and
+replaces only the bid rule. Auctions here are sealed-bid first-price, so the deciding
+quantity is not the value of the lot but the distribution of the maximum opposing bid.
+
+`opponents.py` estimates that distribution. Each rival is resampled from what it has
+actually bid this game, blended toward the fitted population prior in `bid_priors.py`
+and capped by the cash it publicly holds. `bid_priors.py` stores bid-as-a-fraction-of-cash
+quantiles bucketed by action class and game phase, fitted offline from recorded decision
+traces; refit it with `scripts/analysis/fit_bid_prior.py` under a new name.
+
+`ledger.py` derives four further signals from public history alone:
+
+- every seat's loan debt and investment returns, by replaying each turn's action and
+  resolved bids and deriving the winner from the tie-break seat;
+- projected final scores, and therefore whether the acting bot is behind;
+- the exact count of auctions still in the action deck, rather than a resource-count
+  proxy for the horizon;
+- the objective payout a rival would collect by taking the offered lot.
+
+The brain samples hidden terminal prices and opponent bids together, resolves the
+auction exactly including tie priority, and takes the bid with the greatest expected
+surplus plus a bonus for crossing the projected leader. Coefficients live in
+`montecarlo.py` and are released and immutable.
+
 ## Released generations
 
 | Generation | Profile | Liquidity | Future cash | Objective progress | Bid shading |

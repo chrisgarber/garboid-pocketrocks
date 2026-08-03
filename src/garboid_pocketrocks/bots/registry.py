@@ -4,6 +4,7 @@ from collections.abc import Mapping
 from types import MappingProxyType
 
 from garboid_pocketrocks.bots.base import BotSpec
+from garboid_pocketrocks.bots.best_response import MONTE_CARLO_V1_BOT_SPEC
 from garboid_pocketrocks.bots.fixed_bid import (
     FIXED_BID_BOT_SPEC,
     FIXED_BID_DIVERSE_V1_BOT_SPEC,
@@ -58,6 +59,7 @@ BOT_SPECS = (
     SDK_GREEDY_VALUE_V1_BOT_SPEC,
     VECTOR_PPO_SMALL_V1_G1500_BOT_SPEC,
     VECTOR_PPO_LARGE_V1_G350K_BOT_SPEC,
+    MONTE_CARLO_V1_BOT_SPEC,
 )
 
 DEFAULT_TOURNAMENT_BOT_SPECS = (
@@ -74,6 +76,7 @@ DEFAULT_TOURNAMENT_BOT_SPECS = (
     AGGRESSIVE_HEURISTIC_V3_BOT_SPEC,
     BALANCED_HEURISTIC_V3_BOT_SPEC,
     PASSIVE_HEURISTIC_V3_BOT_SPEC,
+    MONTE_CARLO_V1_BOT_SPEC,
 )
 
 

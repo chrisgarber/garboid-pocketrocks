@@ -114,6 +114,7 @@ def test_bot_filters_use_curated_defaults_when_include_is_omitted() -> None:
         "aggressive-v3",
         "balanced-v3",
         "passive-v3",
+        "monte-the-bookie-v1",
     )
 
 

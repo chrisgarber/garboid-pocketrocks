@@ -7,6 +7,10 @@ from garboid_pocketrocks.bots.base import (
     HistoryAwareBotBrain,
     PocketRocksFastBot,
 )
+from garboid_pocketrocks.bots.best_response import (
+    MonteCarloBotBrain,
+    MonteCarloV1Brain,
+)
 from garboid_pocketrocks.bots.fixed_bid import (
     FixedBidBotBrain,
     FixedBidDiverseV1Brain,
@@ -75,6 +79,8 @@ __all__ = [
     "BalancedHeuristicV2Brain",
     "BalancedHeuristicV3Brain",
     "HeuristicBotBrain",
+    "MonteCarloBotBrain",
+    "MonteCarloV1Brain",
     "HistoryAwareBotBrain",
     "PassiveHeuristicBot",
     "PassiveHeuristicBrain",
