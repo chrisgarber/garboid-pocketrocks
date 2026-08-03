@@ -162,14 +162,15 @@ and the [bot-versioning workflow](.agents/skills/versioning-bots/SKILL.md)
 before changing strategy behavior.
 
 The local-only `surplus` heuristic alias currently selects immutable
-`surplus-v12`. Generations v1-v12 remain explicitly selectable for deterministic
+`surplus-v14`. Generations v1-v14 remain explicitly selectable for deterministic
 simulation. The [initial development ladder](docs/benchmarks/2026-08-02-surplus-heuristic-ladder.md),
 the [objective-tuning report](docs/benchmarks/2026-08-02-surplus-v7-objective-tuning.md),
 the [opponent-threat report](docs/benchmarks/2026-08-02-surplus-v8-opponent-objective-threat.md),
 the [liquidity and objective-progress report](docs/benchmarks/2026-08-02-surplus-v9-liquidity-objective-progress.md),
 the [action-aware liquidity report](docs/benchmarks/2026-08-02-surplus-v10-action-aware-liquidity.md),
 the [net-loan valuation report](docs/benchmarks/2026-08-03-surplus-v11-net-loan-valuation.md),
-and the [objective-reachability report](docs/benchmarks/2026-08-03-surplus-v12-objective-reachability.md)
+the [objective-reachability report](docs/benchmarks/2026-08-03-surplus-v12-objective-reachability.md),
+and the [market-timing report](docs/benchmarks/2026-08-03-surplus-v13-v14-market-timing.md)
 record the hypotheses, fixed-seed comparisons, ablations, and negative experiments.
 
 ### Surplus research backlog
@@ -181,11 +182,11 @@ including both expected upside and how often the feature should affect play.
 | Candidate feature | Estimated effectiveness | Why it may help |
 |---|---:|---|
 | Net loan proceeds and marginal liquidity value | 5/5 | Score each legal loan bid using post-win cash (`cash + principal - bid`) and the projected shortfall it removes. V10 can legally bid from the proceeds, but its fixed principal fraction pays the same fee for a small or large shortage. Selected for v11. |
-| Opponent-specific clearing-price and win-probability model | 4.5/5 | Replace the pooled upper-quartile price with seat-aware bid distributions conditioned on action, cash, game phase, and observed behavior; bid only when marginal win probability justifies the next dollar. An investment-only first attempt was rejected after it overbought investments, so a future version needs the richer conditioning described here. |
+| Opponent-specific clearing-price and win-probability model | 4.5/5 | Replace the pooled upper-quartile price with seat-aware bid distributions conditioned on action, cash, game phase, and observed behavior; bid only when marginal win probability justifies the next dollar. V13 selected a conservative investment-only expected-profit curve; applying it to resources was rejected, so broader use still needs richer conditioning. |
 | Objective reachability and race probability | 4.5/5 | Discount objective progress when too few matching resources remain and increase completion or denial value when a rival is likely to claim first. The reachability half was selected for v12; the tested race discounts were not. |
 | Short-horizon bundle lookahead | 4/5 | Compare buying now with the expected marginal value and cash cost of plausible remaining Auction1/Auction2 bundles instead of valuing each offer mostly in isolation. |
 | Strategic information reveal selection | 4/5 | Stop always revealing the first private card; reveal information that leaks the least about valuable suits and objective plans while accounting for information already public. |
-| Endgame cash and action-deck conversion | 3.5/5 | Reduce reserves when too few useful auctions remain, price investments by remaining horizon, and stop borrowing when the remaining deck cannot productively use the proceeds. |
+| Endgame cash and action-deck conversion | 3.5/5 | V14 selected phase-shaped resource bids that move spend from early to late auctions. A future version can make that timing bundle- and objective-aware, price investments by remaining horizon, and stop borrowing when the deck cannot productively use the proceeds. |
 | Opponent liquidity and denial pressure | 3.5/5 | Use rival cash, loans, holdings, and objective proximity to identify who can contest an auction and when one extra bid has meaningful denial value. |
 | Portfolio concentration and diversification | 3/5 | Penalize cards with weak future marginal chart value and reward bundles that preserve multiple feasible objective routes. |
 | Tie-break-aware bid increments | 2.5/5 | Use the current tie-break seat to decide when matching an expected clearing price is enough and when the bot must bid one more. |
