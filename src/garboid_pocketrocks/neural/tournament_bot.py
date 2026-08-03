@@ -28,8 +28,10 @@ if TYPE_CHECKING:
 CHECKPOINTS_PATH = Path(__file__).with_name("checkpoints")
 SMOKE_BOT_NAME = "vector_ppo_small_v1_g1500"
 LARGE_BOT_NAME = "vector_ppo_large_v1_g350k"
+LARGE_V2_BOT_NAME = "vector_ppo_large_v2_g1750k"
 SMOKE_CHECKPOINT_PATH = CHECKPOINTS_PATH / SMOKE_BOT_NAME
 LARGE_CHECKPOINT_PATH = CHECKPOINTS_PATH / LARGE_BOT_NAME
+LARGE_V2_CHECKPOINT_PATH = CHECKPOINTS_PATH / LARGE_V2_BOT_NAME
 
 
 @dataclass(frozen=True, slots=True)
@@ -162,6 +164,12 @@ class VectorPpoLargeV1G350kBrain(_FrozenNeuralBrain):
     checkpoint_path = LARGE_CHECKPOINT_PATH
 
 
+class VectorPpoLargeV2G1750kBrain(_FrozenNeuralBrain):
+    """Frozen 1,764,480-game large policy."""
+
+    checkpoint_path = LARGE_V2_CHECKPOINT_PATH
+
+
 class CheckpointNeuralBrain(_FrozenNeuralBrain):
     """Deterministic brain backed by an explicitly supplied inference bundle."""
 
@@ -188,4 +196,8 @@ VECTOR_PPO_SMALL_V1_G1500_BOT_SPEC = BotSpec.for_simulation(
 VECTOR_PPO_LARGE_V1_G350K_BOT_SPEC = BotSpec.for_simulation(
     LARGE_BOT_NAME,
     VectorPpoLargeV1G350kBrain,
+)
+VECTOR_PPO_LARGE_V2_G1750K_BOT_SPEC = BotSpec.for_simulation(
+    LARGE_V2_BOT_NAME,
+    VectorPpoLargeV2G1750kBrain,
 )

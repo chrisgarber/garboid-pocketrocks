@@ -22,13 +22,14 @@ def main() -> None:
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--games", type=int, required=True)
     parser.add_argument("--bootstrap-samples", type=int, default=0)
+    parser.add_argument("--bot-name")
     parser.add_argument("--workers", type=int, default=1)
     parser.add_argument("--decision-reports", action="store_true")
     parser.add_argument("--seed", type=int, required=True)
     arguments = parser.parse_args()
 
     inspected = inspect_checkpoint(arguments.checkpoint)
-    bot_id = inspected["bot_id"]
+    bot_id = arguments.bot_name or inspected["bot_id"]
     if not isinstance(bot_id, str):
         raise TypeError("checkpoint bot ID must be a string")
     inference = export_inference_checkpoint(

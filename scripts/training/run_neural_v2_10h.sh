@@ -40,6 +40,7 @@ uv run --extra neural garboid-train resume \
 uv run --extra neural python scripts/training/evaluate_neural_checkpoint.py \
   --checkpoint "$training_root/stage3-25/checkpoints/latest" \
   --inference-checkpoint "$training_root/stage3-25/inference" \
+  --bot-name vector_ppo_large_v2_g1750k \
   --output-dir "$tournament_root/final" \
   --games 1500 \
   --bootstrap-samples 100 \

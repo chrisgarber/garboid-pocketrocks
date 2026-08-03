@@ -5,12 +5,14 @@ self-play. The supported envelope covers value charts A through E and three,
 four, and five players. Every seat uses the same frozen policy snapshot during
 collection, and every seat trajectory is available to PPO.
 
-Two immutable checkpoint-backed policies are registered for local simulation
+Three immutable checkpoint-backed policies are registered for local simulation
 and tournaments:
 
 - `vector_ppo_small_v1_g1500`;
 - `vector_ppo_large_v1_g350k`, a rounded release alias whose manifest records
-  the exact 349,860-game age.
+  the exact 349,860-game age;
+- `vector_ppo_large_v2_g1750k`, a rounded release alias whose manifest records
+  the exact 1,764,480-game age.
 
 The checkpoints themselves are immutable local simulation identities, not
 remote live bots. The separate public live wrapper `ppo-large-teen` currently
