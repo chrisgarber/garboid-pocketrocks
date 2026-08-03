@@ -32,6 +32,8 @@ from garboid_pocketrocks.bots.surplus import (
     SURPLUS_V10_POLICY,
     SURPLUS_V11_BOT_SPEC,
     SURPLUS_V11_POLICY,
+    SURPLUS_V12_BOT_SPEC,
+    SURPLUS_V12_POLICY,
     SurplusBrain,
     SurplusPolicy,
     SurplusV1Brain,
@@ -45,6 +47,7 @@ from garboid_pocketrocks.bots.surplus import (
     SurplusV9Brain,
     SurplusV10Brain,
     SurplusV11Brain,
+    SurplusV12Brain,
 )
 from garboid_pocketrocks.knowledge import canonical_knowledge
 
@@ -320,7 +323,7 @@ def test_v6_identity_preserves_v5() -> None:
 def test_unversioned_alias_selects_latest_validated_generation() -> None:
     assert SURPLUS_BOT_SPEC.name == "surplus"
     assert SURPLUS_BOT_SPEC.bot_id == "surplus"
-    assert type(SURPLUS_BOT_SPEC.make_brain(seed=1)) is SurplusV11Brain
+    assert type(SURPLUS_BOT_SPEC.make_brain(seed=1)) is SurplusV12Brain
 
 
 def test_released_generation_policies_remain_exact() -> None:
@@ -448,6 +451,10 @@ def test_policy_rejects_invalid_tuning_ratios() -> None:
         SurplusPolicy(market_quantile_numerator=5)
     with pytest.raises(ValueError, match="objective progress"):
         SurplusPolicy(objective_progress_denominator=0)
+    with pytest.raises(ValueError, match="objective reachability floor"):
+        SurplusPolicy(objective_reachability_floor_numerator=2)
+    with pytest.raises(ValueError, match="objective race discount"):
+        SurplusPolicy(objective_race_discount_denominator=0)
     with pytest.raises(ValueError, match="fallback auction"):
         SurplusPolicy(auction1_fallback_price=-1)
     with pytest.raises(ValueError, match="loan opening fee"):
@@ -697,6 +704,88 @@ def test_v11_identity_preserves_v10_and_advances_latest_alias() -> None:
     assert SURPLUS_V11_BOT_SPEC.bot_id == "surplus-v11"
     assert type(SURPLUS_V11_BOT_SPEC.make_brain(seed=1)) is SurplusV11Brain
     assert type(SURPLUS_V10_BOT_SPEC.make_brain()) is SurplusV10Brain
-    assert type(SURPLUS_BOT_SPEC.make_brain()) is SurplusV11Brain
     assert SURPLUS_V11_POLICY.use_net_loan_value is True
     assert SURPLUS_V10_POLICY.use_net_loan_value is False
+
+
+def test_v12_zeros_progress_when_a_required_suit_cannot_remain_in_the_deck() -> None:
+    exhausted = _context(
+        resources=(1, 0),
+        hand=(2, 2, 2, 2, 2),
+        revealed=((0, 0, 0, 0, 0), (0, 1, 0, 0, 0), (0, 0, 0, 0, 0)),
+        objectives=(21,),
+    )
+    available = _context(resources=(1, 0), objectives=(21,))
+    brain = SurplusBrain(
+        SurplusPolicy(
+            use_objective_reachability=True,
+            objective_reachability_floor_numerator=0,
+        )
+    )
+
+    assert SurplusV11Brain._objective_progress_value(exhausted, (1,)) > 0
+    assert (
+        brain._reachable_objective_progress_value(
+            exhausted,
+            canonical_knowledge(3),
+            (1,),
+        )
+        == 0
+    )
+    assert (
+        brain._reachable_objective_progress_value(
+            available,
+            canonical_knowledge(3),
+            (1,),
+        )
+        > 0
+    )
+
+
+def test_v12_discounts_progress_when_a_rival_is_already_closer() -> None:
+    context = _context(
+        resources=(1, 0),
+        objectives=(2,),
+        won=((0, 0, 0, 0, 0), (2, 0, 0, 0, 0), (0, 0, 0, 0, 0)),
+    )
+    no_race_discount = SurplusBrain(
+        SurplusPolicy(
+            use_objective_reachability=True,
+            objective_reachability_floor_numerator=0,
+        )
+    )
+    race_aware = SurplusBrain(
+        SurplusPolicy(
+            use_objective_reachability=True,
+            objective_reachability_floor_numerator=0,
+            objective_race_discount_numerator=1,
+        )
+    )
+
+    baseline = no_race_discount._reachable_objective_progress_value(
+        context,
+        canonical_knowledge(3),
+        (1,),
+    )
+    discounted = race_aware._reachable_objective_progress_value(
+        context,
+        canonical_knowledge(3),
+        (1,),
+    )
+
+    assert discounted == baseline / 2
+
+
+def test_v12_identity_preserves_v11_and_advances_latest_alias() -> None:
+    assert SURPLUS_V12_BOT_SPEC.name == "surplus-v12"
+    assert SURPLUS_V12_BOT_SPEC.bot_id == "surplus-v12"
+    assert type(SURPLUS_V12_BOT_SPEC.make_brain(seed=1)) is SurplusV12Brain
+    assert type(SURPLUS_V11_BOT_SPEC.make_brain()) is SurplusV11Brain
+    assert type(SURPLUS_BOT_SPEC.make_brain()) is SurplusV12Brain
+    assert SURPLUS_V12_POLICY.use_objective_reachability is True
+    assert SURPLUS_V12_POLICY.objective_reachability_floor_numerator == 1
+    assert SURPLUS_V12_POLICY.objective_reachability_floor_denominator == 2
+    assert SURPLUS_V12_POLICY.objective_race_discount_numerator == 0
+    assert SURPLUS_V12_POLICY.objective_reserve_release_numerator == 5
+    assert SURPLUS_V12_POLICY.objective_reserve_release_denominator == 8
+    assert SURPLUS_V11_POLICY.use_objective_reachability is False
