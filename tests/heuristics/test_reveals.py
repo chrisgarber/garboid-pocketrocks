@@ -6,6 +6,7 @@ from dataclasses import replace
 import pytest
 from pocketrocks import ActionId, DecisionContext, Suit
 
+from garboid_pocketrocks.heuristics.belief import BeliefState, build_belief
 from garboid_pocketrocks.heuristics.errors import HeuristicInputError
 from garboid_pocketrocks.heuristics.profiles import BALANCED_PROFILE
 from garboid_pocketrocks.heuristics.reveals import (
@@ -163,6 +164,35 @@ def test_valuator_exposes_the_same_reveal_policy() -> None:
         context,
         knowledge,
     ) == choose_reveal(context, knowledge)
+
+
+def test_reveal_candidates_reuse_one_seat_scoped_belief_validation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = _reveal_context(
+        hand=(int(Suit.BRICK), int(Suit.WOOD), int(Suit.ORE)),
+    )
+    knowledge = make_knowledge(
+        private_cards=3,
+        resource_counts=(5, 5, 5, 5, 5),
+    )
+    validated_contexts: list[DecisionContext] = []
+
+    def record_build_belief(
+        candidate_context: DecisionContext,
+        candidate_ruleset: RulesetKnowledge,
+    ) -> BeliefState:
+        validated_contexts.append(candidate_context)
+        return build_belief(candidate_context, candidate_ruleset)
+
+    monkeypatch.setattr(
+        "garboid_pocketrocks.heuristics.reveals.build_belief",
+        record_build_belief,
+    )
+
+    choose_reveal(context, knowledge)
+
+    assert validated_contexts == [context]
 
 
 def test_observer_price_vectors_are_finite() -> None:
