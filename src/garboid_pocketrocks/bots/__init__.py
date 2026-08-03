@@ -59,6 +59,7 @@ from garboid_pocketrocks.bots.surplus import (
     SurplusV11Brain,
     SurplusV12Brain,
     SurplusV13Brain,
+    SurplusV14Brain,
 )
 from garboid_pocketrocks.neural.live_bot import PpoLargeTeenBot
 from garboid_pocketrocks.neural.tournament_bot import (
@@ -116,6 +117,7 @@ __all__ = [
     "SurplusV11Brain",
     "SurplusV12Brain",
     "SurplusV13Brain",
+    "SurplusV14Brain",
     "VectorPpoLargeV1G350kBrain",
     "VectorPpoSmallV1G1500Brain",
     "registered_bot_specs",

@@ -33,6 +33,7 @@ class SurplusPolicy:
     use_net_loan_value: bool = False
     use_market_prices: bool = False
     use_expected_investment_bids: bool = False
+    use_phase_resource_shading: bool = False
     resource_value_numerator: int = 1
     resource_value_denominator: int = 1
     objective_value_numerator: int = 1
@@ -49,6 +50,8 @@ class SurplusPolicy:
     resource_reserve_denominator: int = 1
     investment_reserve_numerator: int = 0
     investment_reserve_denominator: int = 1
+    resource_timing_numerator: int = 0
+    resource_timing_denominator: int = 1
     objective_reserve_release_numerator: int = 0
     objective_reserve_release_denominator: int = 1
     loan_trigger_numerator: int = 0
@@ -92,6 +95,11 @@ class SurplusPolicy:
                 "investment reserve",
                 self.investment_reserve_numerator,
                 self.investment_reserve_denominator,
+            ),
+            (
+                "resource timing",
+                self.resource_timing_numerator,
+                self.resource_timing_denominator,
             ),
             (
                 "objective reserve release",
@@ -246,6 +254,13 @@ class SurplusBrain:
         bid = int(estimated_value * Fraction(context.player_count - 1, context.player_count))
         if self._policy.use_market_prices:
             bid = min(bid, self._market_price_cap(context, history))
+        if self._policy.use_phase_resource_shading:
+            bid = self._phase_resource_bid(
+                bid,
+                context,
+                ruleset,
+                awarded_resource_count=len(awarded_resource_ids),
+            )
         if self._policy.manage_liquidity:
             spendable = self._spendable_cash(
                 context,
@@ -676,6 +691,38 @@ class SurplusBrain:
             scaled_index + self._policy.market_quantile_denominator - 1
         ) // self._policy.market_quantile_denominator
         return ordered[quantile_index] + 1
+
+    def _phase_resource_bid(
+        self,
+        bid: int,
+        context: DecisionContext,
+        ruleset: RulesetKnowledge,
+        *,
+        awarded_resource_count: int,
+    ) -> int:
+        """Shade early resource bids down and late resource bids up."""
+
+        total_public_resources = sum(ruleset.resource_counts) - (
+            context.player_count * ruleset.private_cards_per_player
+        )
+        if total_public_resources <= 0:
+            return bid
+        remaining_fraction = Fraction(
+            self._future_resource_count(
+                context,
+                ruleset,
+                awarded_resource_count=awarded_resource_count,
+            ),
+            total_public_resources,
+        )
+        timing_strength = Fraction(
+            self._policy.resource_timing_numerator,
+            self._policy.resource_timing_denominator,
+        )
+        phase_multiplier = Fraction(1) + (
+            timing_strength * (Fraction(1) - (2 * remaining_fraction))
+        )
+        return max(0, int(bid * phase_multiplier))
 
     def _expected_investment_bid(
         self,
@@ -1152,6 +1199,50 @@ SURPLUS_V13_POLICY = SurplusPolicy(
     auction2_fallback_price=10,
     investment_price_prior_weight=4,
 )
+SURPLUS_V14_POLICY = SurplusPolicy(
+    use_posterior_values=True,
+    use_objective_values=True,
+    use_opponent_objective_threat=True,
+    use_objective_progress=True,
+    use_objective_reachability=True,
+    bid_investments=True,
+    bid_liquidity_loans=True,
+    manage_liquidity=True,
+    use_action_liquidity_demand=True,
+    use_net_loan_value=True,
+    use_market_prices=True,
+    use_expected_investment_bids=True,
+    use_phase_resource_shading=True,
+    resource_value_numerator=3,
+    resource_value_denominator=4,
+    objective_value_numerator=3,
+    objective_value_denominator=8,
+    opponent_objective_numerator=1,
+    opponent_objective_denominator=32,
+    objective_progress_numerator=1,
+    objective_progress_denominator=8,
+    objective_reachability_floor_numerator=1,
+    objective_reachability_floor_denominator=2,
+    resource_reserve_numerator=1,
+    resource_reserve_denominator=8,
+    investment_reserve_numerator=0,
+    investment_reserve_denominator=1,
+    resource_timing_numerator=5,
+    resource_timing_denominator=16,
+    objective_reserve_release_numerator=5,
+    objective_reserve_release_denominator=8,
+    loan_trigger_numerator=7,
+    loan_trigger_denominator=8,
+    loan_fee_numerator=2,
+    loan_fee_denominator=5,
+    loan_opening_fee_numerator=2,
+    loan_opening_fee_denominator=5,
+    loan_liquidity_value_numerator=2,
+    loan_liquidity_value_denominator=3,
+    auction1_fallback_price=5,
+    auction2_fallback_price=10,
+    investment_price_prior_weight=4,
+)
 
 
 class SurplusV1Brain(SurplusBrain):
@@ -1219,6 +1310,11 @@ class SurplusV13Brain(SurplusBrain):
         super().__init__(SURPLUS_V13_POLICY)
 
 
+class SurplusV14Brain(SurplusBrain):
+    def __init__(self) -> None:
+        super().__init__(SURPLUS_V14_POLICY)
+
+
 def _surplus_v1_factory(seed: int | None) -> SurplusV1Brain:
     del seed
     return SurplusV1Brain()
@@ -1284,6 +1380,11 @@ def _surplus_v13_factory(seed: int | None) -> SurplusV13Brain:
     return SurplusV13Brain()
 
 
+def _surplus_v14_factory(seed: int | None) -> SurplusV14Brain:
+    del seed
+    return SurplusV14Brain()
+
+
 SURPLUS_V1_BOT_SPEC = BotSpec.for_simulation("surplus-v1", _surplus_v1_factory)
 SURPLUS_V2_BOT_SPEC = BotSpec.for_simulation("surplus-v2", _surplus_v2_factory)
 SURPLUS_V3_BOT_SPEC = BotSpec.for_simulation("surplus-v3", _surplus_v3_factory)
@@ -1297,4 +1398,5 @@ SURPLUS_V10_BOT_SPEC = BotSpec.for_simulation("surplus-v10", _surplus_v10_factor
 SURPLUS_V11_BOT_SPEC = BotSpec.for_simulation("surplus-v11", _surplus_v11_factory)
 SURPLUS_V12_BOT_SPEC = BotSpec.for_simulation("surplus-v12", _surplus_v12_factory)
 SURPLUS_V13_BOT_SPEC = BotSpec.for_simulation("surplus-v13", _surplus_v13_factory)
-SURPLUS_BOT_SPEC = BotSpec.for_simulation("surplus", _surplus_v13_factory)
+SURPLUS_V14_BOT_SPEC = BotSpec.for_simulation("surplus-v14", _surplus_v14_factory)
+SURPLUS_BOT_SPEC = BotSpec.for_simulation("surplus", _surplus_v14_factory)

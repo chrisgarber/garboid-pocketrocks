@@ -36,6 +36,8 @@ from garboid_pocketrocks.bots.surplus import (
     SURPLUS_V12_POLICY,
     SURPLUS_V13_BOT_SPEC,
     SURPLUS_V13_POLICY,
+    SURPLUS_V14_BOT_SPEC,
+    SURPLUS_V14_POLICY,
     SurplusBrain,
     SurplusPolicy,
     SurplusV1Brain,
@@ -51,6 +53,7 @@ from garboid_pocketrocks.bots.surplus import (
     SurplusV11Brain,
     SurplusV12Brain,
     SurplusV13Brain,
+    SurplusV14Brain,
 )
 from garboid_pocketrocks.knowledge import canonical_knowledge
 
@@ -326,7 +329,7 @@ def test_v6_identity_preserves_v5() -> None:
 def test_unversioned_alias_selects_latest_validated_generation() -> None:
     assert SURPLUS_BOT_SPEC.name == "surplus"
     assert SURPLUS_BOT_SPEC.bot_id == "surplus"
-    assert type(SURPLUS_BOT_SPEC.make_brain(seed=1)) is SurplusV13Brain
+    assert type(SURPLUS_BOT_SPEC.make_brain(seed=1)) is SurplusV14Brain
 
 
 def test_released_generation_policies_remain_exact() -> None:
@@ -464,6 +467,8 @@ def test_policy_rejects_invalid_tuning_ratios() -> None:
         SurplusPolicy(loan_opening_fee_denominator=0)
     with pytest.raises(ValueError, match="investment price prior"):
         SurplusPolicy(investment_price_prior_weight=-1)
+    with pytest.raises(ValueError, match="resource timing"):
+        SurplusPolicy(resource_timing_denominator=0)
 
 
 def test_v7_discounts_objectives_and_surrounding_resource_value() -> None:
@@ -834,13 +839,47 @@ def test_v13_updates_the_investment_curve_from_same_action_rival_prices() -> Non
     ) == BotDecision.submit_bid(3)
 
 
-def test_v13_identity_preserves_v12_and_advances_latest_alias() -> None:
+def test_v13_identity_preserves_v12() -> None:
     assert SURPLUS_V13_BOT_SPEC.name == "surplus-v13"
     assert SURPLUS_V13_BOT_SPEC.bot_id == "surplus-v13"
     assert type(SURPLUS_V13_BOT_SPEC.make_brain(seed=1)) is SurplusV13Brain
     assert type(SURPLUS_V12_BOT_SPEC.make_brain()) is SurplusV12Brain
-    assert type(SURPLUS_BOT_SPEC.make_brain()) is SurplusV13Brain
     assert SURPLUS_V13_POLICY.use_expected_investment_bids is True
     assert SURPLUS_V13_POLICY.investment_reserve_numerator == 0
     assert SURPLUS_V13_POLICY.investment_price_prior_weight == 4
     assert SURPLUS_V12_POLICY.use_expected_investment_bids is False
+
+
+def test_v14_shades_resource_bids_down_early_and_up_late() -> None:
+    early = _context(resources=(1, 0))
+    late = _context(
+        resources=(1, 0),
+        won=((6, 6, 2, 0, 0), (0, 0, 0, 0, 0), (0, 0, 0, 0, 0)),
+    )
+    brain = SurplusV14Brain()
+    ruleset = canonical_knowledge(3)
+
+    assert brain._phase_resource_bid(
+        10,
+        early,
+        ruleset,
+        awarded_resource_count=1,
+    ) == 7
+    assert brain._phase_resource_bid(
+        10,
+        late,
+        ruleset,
+        awarded_resource_count=1,
+    ) == 13
+
+
+def test_v14_identity_preserves_v13_and_advances_latest_alias() -> None:
+    assert SURPLUS_V14_BOT_SPEC.name == "surplus-v14"
+    assert SURPLUS_V14_BOT_SPEC.bot_id == "surplus-v14"
+    assert type(SURPLUS_V14_BOT_SPEC.make_brain(seed=1)) is SurplusV14Brain
+    assert type(SURPLUS_V13_BOT_SPEC.make_brain()) is SurplusV13Brain
+    assert type(SURPLUS_BOT_SPEC.make_brain()) is SurplusV14Brain
+    assert SURPLUS_V14_POLICY.use_phase_resource_shading is True
+    assert SURPLUS_V14_POLICY.resource_timing_numerator == 5
+    assert SURPLUS_V14_POLICY.resource_timing_denominator == 16
+    assert SURPLUS_V13_POLICY.use_phase_resource_shading is False

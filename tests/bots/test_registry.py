@@ -46,6 +46,7 @@ def test_registered_bot_specs_have_unique_names_and_ids() -> None:
         "surplus-v11",
         "surplus-v12",
         "surplus-v13",
+        "surplus-v14",
         "vector_ppo_small_v1_g1500",
         "vector_ppo_large_v1_g350k",
     )
