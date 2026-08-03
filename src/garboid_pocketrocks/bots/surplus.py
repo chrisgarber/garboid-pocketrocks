@@ -32,6 +32,7 @@ class SurplusPolicy:
     use_action_liquidity_demand: bool = False
     use_net_loan_value: bool = False
     use_market_prices: bool = False
+    use_expected_investment_bids: bool = False
     resource_value_numerator: int = 1
     resource_value_denominator: int = 1
     objective_value_numerator: int = 1
@@ -62,6 +63,7 @@ class SurplusPolicy:
     auction2_fallback_price: int = 10
     market_quantile_numerator: int = 3
     market_quantile_denominator: int = 4
+    investment_price_prior_weight: int = 0
 
     def __post_init__(self) -> None:
         if self.resource_value_numerator < 0 or self.resource_value_denominator <= 0:
@@ -121,6 +123,8 @@ class SurplusPolicy:
                 raise ValueError(f"{name} multiplier must be nonnegative")
         if self.auction1_fallback_price < 0 or self.auction2_fallback_price < 0:
             raise ValueError("fallback auction prices must be nonnegative")
+        if self.investment_price_prior_weight < 0:
+            raise ValueError("investment price prior weight must be nonnegative")
         if not 0 <= self.market_quantile_numerator <= self.market_quantile_denominator:
             raise ValueError("market quantile must be between zero and one")
         if not (
@@ -160,7 +164,7 @@ class SurplusBrain:
         ):
             payout = 5 if context.current_action_id == ActionId.INVEST5 else 10
             amount = min(payout, context.legal_max_amount or 0)
-            if self._policy.use_market_prices:
+            if self._policy.use_market_prices and not self._policy.use_expected_investment_bids:
                 amount = min(amount, self._market_price_cap(context, history))
             if self._policy.manage_liquidity:
                 amount = min(
@@ -172,6 +176,13 @@ class SurplusBrain:
                         reserve_numerator=self._policy.investment_reserve_numerator,
                         reserve_denominator=self._policy.investment_reserve_denominator,
                     ),
+                )
+            if self._policy.use_expected_investment_bids:
+                amount = self._expected_investment_bid(
+                    context,
+                    history,
+                    payout=payout,
+                    maximum=amount,
                 )
             return BotDecision.submit_bid(amount) if amount > 0 else BotDecision.pass_turn()
 
@@ -666,6 +677,62 @@ class SurplusBrain:
         ) // self._policy.market_quantile_denominator
         return ordered[quantile_index] + 1
 
+    def _expected_investment_bid(
+        self,
+        context: DecisionContext,
+        history: PublicHistory,
+        *,
+        payout: int,
+        maximum: int,
+    ) -> int:
+        """Maximize expected investment profit over the legal bid curve.
+
+        Same-action rival maxima update a broad prior over clearing prices.
+        Requiring the submitted bid to exceed each sampled maximum is a
+        conservative approximation of tie order.
+        """
+
+        maximum = min(maximum, context.legal_max_amount or 0)
+        if maximum <= 0:
+            return 0
+
+        rival_prices: list[int] = []
+        opened_action_id: int | None = None
+        for event in history:
+            if isinstance(event, PublicTurnOpened):
+                opened_action_id = event.action_id
+            elif isinstance(event, PublicAuctionResolved):
+                if opened_action_id == context.current_action_id:
+                    rival_prices.append(
+                        max(
+                            bid
+                            for seat, bid in enumerate(event.bids_by_seat)
+                            if seat != context.bot_seat
+                        )
+                    )
+                opened_action_id = None
+
+        prior_weight = self._policy.investment_price_prior_weight
+        prior_ceiling = 2 * payout
+        total_weight = prior_weight + len(rival_prices)
+        if total_weight <= 0:
+            return 0
+
+        best_bid = 0
+        best_profit = Fraction()
+        for bid in range(1, maximum + 1):
+            prior_wins = Fraction(
+                prior_weight * min(bid, prior_ceiling + 1),
+                prior_ceiling + 1,
+            )
+            empirical_wins = sum(price < bid for price in rival_prices)
+            win_probability = Fraction(prior_wins + empirical_wins, total_weight)
+            expected_profit = win_probability * (payout - bid)
+            if expected_profit > best_profit:
+                best_bid = bid
+                best_profit = expected_profit
+        return best_bid
+
     @staticmethod
     def _future_resource_count(
         context: DecisionContext,
@@ -1044,6 +1111,47 @@ SURPLUS_V12_POLICY = SurplusPolicy(
     auction1_fallback_price=5,
     auction2_fallback_price=10,
 )
+SURPLUS_V13_POLICY = SurplusPolicy(
+    use_posterior_values=True,
+    use_objective_values=True,
+    use_opponent_objective_threat=True,
+    use_objective_progress=True,
+    use_objective_reachability=True,
+    bid_investments=True,
+    bid_liquidity_loans=True,
+    manage_liquidity=True,
+    use_action_liquidity_demand=True,
+    use_net_loan_value=True,
+    use_market_prices=True,
+    use_expected_investment_bids=True,
+    resource_value_numerator=3,
+    resource_value_denominator=4,
+    objective_value_numerator=3,
+    objective_value_denominator=8,
+    opponent_objective_numerator=1,
+    opponent_objective_denominator=32,
+    objective_progress_numerator=1,
+    objective_progress_denominator=8,
+    objective_reachability_floor_numerator=1,
+    objective_reachability_floor_denominator=2,
+    resource_reserve_numerator=1,
+    resource_reserve_denominator=8,
+    investment_reserve_numerator=0,
+    investment_reserve_denominator=1,
+    objective_reserve_release_numerator=5,
+    objective_reserve_release_denominator=8,
+    loan_trigger_numerator=7,
+    loan_trigger_denominator=8,
+    loan_fee_numerator=2,
+    loan_fee_denominator=5,
+    loan_opening_fee_numerator=2,
+    loan_opening_fee_denominator=5,
+    loan_liquidity_value_numerator=2,
+    loan_liquidity_value_denominator=3,
+    auction1_fallback_price=5,
+    auction2_fallback_price=10,
+    investment_price_prior_weight=4,
+)
 
 
 class SurplusV1Brain(SurplusBrain):
@@ -1106,6 +1214,11 @@ class SurplusV12Brain(SurplusBrain):
         super().__init__(SURPLUS_V12_POLICY)
 
 
+class SurplusV13Brain(SurplusBrain):
+    def __init__(self) -> None:
+        super().__init__(SURPLUS_V13_POLICY)
+
+
 def _surplus_v1_factory(seed: int | None) -> SurplusV1Brain:
     del seed
     return SurplusV1Brain()
@@ -1166,6 +1279,11 @@ def _surplus_v12_factory(seed: int | None) -> SurplusV12Brain:
     return SurplusV12Brain()
 
 
+def _surplus_v13_factory(seed: int | None) -> SurplusV13Brain:
+    del seed
+    return SurplusV13Brain()
+
+
 SURPLUS_V1_BOT_SPEC = BotSpec.for_simulation("surplus-v1", _surplus_v1_factory)
 SURPLUS_V2_BOT_SPEC = BotSpec.for_simulation("surplus-v2", _surplus_v2_factory)
 SURPLUS_V3_BOT_SPEC = BotSpec.for_simulation("surplus-v3", _surplus_v3_factory)
@@ -1178,4 +1296,5 @@ SURPLUS_V9_BOT_SPEC = BotSpec.for_simulation("surplus-v9", _surplus_v9_factory)
 SURPLUS_V10_BOT_SPEC = BotSpec.for_simulation("surplus-v10", _surplus_v10_factory)
 SURPLUS_V11_BOT_SPEC = BotSpec.for_simulation("surplus-v11", _surplus_v11_factory)
 SURPLUS_V12_BOT_SPEC = BotSpec.for_simulation("surplus-v12", _surplus_v12_factory)
-SURPLUS_BOT_SPEC = BotSpec.for_simulation("surplus", _surplus_v12_factory)
+SURPLUS_V13_BOT_SPEC = BotSpec.for_simulation("surplus-v13", _surplus_v13_factory)
+SURPLUS_BOT_SPEC = BotSpec.for_simulation("surplus", _surplus_v13_factory)
