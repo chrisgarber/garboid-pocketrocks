@@ -187,6 +187,54 @@ def test_reveal_context_ignores_the_preserved_offer_identity() -> None:
     assert with_preserved_offer == without_preserved_offer
 
 
+def test_live_reveal_contexts_account_for_action_aware_carried_resources() -> None:
+    observed_categories: set[str] = set()
+    for seed in range(32):
+        session = SdkGameSession.start(player_count=3, seed=f"belief-reveal-prefix-{seed}")
+        while not session.terminated and len(observed_categories) < 3:
+            if session.pending.decision_kind == "selectInfoToReveal":
+                context = session.pending.contexts[0][1]
+                assert context.current_action_id is not None
+                action = ActionId(context.current_action_id)
+                carried: tuple[int, ...]
+                if action is ActionId.AUCTION2:
+                    category = "auction2"
+                    carried = ()
+                elif action is ActionId.AUCTION1:
+                    category = "auction1"
+                    carried = context.current_resource_ids[1:]
+                else:
+                    category = "non-resource"
+                    carried = context.current_resource_ids
+                observed_categories.add(category)
+                knowledge = canonical_knowledge(context.player_count)
+                belief = build_belief(context, knowledge)
+                carried_counts = tuple(
+                    carried.count(suit_id) for suit_id in range(1, len(Suit) + 1)
+                )
+                expected_unseen = tuple(
+                    total
+                    - sum(row[index] for row in context.won_resource_counts_by_seat)
+                    - sum(row[index] for row in context.revealed_info_counts_by_seat)
+                    - context.current_hand_suit_ids.count(index + 1)
+                    - carried_counts[index]
+                    for index, total in enumerate(knowledge.resource_counts)
+                )
+
+                assert tuple(suit.unseen_suit_count for suit in belief.suits) == expected_unseen
+
+            if session.pending.decision_kind == "submitBid":
+                decisions = {seat: BotDecision.pass_turn() for seat in session.pending.acting_seats}
+            else:
+                reveal_seat = session.pending.acting_seats[0]
+                decisions = {reveal_seat: BotDecision.select_info_to_reveal(0)}
+            session.step(decisions)
+        if len(observed_categories) == 3:
+            break
+
+    assert observed_categories == {"auction1", "auction2", "non-resource"}
+
+
 def test_financial_bid_ignores_visible_board_resources() -> None:
     context = make_context(
         action_id=ActionId.INVEST10,
@@ -398,11 +446,16 @@ def test_engine_generated_contexts_preserve_exact_belief_properties(
                 )
             else:
                 offered_count = 0
-            visible_count = (
-                sum(resource_id != 0 for resource_id in context.current_resource_ids)
-                if context.decision_kind == "submitBid"
-                else 0
-            )
+            visible_resource_ids: tuple[int, ...]
+            if context.decision_kind == "submitBid":
+                visible_resource_ids = context.current_resource_ids
+            elif context.current_action_id == int(ActionId.AUCTION2):
+                visible_resource_ids = ()
+            elif context.current_action_id == int(ActionId.AUCTION1):
+                visible_resource_ids = context.current_resource_ids[1:]
+            else:
+                visible_resource_ids = context.current_resource_ids
+            visible_count = sum(resource_id != 0 for resource_id in visible_resource_ids)
             known_future_count = visible_count - offered_count
             future_biddable = total_biddable - won_count - offered_count
             hidden_slots = sum(
