@@ -8,14 +8,12 @@ from pathlib import Path
 import pytest
 
 import garboid_pocketrocks.tournament.cli as cli_module
-from garboid_pocketrocks.bots import (
-    BOT_SPECS_BY_NAME,
-    DEFAULT_TOURNAMENT_BOT_SPECS,
-)
+from garboid_pocketrocks.bots import BOT_SPECS_BY_NAME
 from garboid_pocketrocks.tournament.cli import (
     _parser,
     _resolve_bot_specs,
 )
+from garboid_pocketrocks.tournament.fields import load_tournament_field_bot_names
 from garboid_pocketrocks.tournament.runner import TournamentRunner
 from garboid_pocketrocks.tournament.schedule import TournamentConfig
 
@@ -85,6 +83,7 @@ def test_parser_enables_decision_reports_explicitly() -> None:
 def test_bot_filters_include_then_exclude_registered_names() -> None:
     selected = _resolve_bot_specs(
         include=("random", "balanced", "passive"),
+        field="default",
         exclude=("balanced",),
         registry=BOT_SPECS_BY_NAME,
     )
@@ -92,12 +91,12 @@ def test_bot_filters_include_then_exclude_registered_names() -> None:
     assert tuple(spec.name for spec in selected) == ("random", "passive")
 
 
-def test_bot_filters_use_curated_defaults_when_include_is_omitted() -> None:
+def test_bot_filters_use_default_field_when_include_is_omitted() -> None:
     selected = _resolve_bot_specs(
         include=None,
+        field="default",
         exclude=(),
         registry=BOT_SPECS_BY_NAME,
-        defaults=DEFAULT_TOURNAMENT_BOT_SPECS,
     )
 
     assert tuple(spec.name for spec in selected) == (
@@ -124,15 +123,63 @@ def test_bot_filters_reject_unknown_or_empty_selection() -> None:
     with pytest.raises(ValueError, match="unknown"):
         _resolve_bot_specs(
             include=("missing",),
+            field="default",
             exclude=(),
             registry=BOT_SPECS_BY_NAME,
         )
     with pytest.raises(ValueError, match="at least one"):
         _resolve_bot_specs(
             include=("random",),
+            field="default",
             exclude=("random",),
             registry=BOT_SPECS_BY_NAME,
         )
+
+
+def test_bot_filters_use_all_registered_field() -> None:
+    selected = _resolve_bot_specs(
+        include=None,
+        field="all",
+        exclude=(),
+        registry=BOT_SPECS_BY_NAME,
+    )
+
+    assert tuple(spec.name for spec in selected) == tuple(BOT_SPECS_BY_NAME)
+
+
+def test_bot_filters_load_field_config_from_json(tmp_path: Path) -> None:
+    config_path = tmp_path / "custom-field.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "name": "custom",
+                "bot_names": ["random", "fixed-bid"],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    selected = _resolve_bot_specs(
+        include=None,
+        field=str(config_path),
+        exclude=(),
+        registry=BOT_SPECS_BY_NAME,
+    )
+
+    assert tuple(spec.name for spec in selected) == ("random", "fixed-bid")
+
+
+def test_shipped_all_registered_field_config_excludes_moving_aliases() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    config_path = repo_root / "configs" / "tournament" / "all-registered-v1.json"
+
+    names = load_tournament_field_bot_names(str(config_path))
+
+    assert "aggressive" not in names
+    assert "balanced" not in names
+    assert "passive" not in names
+    assert set(names) <= set(BOT_SPECS_BY_NAME)
 
 
 def test_cli_runs_all_conditions_with_current_registry(tmp_path: Path) -> None:

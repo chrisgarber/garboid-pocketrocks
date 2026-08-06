@@ -14,9 +14,27 @@ uv run --extra neural garboid-tournament \
 Current defaults are 15,000 games, player counts three through five, value
 charts A through E, batch size 64, 200 bootstrap samples, and all available
 CPUs except one. Ordinary tournaments retain root seed zero when `--seed` is
-omitted. Use `--bots` or `--exclude-bots` for an explicit field,
+omitted. Use `--field` to choose a named or file-backed bot field,
+`--bots` or `--exclude-bots` to override that selection,
 `--bootstrap-samples 0` for a quick run, and `--overwrite` only when replacing
 an existing known artifact generation.
+
+Built-in fields:
+
+- `default`: the curated comparison field in `DEFAULT_TOURNAMENT_BOT_SPECS`;
+- `all`: every registered bot, including moving aliases such as `aggressive`.
+
+Versioned field configs live under `configs/tournament/`. Each file lists an
+ordered `bot_names` array:
+
+```bash
+uv run --extra neural garboid-tournament \
+  --field configs/tournament/all-registered-v1.json \
+  --output-dir artifacts/tournaments/all-registered
+```
+
+Copy that file to define a custom field without passing a long `--bots` list.
+`--bots` still overrides `--field` when you need a one-off lineup.
 
 The curated default field retains the released `fixed-objective-overlay-v1`
 and v2 generations and adds the cash- and tiebreak-aware

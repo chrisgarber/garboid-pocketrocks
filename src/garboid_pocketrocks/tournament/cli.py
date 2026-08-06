@@ -6,11 +6,8 @@ import secrets
 from collections.abc import Mapping
 from pathlib import Path
 
-from garboid_pocketrocks.bots import (
-    BOT_SPECS_BY_NAME,
-    DEFAULT_TOURNAMENT_BOT_SPECS,
-    BotSpec,
-)
+from garboid_pocketrocks.bots import BOT_SPECS_BY_NAME, BotSpec
+from garboid_pocketrocks.tournament.fields import load_tournament_field_bot_names
 from garboid_pocketrocks.tournament.runner import TournamentRun, TournamentRunner
 from garboid_pocketrocks.tournament.schedule import TournamentConfig
 
@@ -86,6 +83,14 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--batch-size", type=_positive_int, default=64)
     parser.add_argument("--bootstrap-samples", type=_nonnegative_int, default=200)
+    parser.add_argument(
+        "--field",
+        default="default",
+        help=(
+            "built-in field (default, all) or path to a versioned field config JSON; "
+            "ignored when --bots is set"
+        ),
+    )
     parser.add_argument("--bots", type=_csv)
     parser.add_argument("--exclude-bots", type=_csv, default=())
     parser.add_argument(
@@ -102,16 +107,14 @@ def _parser() -> argparse.ArgumentParser:
 def _resolve_bot_specs(
     *,
     include: tuple[str, ...] | None,
+    field: str,
     exclude: tuple[str, ...],
     registry: Mapping[str, BotSpec],
-    defaults: tuple[BotSpec, ...] | None = None,
 ) -> tuple[BotSpec, ...]:
     requested = (
-        tuple(spec.name for spec in defaults)
-        if include is None and defaults is not None
-        else tuple(registry)
-        if include is None
-        else include
+        include
+        if include is not None
+        else load_tournament_field_bot_names(field)
     )
     unknown = (set(requested) | set(exclude)) - set(registry)
     if unknown:
@@ -171,9 +174,9 @@ def main() -> None:
     try:
         bot_specs = _resolve_bot_specs(
             include=args.bots,
+            field=args.field,
             exclude=args.exclude_bots,
             registry=BOT_SPECS_BY_NAME,
-            defaults=DEFAULT_TOURNAMENT_BOT_SPECS,
         )
         config = TournamentConfig(
             bot_specs=bot_specs,
